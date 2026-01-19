@@ -20,8 +20,10 @@ import CreatePIForm from './CreatePIForm.jsx'
 import Toast from '../../utils/Toast'
 import { QuotationHelper } from '../../utils/QuotationHelper'
 import { StatusConverter } from '../../utils/StatusConverter'
-import { Search, RefreshCw, Plus, Filter, Eye, Pencil, FileText, Upload, Settings, Tag, X, User, Mail, Building2, Package, Hash, MapPin, Globe, Users, TrendingUp, Calendar, Clock, MoreHorizontal } from 'lucide-react'
+import { Search, RefreshCw, Plus, Filter, Eye, Pencil, FileText, Upload, Settings, Tag, X, User, Mail, Building2, Package, Hash, MapPin, Globe, Users, TrendingUp, Calendar, Clock, MoreHorizontal, ShieldCheck } from 'lucide-react'
 import { apiClient, API_ENDPOINTS, quotationService } from '../../utils/globalImports'
+import rfpService from '../../services/RfpService'
+import productPriceService from '../../services/ProductPriceService'
 import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton'
 import { EditLeadStatusModal } from './LeadStatus'
 import EnquiryTable from '../../components/EnquiryTable'
@@ -76,6 +78,18 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   const [showCreatePIModal, setShowCreatePIModal] = React.useState(false)
   const [editingCustomer, setEditingCustomer] = React.useState(null)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
+  const [showPricingModal, setShowPricingModal] = React.useState(false)
+  const [pricingLead, setPricingLead] = React.useState(null)
+  const [pricingLoading, setPricingLoading] = React.useState(false)
+  const [pricingError, setPricingError] = React.useState('')
+  const [pricingStock, setPricingStock] = React.useState(null)
+  const [pricingPrice, setPricingPrice] = React.useState(null)
+  const [rfpForm, setRfpForm] = React.useState({
+    productSpec: '3×16',
+    quantity: '',
+    deliveryTimeline: '',
+    specialRequirements: ''
+  })
   const [selectedBranch, setSelectedBranch] = React.useState('')
   const [companyBranches, setCompanyBranches] = React.useState({})
 
@@ -228,6 +242,62 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   const handleQuotation = (customer) => {
     setViewingCustomerForQuotation(customer)
     setShowCreateQuotation(true)
+  }
+
+  const openPricingModal = async (customer) => {
+    const productSpec = customer?.productName || '3×16'
+    setPricingLead(customer)
+    setPricingError('')
+    setPricingPrice(null)
+    setPricingStock(null)
+    setRfpForm({
+      productSpec,
+      quantity: '',
+      deliveryTimeline: '',
+      specialRequirements: ''
+    })
+    setShowPricingModal(true)
+    setPricingLoading(true)
+    try {
+      const [stockRes, priceRes] = await Promise.all([
+        apiClient.get(API_ENDPOINTS.STOCK_GET_BY_PRODUCT(productSpec)).catch(() => null),
+        productPriceService.getApprovedPrice(productSpec).catch(() => null)
+      ])
+      setPricingStock(stockRes?.data || null)
+      setPricingPrice(priceRes?.data || null)
+    } catch (error) {
+      setPricingError(error.message || 'Failed to load pricing details')
+    } finally {
+      setPricingLoading(false)
+    }
+  }
+
+  const closePricingModal = () => {
+    setShowPricingModal(false)
+    setPricingLead(null)
+    setPricingError('')
+    setPricingStock(null)
+    setPricingPrice(null)
+  }
+
+  const handleRaiseRfp = async () => {
+    if (!pricingLead) return
+    const inStock = pricingStock && (pricingStock.status === 'available' || pricingStock.status === 'limited' || Number(pricingStock.quantity || 0) > 0)
+    const hasPrice = !!pricingPrice
+    const availabilityStatus = inStock && hasPrice ? 'in_stock' : 'not_in_stock'
+    try {
+      await rfpService.create({
+        leadId: pricingLead.id,
+        productSpec: rfpForm.productSpec,
+        quantity: rfpForm.quantity,
+        deliveryTimeline: rfpForm.deliveryTimeline,
+        specialRequirements: rfpForm.specialRequirements,
+        availabilityStatus
+      })
+      closePricingModal()
+    } catch (error) {
+      setPricingError(error.message || 'Failed to raise RFP')
+    }
   }
 
   const handleEditLeadStatus = (customer) => {
@@ -1777,6 +1847,17 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                             <FileText className="h-4 w-4 text-purple-600" />
                             <span>Create Quotation</span>
                           </button>
+                          <button
+                            onClick={() => { openPricingModal(customer); setActionMenuOpen(null) }}
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                              isDarkMode
+                                ? 'hover:bg-gray-700 text-gray-300'
+                                : 'hover:bg-indigo-50 text-gray-700'
+                            }`}
+                          >
+                            <ShieldCheck className="h-4 w-4 text-indigo-600" />
+                            <span>Pricing / RFP</span>
+                          </button>
                         </div>
                       )}
                     </div>
@@ -2112,6 +2193,116 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
         </div>
       )}
       {showCreateQuotation && viewingCustomerForQuotation && <CreateQuotationForm customer={viewingCustomerForQuotation} user={user} existingQuotation={editingQuotation} onClose={() => { setShowCreateQuotation(false); setViewingCustomerForQuotation(null); setEditingQuotation(null) }} onSave={handleSaveQuotation} />}
+      {showPricingModal && pricingLead && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
+          <div className={`w-full max-w-2xl rounded-2xl p-6 shadow-xl ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'}`}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold">Pricing & RFP Decision</h2>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Lead: {pricingLead.name} • Product: {rfpForm.productSpec || '3×16'}
+                </p>
+              </div>
+              <button onClick={closePricingModal} className="p-2 rounded-lg hover:bg-black/10">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {pricingError && (
+              <div className="mt-4 px-4 py-3 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">
+                {pricingError}
+              </div>
+            )}
+
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className={`rounded-xl border p-4 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                <h3 className="text-sm font-semibold mb-2">Stock Status</h3>
+                {pricingLoading ? (
+                  <p className="text-sm text-gray-500">Checking stock...</p>
+                ) : pricingStock ? (
+                  <div className="space-y-1 text-sm">
+                    <p>Status: <span className="font-semibold capitalize">{pricingStock.status || 'unknown'}</span></p>
+                    <p>Quantity: <span className="font-semibold">{pricingStock.quantity || 0} {pricingStock.unit || ''}</span></p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No stock record found.</p>
+                )}
+              </div>
+              <div className={`rounded-xl border p-4 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                <h3 className="text-sm font-semibold mb-2">Approved Price</h3>
+                {pricingLoading ? (
+                  <p className="text-sm text-gray-500">Checking price list...</p>
+                ) : pricingPrice ? (
+                  <div className="space-y-1 text-sm">
+                    <p>Unit Price: <span className="font-semibold">₹{Number(pricingPrice.unit_price || 0).toLocaleString('en-IN')}</span></p>
+                    <p>Valid Until: <span className="font-semibold">{pricingPrice.valid_until ? new Date(pricingPrice.valid_until).toLocaleDateString('en-IN') : 'N/A'}</span></p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No approved price found.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <input
+                  className={`w-full rounded-lg border px-3 py-2 text-sm ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200'}`}
+                  placeholder="Product Spec"
+                  value={rfpForm.productSpec}
+                  onChange={(e) => setRfpForm((prev) => ({ ...prev, productSpec: e.target.value }))}
+                />
+                <input
+                  className={`w-full rounded-lg border px-3 py-2 text-sm ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200'}`}
+                  placeholder="Quantity"
+                  value={rfpForm.quantity}
+                  onChange={(e) => setRfpForm((prev) => ({ ...prev, quantity: e.target.value }))}
+                />
+                <input
+                  className={`w-full rounded-lg border px-3 py-2 text-sm ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200'}`}
+                  placeholder="Delivery Timeline"
+                  value={rfpForm.deliveryTimeline}
+                  onChange={(e) => setRfpForm((prev) => ({ ...prev, deliveryTimeline: e.target.value }))}
+                />
+                <textarea
+                  className={`w-full rounded-lg border px-3 py-2 text-sm ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200'}`}
+                  rows={3}
+                  placeholder="Special Requirements"
+                  value={rfpForm.specialRequirements}
+                  onChange={(e) => setRfpForm((prev) => ({ ...prev, specialRequirements: e.target.value }))}
+                />
+              </div>
+              <div className={`rounded-xl border p-4 space-y-3 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                <h3 className="text-sm font-semibold">Decision</h3>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  If stock is available and approved price exists, proceed to quotation. Otherwise raise an RFP.
+                </p>
+                <button
+                  onClick={() => { handleQuotation(pricingLead); closePricingModal() }}
+                  disabled={pricingLoading || !pricingPrice || !(pricingStock && (pricingStock.status === 'available' || pricingStock.status === 'limited' || Number(pricingStock.quantity || 0) > 0))}
+                  className={`w-full px-4 py-2 rounded-lg text-sm font-semibold text-white ${
+                    pricingLoading || !pricingPrice || !(pricingStock && (pricingStock.status === 'available' || pricingStock.status === 'limited' || Number(pricingStock.quantity || 0) > 0))
+                      ? 'bg-slate-400 cursor-not-allowed'
+                      : 'bg-indigo-600 hover:bg-indigo-500'
+                  }`}
+                >
+                  Proceed to Quotation
+                </button>
+                <button
+                  onClick={handleRaiseRfp}
+                  disabled={pricingLoading || (pricingPrice && pricingStock && (pricingStock.status === 'available' || pricingStock.status === 'limited' || Number(pricingStock.quantity || 0) > 0))}
+                  className={`w-full px-4 py-2 rounded-lg text-sm font-semibold text-white ${
+                    pricingLoading || (pricingPrice && pricingStock && (pricingStock.status === 'available' || pricingStock.status === 'limited' || Number(pricingStock.quantity || 0) > 0))
+                      ? 'bg-slate-400 cursor-not-allowed'
+                      : 'bg-emerald-600 hover:bg-emerald-500'
+                  }`}
+                >
+                  Raise RFP
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {showCreatePIModal && selectedQuotationForPI && viewingCustomerForQuotation && <CreatePIForm quotation={selectedQuotationForPI} customer={viewingCustomerForQuotation} user={user} modal={true} onClose={async (savedPI) => { 
         setShowCreatePIModal(false)
         if (selectedQuotationForPI?.id) {

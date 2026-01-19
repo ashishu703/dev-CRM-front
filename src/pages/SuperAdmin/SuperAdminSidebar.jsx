@@ -117,6 +117,12 @@ const Sidebar = ({ onLogout, activeView, setActiveView }) => {
       hasDropdown: false
     },
     {
+      id: 'rfp-workflow',
+      label: 'RFP Workflow',
+      icon: <FileText className="w-5 h-5" />,
+      hasDropdown: false
+    },
+    {
       id: 'reports',
       label: 'Reports',
       icon: <FileText className="w-5 h-5" />,

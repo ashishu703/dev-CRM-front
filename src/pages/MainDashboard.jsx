@@ -12,6 +12,7 @@ import OfficeSalesPersonDashboard from './SuperAdmin/OfficeSalesPersonDashboard'
 import CreateOrganisation from './SuperAdmin/CreateOrganisation';
 import ReportsPage from './Reports/ReportsPage';
 import DetailedReportPage from './Reports/DetailedReportPage';
+import RfpWorkflow from './shared/RfpWorkflow';
 
 const MainDashboard = ({ activeView, setActiveView }) => {
   const { selectedCompany } = useCompany();
@@ -51,6 +52,8 @@ const MainDashboard = ({ activeView, setActiveView }) => {
         return <CreateOrganisation />;
       case 'reports':
         return <ReportsPage setActiveView={setActiveView} />;
+      case 'rfp-workflow':
+        return <RfpWorkflow />;
       default:
         if (activeView?.startsWith('detailed-report-')) {
           return <DetailedReportPage activeView={activeView} setActiveView={setActiveView} />;

@@ -5,6 +5,7 @@ import RawMaterialPlan from './RawMaterialPlan';
 import MachineScheduling from './MachineScheduling';
 import ManPowerAllotment from './ManPowerAllotment';
 import InventoryControl from './InventoryControl';
+import RfpWorkflow from '../../shared/RfpWorkflow';
 
 const PPCDashboard = ({ activeView, setActiveView }) => {
   // Set default view to ppc-dashboard if not set
@@ -33,6 +34,8 @@ const PPCDashboard = ({ activeView, setActiveView }) => {
       case 'inventory-batch-code':
       case 'inventory-approval':
         return <InventoryControl activeView={activeView} setActiveView={setActiveView} />;
+      case 'rfp-workflow':
+        return <RfpWorkflow />;
       default:
         return <Dashboard />;
     }

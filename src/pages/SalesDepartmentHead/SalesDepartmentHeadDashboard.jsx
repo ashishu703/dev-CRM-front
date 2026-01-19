@@ -7,6 +7,7 @@ import SalesDepartmentUser from './SalesDepartmentUser';
 import StockUpdate from './StockUpdate';
 import ReportsPage from '../Reports/ReportsPage';
 import DetailedReportPage from '../Reports/DetailedReportPage';
+import RfpWorkflow from '../shared/RfpWorkflow';
 
 const SalesDepartmentHeadDashboard = ({ activeView, setActiveView }) => {
   // Set default view to sales-dashboard if not set (only on initial mount, once)
@@ -46,6 +47,8 @@ const SalesDepartmentHeadDashboard = ({ activeView, setActiveView }) => {
       case 'reports':
         console.log('✅ Rendering ReportsPage component');
         return <ReportsPage setActiveView={setActiveView} />;
+      case 'rfp-workflow':
+        return <RfpWorkflow />;
       default:
         // Handle default case - if it's 'dashboard' or empty, show sales dashboard
         // Otherwise show sales dashboard as fallback

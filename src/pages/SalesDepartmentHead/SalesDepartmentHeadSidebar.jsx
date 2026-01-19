@@ -99,6 +99,12 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
       hasDropdown: false
     },
     {
+      id: 'rfp-workflow',
+      label: 'RFP Workflow',
+      icon: <FileText className="w-5 h-5" />,
+      hasDropdown: false
+    },
+    {
       id: 'user-performance',
       label: 'User Performance',
       icon: <Target className="w-5 h-5" />,

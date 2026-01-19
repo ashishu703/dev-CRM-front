@@ -48,6 +48,11 @@ const ProductionDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView }
       icon: <Package className="w-5 h-5" />
     },
     {
+      id: 'rfp-workflow',
+      label: 'RFP Workflow',
+      icon: <FileText className="w-5 h-5" />
+    },
+    {
       id: 'maintenance-management',
       label: 'Maintenance',
       icon: <Wrench className="w-5 h-5" />

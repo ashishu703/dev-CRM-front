@@ -15,6 +15,7 @@ import Maintenance from './Maintenance';
 import Inventory from './Inventory';
 import ProductionUsers from './ProductionUsers';
 import Reports from './Reports';
+import RfpWorkflow from '../shared/RfpWorkflow';
 
 const ProductionDepartmentHeadDashboard = ({ activeView, setActiveView }) => {
   // Set default view to production-dashboard if not set
@@ -74,6 +75,8 @@ const ProductionDepartmentHeadDashboard = ({ activeView, setActiveView }) => {
         return <Inventory activeView={activeView} setActiveView={setActiveView} />;
       case 'production-users':
         return <ProductionUsers />;
+      case 'rfp-workflow':
+        return <RfpWorkflow />;
       case 'reports':
       case 'production-reports':
       case 'efficiency-metrics':

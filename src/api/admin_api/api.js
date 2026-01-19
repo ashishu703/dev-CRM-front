@@ -69,6 +69,24 @@ export const API_ENDPOINTS = {
   PRODUCTION_MAINT_ORDERS: (query = '') => `${PRODUCTION_BASE}/maintenance/orders${query ? `?${query}` : ''}`,
   PRODUCTION_INVENTORY: (query = '') => `${PRODUCTION_BASE}/inventory${query ? `?${query}` : ''}`,
 
+  // RFP Workflow
+  RFPS_BASE: `${API_BASE_URL}/api/rfps`,
+  RFPS_LIST: (query = '') => `${API_BASE_URL}/api/rfps${query ? `?${query}` : ''}`,
+  RFPS_CREATE: () => `${API_BASE_URL}/api/rfps`,
+  RFP_BY_ID: (id) => `${API_BASE_URL}/api/rfps/${id}`,
+  RFP_APPROVE: (id) => `${API_BASE_URL}/api/rfps/${id}/approve`,
+  RFP_REJECT: (id) => `${API_BASE_URL}/api/rfps/${id}/reject`,
+  RFP_PRICES: (id) => `${API_BASE_URL}/api/rfps/${id}/prices`,
+  RFP_ADD_PRICE: (id) => `${API_BASE_URL}/api/rfps/${id}/prices`,
+  RFP_QUOTATION: (id) => `${API_BASE_URL}/api/rfps/${id}/quotation`,
+  RFP_SUBMIT_ACCOUNTS: (id) => `${API_BASE_URL}/api/rfps/${id}/submit-accounts`,
+  RFP_ACCOUNTS_APPROVAL: (id) => `${API_BASE_URL}/api/rfps/${id}/accounts-approval`,
+  RFP_SENIOR_APPROVAL: (id) => `${API_BASE_URL}/api/rfps/${id}/senior-approval`,
+
+  // Product prices
+  PRODUCT_PRICE_GET: (productSpec) => `${API_BASE_URL}/api/prices/${encodeURIComponent(productSpec)}`,
+  PRODUCT_PRICE_CREATE: () => `${API_BASE_URL}/api/prices`,
+
   // Stock
   STOCK_BASE: `${API_BASE_URL}/api/stock`,
   STOCK_GET_ALL: () => `${API_BASE_URL}/api/stock`,

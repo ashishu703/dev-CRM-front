@@ -15,7 +15,8 @@ import {
   Factory,
   Store,
   Barcode,
-  ClipboardCheck
+  ClipboardCheck,
+  FileText
 } from 'lucide-react';
 
 const PPCSidebar = ({ onLogout, activeView, setActiveView }) => {
@@ -72,6 +73,12 @@ const PPCSidebar = ({ onLogout, activeView, setActiveView }) => {
       id: 'manpower-allotment',
       label: 'Manpower Allotment',
       icon: <Users className="w-5 h-5" />,
+      hasDropdown: false
+    },
+    {
+      id: 'rfp-workflow',
+      label: 'RFP Workflow',
+      icon: <FileText className="w-5 h-5" />,
       hasDropdown: false
     },
     {
