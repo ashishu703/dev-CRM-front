@@ -1,0 +1,2256 @@
+"use client"
+
+import React from 'react'
+import { useSharedData } from './SharedDataContext'
+import { useSalespersonLeads } from '../../hooks/useSalespersonLeads'
+import { useQuotationFlow } from '../../hooks/useQuotationFlow'
+import { usePIFlow } from '../../hooks/usePIFlow'
+import CompanyBranchService from '../../services/CompanyBranchService'
+import QuotationPreview from '../../components/QuotationPreview'
+import PIPreview from '../../components/PIPreview'
+import LeadFilters from '../../components/salesperson/LeadFilters'
+import EnquiryFilters from '../../components/salesperson/EnquiryFilters'
+import TagManager from '../../components/salesperson/TagManager'
+import CustomerDetailSidebar from '../../components/salesperson/CustomerDetailSidebar'
+import ImportLeadsModal from '../../components/salesperson/ImportLeadsModal'
+import ColumnVisibilityModal from '../../components/salesperson/ColumnVisibilityModal'
+import AddCustomerForm from './salespersonaddcustomer.jsx'
+import CreateQuotationForm from './salespersoncreatequotation.jsx'
+import CreatePIForm from './CreatePIForm.jsx'
+import Toast from '../../utils/Toast'
+import { QuotationHelper } from '../../utils/QuotationHelper'
+import { StatusConverter } from '../../utils/StatusConverter'
+import { Search, RefreshCw, Plus, Filter, Eye, Pencil, FileText, Upload, Settings, Tag, X, User, Mail, Building2, Package, Hash, MapPin, Globe, Users, TrendingUp, Calendar, Clock, MoreHorizontal } from 'lucide-react'
+import { apiClient, API_ENDPOINTS, quotationService } from '../../utils/globalImports'
+import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton'
+import { EditLeadStatusModal } from './LeadStatus'
+import EnquiryTable from '../../components/EnquiryTable'
+import { useAuth } from '../../hooks/useAuth'
+
+const getUserData = () => {
+  try {
+    const userData = JSON.parse(localStorage.getItem('user') || '{}')
+    return { username: userData.username || userData.name || 'User', email: userData.email || '', name: userData.name || userData.username || 'User' }
+  } catch {
+    return { username: 'User', email: '', name: 'User' }
+  }
+}
+
+export default function CustomerListContent({ isDarkMode = false, selectedCustomerId = null }) {
+  const { customers, setCustomers, loading } = useSharedData()
+  const [initialLoading, setInitialLoading] = React.useState(true)
+  const user = getUserData()
+  
+  // Active tab state
+  const [activeTab, setActiveTab] = React.useState('leads')
+  
+  // Enquiry state
+  const { user: authUser } = useAuth()
+  const [enquiries, setEnquiries] = React.useState([])
+  const [enquiriesGroupedByDate, setEnquiriesGroupedByDate] = React.useState({})
+  const [enquiriesLoading, setEnquiriesLoading] = React.useState(false)
+  const [enquiryPage, setEnquiryPage] = React.useState(1)
+  const [enquiryLimit, setEnquiryLimit] = React.useState(50)
+  const [enquiryTotal, setEnquiryTotal] = React.useState(0)
+  const [showEnquiryFilters, setShowEnquiryFilters] = React.useState(false)
+  const [enquirySearchQuery, setEnquirySearchQuery] = React.useState('')
+  const [debouncedEnquirySearchQuery, setDebouncedEnquirySearchQuery] = React.useState('')
+  const [enquiryFilters, setEnquiryFilters] = React.useState({
+    state: '', division: '', product: '', followUpStatus: '', salesStatus: '', salesperson: '', telecaller: '', dateFrom: '', dateTo: ''
+  })
+  const [enquiryEnabledFilters, setEnquiryEnabledFilters] = React.useState({
+    state: false, division: false, product: false, followUpStatus: false, salesStatus: false, salesperson: false, telecaller: false, dateRange: false
+  })
+  const [enquirySortBy, setEnquirySortBy] = React.useState('none')
+  const [enquirySortOrder, setEnquirySortOrder] = React.useState('asc')
+  
+  // Modal states
+  const [viewingCustomer, setViewingCustomer] = React.useState(null)
+  const [viewingCustomerForQuotation, setViewingCustomerForQuotation] = React.useState(null)
+  const [showAddCustomer, setShowAddCustomer] = React.useState(false)
+  const [showCreateQuotation, setShowCreateQuotation] = React.useState(false)
+  const [editingQuotation, setEditingQuotation] = React.useState(null)
+  const [selectedCustomerForQuotation, setSelectedCustomerForQuotation] = React.useState(null)
+  const [selectedCustomerForPI, setSelectedCustomerForPI] = React.useState(null)
+  const [selectedQuotationForPI, setSelectedQuotationForPI] = React.useState(null)
+  const [showCreatePIModal, setShowCreatePIModal] = React.useState(false)
+  const [editingCustomer, setEditingCustomer] = React.useState(null)
+  const [isRefreshing, setIsRefreshing] = React.useState(false)
+  const [selectedBranch, setSelectedBranch] = React.useState('')
+  const [companyBranches, setCompanyBranches] = React.useState({})
+
+  // Tag management
+  const [showCreateTagModal, setShowCreateTagModal] = React.useState(false)
+  const [newTagName, setNewTagName] = React.useState('')
+  const [selectedLeadsForTag, setSelectedLeadsForTag] = React.useState([])
+  const [isCreatingTag, setIsCreatingTag] = React.useState(false)
+  const [showBulkActions, setShowBulkActions] = React.useState(false)
+  const [bulkActionType, setBulkActionType] = React.useState('tag') // 'tag' or 'sku'
+  const [bulkTagValue, setBulkTagValue] = React.useState('')
+  const [bulkSkuValue, setBulkSkuValue] = React.useState('')
+  
+  // Duplicate lead modal state
+  const [showDuplicateModal, setShowDuplicateModal] = React.useState(false)
+  const [duplicateLeadInfo, setDuplicateLeadInfo] = React.useState(null)
+
+  // Import leads modal
+  const [showImportModal, setShowImportModal] = React.useState(false)
+
+  // Edit Lead Status Modal
+  const [showEditLeadStatusModal, setShowEditLeadStatusModal] = React.useState(false)
+  const [selectedCustomerForLeadStatus, setSelectedCustomerForLeadStatus] = React.useState(null)
+  const [actionMenuOpen, setActionMenuOpen] = React.useState(null)
+
+  const defaultColumns = React.useMemo(() => ({
+    leadId: true,
+    namePhone: true,
+    email: true,
+    business: true,
+    productType: false,
+    gstNo: false,
+    address: true,
+    state: true,
+    division: true,
+    customerType: false,
+    leadSource: false,
+    salesStatus: true,
+    followUpStatus: true,
+    followUpDate: false,
+    followUpTime: false,
+    date: false
+  }), [])
+  const [columnVisibility, setColumnVisibility] = React.useState(defaultColumns)
+  const [showColumnModal, setShowColumnModal] = React.useState(false)
+
+  const handleToggleColumn = (columnKey) => {
+    setColumnVisibility(prev => ({ ...prev, [columnKey]: !prev[columnKey] }))
+  }
+
+  const handleImportSuccess = async () => {
+    setShowImportModal(false)
+    // Add a small delay to ensure backend has processed the import
+    await new Promise(resolve => setTimeout(resolve, 500))
+    // Refresh leads to show the newly imported data
+    await handleRefresh()
+  }
+
+  // Use custom hooks
+  const leadsHook = useSalespersonLeads(customers)
+  const activeCustomerId = viewingCustomer?.id || viewingCustomerForQuotation?.id
+  const quotationHook = useQuotationFlow(activeCustomerId, isRefreshing)
+  const piHook = usePIFlow(viewingCustomer, viewingCustomerForQuotation, selectedBranch)
+
+  // Load company branches
+  React.useEffect(() => {
+    const loadBranches = async () => {
+      try {
+        const { branches } = await CompanyBranchService.fetchBranches()
+        setCompanyBranches(branches)
+        if (Object.keys(branches).length > 0 && !selectedBranch) {
+          setSelectedBranch(Object.keys(branches)[0])
+        }
+      } catch (error) {
+        Toast.error('Failed to load company branches')
+      }
+    }
+    loadBranches()
+  }, [])
+
+  // Initial data load on mount
+  const initialLoadRef = React.useRef(false)
+  React.useEffect(() => {
+    if (!initialLoadRef.current) {
+      initialLoadRef.current = true
+      handleRefresh()
+    }
+  }, [])
+
+  // If parent requested opening a specific customer, find and open it
+  React.useEffect(() => {
+    if (!selectedCustomerId) return
+    // If customers not loaded yet, wait for them (handleRefresh sets customers)
+    const found = (customers || []).find(c => String(c.id) === String(selectedCustomerId))
+    if (found) {
+      setViewingCustomer(found)
+      // scroll or focus logic could go here
+    }
+  }, [selectedCustomerId, customers])
+
+  const refreshingRef = React.useRef(false)
+  
+  const handleRefresh = async () => {
+    if (refreshingRef.current) {
+      return
+    }
+    
+    try {
+      refreshingRef.current = true
+      setIsRefreshing(true)
+      const res = await apiClient.get(API_ENDPOINTS.SALESPERSON_ASSIGNED_LEADS_ME())
+      const rows = res?.data || []
+      const mapped = rows.map((r) => ({
+        id: r.id, name: r.name, phone: r.phone, email: r.email || 'N/A', business: r.business || 'N/A',
+        address: r.address || 'N/A', gstNo: r.gst_no || 'N/A', productName: r.product_type || 'N/A',
+        state: r.state || 'N/A', division: r.division || null, enquiryBy: r.lead_source || 'N/A', customerType: r.customer_type || 'N/A',
+        date: r.date ? new Date(r.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        salesStatus: r.sales_status || 'pending', salesStatusRemark: r.sales_status_remark || null,
+        salesStatusDate: new Date(r.updated_at || r.created_at || Date.now()).toLocaleString(),
+        whatsapp: r.whatsapp ? `+91${String(r.whatsapp).replace(/\D/g, '').slice(-10)}` : null,
+        transferredTo: r.transferred_to || null, callDurationSeconds: r.call_duration_seconds || null,
+        quotationUrl: r.quotation_url || null, proformaInvoiceUrl: r.proforma_invoice_url || null,
+        paymentReceiptUrl: r.payment_receipt_url || null, quotationCount: typeof r.quotation_count === 'number' ? r.quotation_count : (parseInt(r.quotation_count) || 0),
+        paymentStatusDb: r.payment_status || null, paymentModeDb: r.payment_mode || null,
+        followUpStatus: r.follow_up_status || null, followUpRemark: r.follow_up_remark || null,
+        followUpDate: r.follow_up_date ? new Date(r.follow_up_date).toISOString().split('T')[0] : null,
+        followUpTime: r.follow_up_time || null,
+      }))
+      leadsHook.setCustomers(mapped)
+      setCustomers(mapped)
+    } catch (err) {
+      Toast.error('Failed to refresh leads')
+    } finally {
+      setIsRefreshing(false)
+      refreshingRef.current = false
+      setInitialLoading(false)
+    }
+  }
+
+  // Handlers
+  const handleEdit = (customer) => {
+    setEditingCustomer(customer)
+    setShowAddCustomer(true)
+  }
+
+  const handleView = (customer) => {
+    setViewingCustomer(customer)
+  }
+
+  const handleQuotation = (customer) => {
+    setViewingCustomerForQuotation(customer)
+    setShowCreateQuotation(true)
+  }
+
+  const handleEditLeadStatus = (customer) => {
+    const leadFormat = {
+      id: customer.id,
+      sales_status: customer.salesStatus || '',
+      sales_status_remark: customer.salesStatusRemark || '',
+      follow_up_status: customer.followUpStatus || '',
+      follow_up_remark: customer.followUpRemark || '',
+      follow_up_date: customer.followUpDate || '',
+      follow_up_time: customer.followUpTime || '',
+      enquired_products: customer.enquired_products || customer.enquiredProducts || [],
+      other_product: customer.other_product || customer.otherProduct || ''
+    }
+    setSelectedCustomerForLeadStatus(leadFormat)
+    setShowEditLeadStatusModal(true)
+  }
+
+  const handleUpdateLeadStatus = async (leadId, statusData) => {
+    try {
+      const enquiredProducts = statusData.enquired_products || [];
+      const enquiredProductsStr = Array.isArray(enquiredProducts) 
+        ? JSON.stringify(enquiredProducts) 
+        : enquiredProducts;
+      
+      const payload = {
+        sales_status: statusData.sales_status ?? statusData.salesStatus ?? '',
+        sales_status_remark: statusData.sales_status_remark ?? statusData.salesStatusRemark ?? '',
+        follow_up_status: statusData.follow_up_status ?? statusData.followUpStatus ?? '',
+        follow_up_remark: statusData.follow_up_remark ?? statusData.followUpRemark ?? '',
+        follow_up_date: statusData.follow_up_date ?? statusData.followUpDate ?? '',
+        follow_up_time: statusData.follow_up_time ?? statusData.followUpTime ?? '',
+        enquired_products: enquiredProductsStr,
+        other_product: statusData.other_product || '',
+      }
+      const fd = new FormData()
+      Object.entries(payload).forEach(([k, v]) => fd.append(k, v == null ? '' : v))
+      const response = await apiClient.putFormData(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(leadId), fd);
+      
+      if (response.success) {
+        let formattedProductsForState = [];
+        try {
+          formattedProductsForState = typeof enquiredProductsStr === 'string' 
+            ? JSON.parse(enquiredProductsStr) 
+            : enquiredProducts;
+        } catch {
+          formattedProductsForState = enquiredProducts;
+        }
+        
+        // Update the customers list
+        const updatedCustomers = leadsHook.customers.map(customer => 
+          customer.id === leadId 
+            ? { 
+                ...customer, 
+                salesStatus: payload.sales_status,
+                salesStatusRemark: payload.sales_status_remark,
+                followUpStatus: payload.follow_up_status,
+                followUpRemark: payload.follow_up_remark,
+                followUpDate: payload.follow_up_date,
+                followUpTime: payload.follow_up_time,
+                enquired_products: formattedProductsForState,
+                enquiredProducts: formattedProductsForState,
+                other_product: payload.other_product,
+                otherProduct: payload.other_product,
+                updated_at: new Date().toISOString() 
+              }
+            : customer
+        );
+        
+        leadsHook.setCustomers(updatedCustomers)
+        setCustomers(updatedCustomers)
+        
+        Toast.success('Lead status updated successfully!')
+        setShowEditLeadStatusModal(false)
+        setSelectedCustomerForLeadStatus(null)
+      }
+    } catch (error) {
+      Toast.error('Failed to update lead status')
+      throw error
+    }
+  }
+
+  const handleToggleLeadForTag = (leadId) => {
+    setSelectedLeadsForTag(prev => prev.includes(leadId) ? prev.filter(id => id !== leadId) : [...prev, leadId])
+  }
+
+  const handleSelectAllLeadsForTag = () => {
+    setSelectedLeadsForTag(prev => prev.length === leadsHook.paginatedCustomers.length ? [] : leadsHook.paginatedCustomers.map(c => c.id))
+  }
+
+  const handleBulkTagChange = async () => {
+    const trimmedTag = bulkTagValue.trim().toLowerCase()
+    if (!trimmedTag) {
+      Toast.warning('Please enter a tag name')
+      return
+    }
+    if (selectedLeadsForTag.length === 0) {
+      Toast.warning('Please select at least one lead to assign this tag')
+      return
+    }
+    
+    setIsCreatingTag(true)
+    try {
+      const updatePromises = selectedLeadsForTag.map(async (leadId) => {
+        const lead = leadsHook.customers.find(c => c.id === leadId)
+        if (!lead) return null
+        const formData = new FormData()
+        formData.append('name', lead.name)
+        formData.append('phone', lead.phone)
+        formData.append('email', lead.email === 'N/A' ? '' : lead.email)
+        formData.append('business', lead.business)
+        formData.append('address', lead.address)
+        formData.append('gst_no', lead.gstNo === 'N/A' ? '' : lead.gstNo)
+        formData.append('product_type', lead.productName)
+        formData.append('state', lead.state)
+        formData.append('lead_source', lead.enquiryBy)
+        formData.append('customer_type', trimmedTag)
+        formData.append('date', lead.date)
+        formData.append('whatsapp', lead.whatsapp ? lead.whatsapp.replace('+91','') : '')
+        formData.append('sales_status', lead.salesStatus)
+        formData.append('sales_status_remark', lead.salesStatusRemark || '')
+        formData.append('follow_up_status', lead.followUpStatus || '')
+        formData.append('follow_up_remark', lead.followUpRemark || '')
+        formData.append('follow_up_date', lead.followUpDate || '')
+        formData.append('follow_up_time', lead.followUpTime || '')
+        return apiClient.putFormData(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(leadId), formData)
+      })
+      await Promise.all(updatePromises)
+      
+      // Update local state
+      const updatedCustomers = leadsHook.customers.map(customer => 
+        selectedLeadsForTag.includes(customer.id) 
+          ? { ...customer, customerType: trimmedTag } 
+          : customer
+      )
+      
+      leadsHook.setCustomers(updatedCustomers)
+      setCustomers(updatedCustomers)
+      
+      Toast.success(`Tag "${trimmedTag}" created and assigned to ${selectedLeadsForTag.length} lead(s) successfully!`)
+      setSelectedLeadsForTag([])
+      setBulkTagValue('')
+      setShowBulkActions(false)
+    } catch (error) {
+      Toast.error('Failed to create tag. Please try again.')
+    } finally {
+      setIsCreatingTag(false)
+    }
+  }
+
+  const handleBulkSkuChange = async () => {
+    if (selectedLeadsForTag.length === 0) {
+      Toast.error('Please select at least one lead')
+      return
+    }
+    if (!bulkSkuValue.trim()) {
+      Toast.error('Please enter a SKU value')
+      return
+    }
+    
+    setIsCreatingTag(true)
+    try {
+      // Update product type (SKU) for selected leads via API
+      const updatePromises = selectedLeadsForTag.map(async (leadId) => {
+        const lead = leadsHook.customers.find(c => c.id === leadId)
+        if (!lead) return null
+        const formData = new FormData()
+        formData.append('name', lead.name)
+        formData.append('phone', lead.phone)
+        formData.append('email', lead.email === 'N/A' ? '' : lead.email)
+        formData.append('business', lead.business)
+        formData.append('address', lead.address)
+        formData.append('gst_no', lead.gstNo === 'N/A' ? '' : lead.gstNo)
+        formData.append('product_type', bulkSkuValue.trim())
+        formData.append('state', lead.state)
+        formData.append('lead_source', lead.enquiryBy)
+        formData.append('customer_type', lead.customerType || '')
+        formData.append('date', lead.date)
+        formData.append('whatsapp', lead.whatsapp ? lead.whatsapp.replace('+91','') : '')
+        formData.append('sales_status', lead.salesStatus)
+        formData.append('sales_status_remark', lead.salesStatusRemark || '')
+        formData.append('follow_up_status', lead.followUpStatus || '')
+        formData.append('follow_up_remark', lead.followUpRemark || '')
+        formData.append('follow_up_date', lead.followUpDate || '')
+        formData.append('follow_up_time', lead.followUpTime || '')
+        return apiClient.putFormData(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(leadId), formData)
+      })
+      await Promise.all(updatePromises)
+      
+      // Update local state
+      const updatedCustomers = leadsHook.customers.map(customer => {
+        if (selectedLeadsForTag.includes(customer.id)) {
+          return { ...customer, productName: bulkSkuValue.trim(), product_type: bulkSkuValue.trim() }
+        }
+        return customer
+      })
+      
+      leadsHook.setCustomers(updatedCustomers)
+      setCustomers(updatedCustomers)
+      
+      Toast.success(`SKU updated for ${selectedLeadsForTag.length} lead(s)`)
+      setSelectedLeadsForTag([])
+      setBulkSkuValue('')
+      setShowBulkActions(false)
+    } catch (error) {
+      Toast.error('Failed to update SKU')
+    } finally {
+      setIsCreatingTag(false)
+    }
+  }
+
+  const handleTagSelect = (tag) => {
+    leadsHook.setSelectedTag(tag)
+  }
+
+  // Save customer handler (create or update)
+  const handleSaveCustomer = async (customerData) => {
+    try {
+      const formData = new FormData()
+      
+      if (editingCustomer) {
+        // Update existing customer
+        formData.append('name', customerData.customerName)
+        formData.append('phone', customerData.mobileNumber.replace(/\D/g, '').slice(-10))
+        formData.append('whatsapp', customerData.whatsappNumber ? customerData.whatsappNumber.replace(/\D/g, '').slice(-10) : customerData.mobileNumber.replace(/\D/g, '').slice(-10))
+        formData.append('email', customerData.email || '')
+        formData.append('business', customerData.business || 'N/A')
+        formData.append('address', customerData.address || 'N/A')
+        formData.append('gst_no', customerData.gstNumber || '')
+        formData.append('product_type', customerData.productName || 'N/A')
+        formData.append('state', customerData.state || 'N/A')
+        formData.append('division', customerData.division || '')
+        formData.append('lead_source', customerData.leadSource || 'N/A')
+        formData.append('customer_type', customerData.customerType || 'N/A')
+        formData.append('date', customerData.date)
+        formData.append('sales_status', customerData.salesStatus || 'pending')
+        formData.append('sales_status_remark', customerData.salesStatusRemark || '')
+        formData.append('follow_up_status', customerData.followUpStatus || '')
+        formData.append('follow_up_remark', customerData.followUpRemark || '')
+        formData.append('follow_up_date', customerData.followUpDate || '')
+        formData.append('follow_up_time', customerData.followUpTime || '')
+        formData.append('call_duration_seconds', customerData.callDurationSeconds || '')
+        formData.append('transferred_to', customerData.transferredTo || '')
+        
+        if (customerData.callRecordingFile) {
+          formData.append('call_recording', customerData.callRecordingFile)
+        }
+        
+        const updateResponse = await apiClient.putFormData(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(editingCustomer.id), formData)
+        
+        if (!updateResponse?.success) {
+          throw new Error(updateResponse?.message || 'Failed to update customer')
+        }
+        
+        // Update local state immediately for instant feedback
+        const updatedCustomer = {
+          ...editingCustomer,
+          name: customerData.customerName,
+          phone: customerData.mobileNumber.replace(/\D/g, '').slice(-10),
+          whatsapp: customerData.whatsappNumber ? `+91${customerData.whatsappNumber.replace(/\D/g, '').slice(-10)}` : `+91${customerData.mobileNumber.replace(/\D/g, '').slice(-10)}`,
+          email: customerData.email || 'N/A',
+          business: customerData.business || 'N/A',
+          address: customerData.address || 'N/A',
+          gstNo: customerData.gstNumber || 'N/A',
+          productName: customerData.productName || 'N/A',
+          product_type: customerData.productName || 'N/A',
+          state: customerData.state || 'N/A',
+          division: customerData.division || null,
+          enquiryBy: customerData.leadSource || 'N/A',
+          customerType: customerData.customerType || 'N/A',
+          salesStatus: customerData.salesStatus || 'pending',
+          salesStatusRemark: customerData.salesStatusRemark || null,
+          followUpStatus: customerData.followUpStatus || null,
+          followUpRemark: customerData.followUpRemark || null,
+          followUpDate: customerData.followUpDate || null,
+          followUpTime: customerData.followUpTime || null,
+          callDurationSeconds: customerData.callDurationSeconds || null,
+          transferredTo: customerData.transferredTo || null,
+        }
+        
+        // Update local state immediately
+        setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? updatedCustomer : c))
+        leadsHook.setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? updatedCustomer : c))
+        
+        // If lead is being transferred, call the transfer API
+        if (customerData.transferredTo) {
+          try {
+            await apiClient.post(API_ENDPOINTS.LEAD_TRANSFER(editingCustomer.id), {
+              transferredTo: customerData.transferredTo,
+              reason: `Transferred via edit form`
+            })
+            Toast.success(`Customer updated and transferred to ${customerData.transferredTo} successfully!`)
+          } catch (transferErr) {
+            Toast.warning('Customer updated but transfer failed. Please try again.')
+          }
+        } else {
+          Toast.success('Customer updated successfully!')
+        }
+        
+        // Close modal immediately
+        setShowAddCustomer(false)
+        setEditingCustomer(null)
+        
+        // Refresh from API in background to ensure data is in sync
+        setTimeout(async () => {
+          await handleRefresh()
+        }, 500)
+      } else {
+        // Create new customer
+        // Send actual data if present, empty string if not - backend will handle 'N/A' conversion
+        formData.append('name', customerData.customerName || '')
+        formData.append('phone', customerData.mobileNumber.replace(/\D/g, '').slice(-10))
+        formData.append('whatsapp', customerData.whatsappNumber ? customerData.whatsappNumber.replace(/\D/g, '').slice(-10) : customerData.mobileNumber.replace(/\D/g, '').slice(-10))
+        formData.append('email', customerData.email || '')
+        formData.append('business', customerData.business || '')
+        formData.append('address', customerData.address || '')
+        formData.append('gst_no', customerData.gstNumber || '')
+        formData.append('product_type', customerData.productName || '')
+        formData.append('state', customerData.state || '')
+        formData.append('division', customerData.division || '')
+        formData.append('lead_source', customerData.leadSource || '')
+        formData.append('customer_type', customerData.customerType || '')
+        formData.append('date', customerData.date || '')
+        formData.append('sales_status', customerData.salesStatus || 'pending')
+        formData.append('sales_status_remark', customerData.salesStatusRemark || '')
+        formData.append('follow_up_status', customerData.followUpStatus || '')
+        formData.append('follow_up_remark', customerData.followUpRemark || '')
+        formData.append('follow_up_date', customerData.followUpDate || '')
+        formData.append('follow_up_time', customerData.followUpTime || '')
+        formData.append('call_duration_seconds', customerData.callDurationSeconds || '')
+        formData.append('transferred_to', customerData.transferredTo || '')
+        
+        if (customerData.callRecordingFile) {
+          formData.append('call_recording', customerData.callRecordingFile)
+        }
+        
+        try {
+          const response = await apiClient.postFormData(API_ENDPOINTS.SALESPERSON_CREATE_LEAD(), formData)
+          
+          // Check if response indicates duplicate (shouldn't happen if API throws error, but just in case)
+          if (response?.isDuplicate || response?.data?.isDuplicate) {
+            const duplicateInfo = response?.duplicateLead || response?.data?.duplicateLead
+            setDuplicateLeadInfo(duplicateInfo)
+            setShowDuplicateModal(true)
+            Toast.error('Duplicate lead found! Lead not added.')
+            return // Don't close modal or refresh
+          }
+          
+          Toast.success('Customer added successfully!')
+          
+          // Refresh leads from API
+          await handleRefresh()
+          
+          // Close modal and reset editing state
+          setShowAddCustomer(false)
+          setEditingCustomer(null)
+        } catch (createError) {
+          // Check if error is due to duplicate (409 status)
+          if (createError.status === 409 || createError.data?.isDuplicate) {
+            // Extract duplicate info from error response
+            const duplicateInfo = createError.data?.duplicateLead || createError.duplicateLead
+            if (duplicateInfo) {
+              setDuplicateLeadInfo(duplicateInfo)
+              setShowDuplicateModal(true)
+              Toast.error('Duplicate lead found! Lead not added.')
+              return // Don't close modal or refresh
+            }
+          }
+          
+          // Re-throw if not a duplicate error so it gets caught by outer catch
+          throw createError
+        }
+      }
+    } catch (error) {
+      if (error.status === 409 || error.data?.isDuplicate) {
+        const duplicateInfo = error.data?.duplicateLead || error.duplicateLead
+        if (duplicateInfo) {
+          setDuplicateLeadInfo(duplicateInfo)
+          setShowDuplicateModal(true)
+          Toast.error('Duplicate lead found! Lead not added.')
+          return
+        }
+      }
+      
+      const errorMessage = error.data?.message || error.message || 'Failed to add customer. Please try again.'
+      Toast.error(editingCustomer ? 'Failed to update customer. Please try again.' : errorMessage)
+    }
+  }
+
+  // Edit quotation handler
+  const handleEditQuotation = async (quotation, customer) => {
+    try {
+      // Fetch full quotation details
+      const response = await quotationService.getQuotation(quotation.id)
+      if (response?.success) {
+        const fullQuotation = response.data
+        // Set customer and quotation for editing
+        setViewingCustomerForQuotation(customer)
+        setEditingQuotation(fullQuotation)
+        setShowCreateQuotation(true)
+      } else {
+        Toast.error('Failed to load quotation for editing')
+      }
+    } catch (error) {
+      Toast.error('Failed to load quotation for editing')
+    }
+  }
+
+  // Save quotation handler
+  const handleSaveQuotation = async (quotationData) => {
+    const customerToUse = viewingCustomerForQuotation || viewingCustomer
+    if (!customerToUse) {
+      Toast.error('Customer not found')
+      return
+    }
+    const quotationId = quotationData.quotationId || editingQuotation?.id || null
+    const success = await quotationHook.handleSaveQuotation(quotationData, customerToUse, quotationId)
+    if (success) {
+      setShowCreateQuotation(false)
+      setViewingCustomerForQuotation(null)
+      setEditingQuotation(null)
+      // Refresh quotations list
+      if (customerToUse.id) {
+        const res = await quotationService.getQuotationsByCustomer(customerToUse.id)
+        if (res?.success) {
+          quotationHook.setQuotations((res.data || []).map(q => QuotationHelper.normalizeQuotation(q)))
+        }
+      }
+    }
+  }
+
+  const handleViewQuotation = async (quotationSummary) => {
+    try {
+      const response = await quotationService.getQuotation(quotationSummary.id);
+      
+      if (response?.success && response?.data) {
+        const dbQuotation = response.data;
+        const normalized = {
+          id: dbQuotation.id,
+          quotationNumber: dbQuotation.quotation_number,
+          quotationDate: dbQuotation.quotation_date,
+          validUpto: dbQuotation.valid_until,
+          validUntil: dbQuotation.valid_until,
+          selectedBranch: dbQuotation.branch,
+          template: dbQuotation.template,
+          
+          // Customer and billing info - EXACT from DB
+          customer: {
+            id: dbQuotation.customer_id,
+            name: dbQuotation.customer_name,
+            business: dbQuotation.customer_business,
+            phone: dbQuotation.customer_phone,
+            email: dbQuotation.customer_email,
+            address: dbQuotation.customer_address,
+            gstNo: dbQuotation.customer_gst_no,
+            state: dbQuotation.customer_state
+          },
+          billTo: dbQuotation.bill_to ? dbQuotation.bill_to : {
+            business: dbQuotation.customer_business,
+            buyerName: dbQuotation.customer_business,
+            address: dbQuotation.customer_address,
+            phone: dbQuotation.customer_phone,
+            gstNo: dbQuotation.customer_gst_no,
+            state: dbQuotation.customer_state
+          },
+          
+          items: (dbQuotation.items || []).map(i => ({
+            productName: i.product_name,
+            description: i.description,
+            quantity: i.quantity,
+            unit: i.unit,
+            buyerRate: i.unit_price,
+            unitPrice: i.unit_price,
+            rate: i.unit_price,
+            amount: i.taxable_amount,
+            total: i.total_amount,
+            hsn: i.hsn_code,
+            hsnCode: i.hsn_code,
+            gstRate: i.gst_rate
+          })),
+          
+          // Financial details - EXACT
+          subtotal: parseFloat(dbQuotation.subtotal),
+          discountRate: parseFloat(dbQuotation.discount_rate),
+          discountAmount: parseFloat(dbQuotation.discount_amount),
+          taxRate: parseFloat(dbQuotation.tax_rate),
+          taxAmount: parseFloat(dbQuotation.tax_amount),
+          total: parseFloat(dbQuotation.total_amount),
+          
+          // Customer ID
+          customerId: dbQuotation.customer_id,
+          
+          // New fields for delivery & payment - EXACT (handle nulls)
+          paymentMode: dbQuotation.payment_mode || '',
+          transportTc: dbQuotation.transport_tc || '',
+          dispatchThrough: dbQuotation.dispatch_through || '',
+          deliveryTerms: dbQuotation.delivery_terms || '',
+          materialType: dbQuotation.material_type || '',
+          
+          // Bank details and terms - EXACT (parse JSON if string)
+          bankDetails: typeof dbQuotation.bank_details === 'string' 
+            ? JSON.parse(dbQuotation.bank_details) 
+            : dbQuotation.bank_details,
+          termsSections: typeof dbQuotation.terms_sections === 'string' 
+            ? JSON.parse(dbQuotation.terms_sections) 
+            : dbQuotation.terms_sections,
+          
+          status: dbQuotation.status
+        };
+        
+        await quotationHook.handleViewQuotation(normalized);
+      } else {
+        Toast.error('Failed to load full quotation details. Please try again.');
+      }
+    } catch (error) {
+      Toast.error('Failed to load quotation details');
+    }
+  }
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (actionMenuOpen && !event.target.closest('.action-menu-container')) {
+        setActionMenuOpen(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [actionMenuOpen])
+
+  // Get unique color for Sales Status
+  const getSalesStatusColor = (status) => {
+    if (!status) return 'bg-gray-100 text-gray-800 border-gray-200'
+    const statusLower = String(status).toLowerCase()
+    const colorMap = {
+      'pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'approved': 'bg-green-100 text-green-800 border-green-200',
+      'connected': 'bg-blue-100 text-blue-800 border-blue-200',
+      'not_connected': 'bg-red-100 text-red-800 border-red-200',
+      'not connected': 'bg-red-100 text-red-800 border-red-200',
+      'follow_up': 'bg-orange-100 text-orange-800 border-orange-200',
+      'follow up': 'bg-orange-100 text-orange-800 border-orange-200',
+      'next_meeting': 'bg-purple-100 text-purple-800 border-purple-200',
+      'next meeting': 'bg-purple-100 text-purple-800 border-purple-200',
+      'order_confirmed': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      'order confirmed': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      'closed': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      'open': 'bg-cyan-100 text-cyan-800 border-cyan-200',
+      'win': 'bg-lime-100 text-lime-800 border-lime-200',
+      'loose': 'bg-rose-100 text-rose-800 border-rose-200',
+      'not interested': 'bg-slate-100 text-slate-800 border-slate-200',
+      'not_interested': 'bg-slate-100 text-slate-800 border-slate-200',
+      'running': 'bg-amber-100 text-amber-800 border-amber-200',
+      'converted': 'bg-teal-100 text-teal-800 border-teal-200',
+      'interested': 'bg-pink-100 text-pink-800 border-pink-200'
+    }
+    return colorMap[statusLower] || 'bg-gray-100 text-gray-800 border-gray-200'
+  }
+
+  // Get unique color for Follow Up Status
+  const getFollowUpStatusColor = (status) => {
+    if (!status) return 'bg-gray-100 text-gray-800 border-gray-200'
+    const statusLower = String(status).toLowerCase()
+    const colorMap = {
+      'pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'unreachable': 'bg-red-100 text-red-800 border-red-200',
+      'unreachable/call not connected': 'bg-red-100 text-red-800 border-red-200',
+      'inactive': 'bg-gray-100 text-gray-800 border-gray-200',
+      'interested': 'bg-green-100 text-green-800 border-green-200',
+      'not interested': 'bg-rose-100 text-rose-800 border-rose-200',
+      'appointment scheduled': 'bg-blue-100 text-blue-800 border-blue-200',
+      'quotation sent': 'bg-purple-100 text-purple-800 border-purple-200',
+      'negotiation': 'bg-orange-100 text-orange-800 border-orange-200',
+      'close order': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      'closed/lost': 'bg-slate-100 text-slate-800 border-slate-200',
+      'call back request': 'bg-amber-100 text-amber-800 border-amber-200',
+      'currently not required': 'bg-gray-100 text-gray-800 border-gray-200',
+      'not required': 'bg-gray-100 text-gray-800 border-gray-200',
+      'not relevant': 'bg-gray-100 text-gray-800 border-gray-200',
+      'connected': 'bg-cyan-100 text-cyan-800 border-cyan-200',
+      'follow up': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      'follow_up': 'bg-indigo-100 text-indigo-800 border-indigo-200'
+    }
+    return colorMap[statusLower] || 'bg-gray-100 text-gray-800 border-gray-200'
+  }
+
+  // Get dark mode color for Sales Status
+  const getSalesStatusColorDark = (status) => {
+    if (!status) return 'bg-gray-800/30 text-gray-300 border-gray-700'
+    const statusLower = String(status).toLowerCase()
+    const colorMap = {
+      'pending': 'bg-yellow-900/30 text-yellow-300 border-yellow-700',
+      'approved': 'bg-green-900/30 text-green-300 border-green-700',
+      'connected': 'bg-blue-900/30 text-blue-300 border-blue-700',
+      'not_connected': 'bg-red-900/30 text-red-300 border-red-700',
+      'not connected': 'bg-red-900/30 text-red-300 border-red-700',
+      'follow_up': 'bg-orange-900/30 text-orange-300 border-orange-700',
+      'follow up': 'bg-orange-900/30 text-orange-300 border-orange-700',
+      'next_meeting': 'bg-purple-900/30 text-purple-300 border-purple-700',
+      'next meeting': 'bg-purple-900/30 text-purple-300 border-purple-700',
+      'order_confirmed': 'bg-emerald-900/30 text-emerald-300 border-emerald-700',
+      'order confirmed': 'bg-emerald-900/30 text-emerald-300 border-emerald-700',
+      'closed': 'bg-indigo-900/30 text-indigo-300 border-indigo-700',
+      'open': 'bg-cyan-900/30 text-cyan-300 border-cyan-700',
+      'win': 'bg-lime-900/30 text-lime-300 border-lime-700',
+      'loose': 'bg-rose-900/30 text-rose-300 border-rose-700',
+      'not interested': 'bg-slate-900/30 text-slate-300 border-slate-700',
+      'not_interested': 'bg-slate-900/30 text-slate-300 border-slate-700',
+      'running': 'bg-amber-900/30 text-amber-300 border-amber-700',
+      'converted': 'bg-teal-900/30 text-teal-300 border-teal-700',
+      'interested': 'bg-pink-900/30 text-pink-300 border-pink-700'
+    }
+    return colorMap[statusLower] || 'bg-gray-800/30 text-gray-300 border-gray-700'
+  }
+
+  // Get dark mode color for Follow Up Status
+  const getFollowUpStatusColorDark = (status) => {
+    if (!status) return 'bg-gray-800/30 text-gray-300 border-gray-700'
+    const statusLower = String(status).toLowerCase()
+    const colorMap = {
+      'pending': 'bg-yellow-900/30 text-yellow-300 border-yellow-700',
+      'unreachable': 'bg-red-900/30 text-red-300 border-red-700',
+      'unreachable/call not connected': 'bg-red-900/30 text-red-300 border-red-700',
+      'inactive': 'bg-gray-800/30 text-gray-300 border-gray-700',
+      'interested': 'bg-green-900/30 text-green-300 border-green-700',
+      'not interested': 'bg-rose-900/30 text-rose-300 border-rose-700',
+      'appointment scheduled': 'bg-blue-900/30 text-blue-300 border-blue-700',
+      'quotation sent': 'bg-purple-900/30 text-purple-300 border-purple-700',
+      'negotiation': 'bg-orange-900/30 text-orange-300 border-orange-700',
+      'close order': 'bg-emerald-900/30 text-emerald-300 border-emerald-700',
+      'closed/lost': 'bg-slate-900/30 text-slate-300 border-slate-700',
+      'call back request': 'bg-amber-900/30 text-amber-300 border-amber-700',
+      'currently not required': 'bg-gray-800/30 text-gray-300 border-gray-700',
+      'not required': 'bg-gray-800/30 text-gray-300 border-gray-700',
+      'not relevant': 'bg-gray-800/30 text-gray-300 border-gray-700',
+      'connected': 'bg-cyan-900/30 text-cyan-300 border-cyan-700',
+      'follow up': 'bg-indigo-900/30 text-indigo-300 border-indigo-700',
+      'follow_up': 'bg-indigo-900/30 text-indigo-300 border-indigo-700'
+    }
+    return colorMap[statusLower] || 'bg-gray-800/30 text-gray-300 border-gray-700'
+  }
+
+  const truncateText = (text, maxLength = 30) => {
+    if (!text || text === 'N/A' || text === '-') return text === 'N/A' || text === '-' ? '-' : (text || '-')
+    if (text.length <= maxLength) return text
+    return text.substring(0, maxLength) + '...'
+  }
+
+  const totalPages = Math.ceil(leadsHook.filteredCustomers.length / leadsHook.itemsPerPage)
+  const goToPreviousPage = () => leadsHook.setCurrentPage(prev => Math.max(1, prev - 1))
+  const goToNextPage = () => leadsHook.setCurrentPage(prev => Math.min(totalPages, prev + 1))
+
+  // Ref to prevent multiple simultaneous fetches
+  const fetchingEnquiriesRef = React.useRef(false);
+  const enquiryInitialLoadRef = React.useRef(false);
+  const lastEnquiryFetchRef = React.useRef({ page: 0, limit: 0, date: '' });
+
+  // Get stable user identifier
+  const salespersonIdentifier = React.useMemo(() => {
+    return authUser?.username || authUser?.email || user?.username || user?.email || '';
+  }, [authUser?.username, authUser?.email, user?.username, user?.email]);
+
+  // Fetch enquiries function for manual refresh
+  const fetchEnquiries = React.useCallback(async (forceRefresh = false) => {
+    if (activeTab !== 'enquiry') return;
+    
+    // Prevent multiple simultaneous calls
+    if (fetchingEnquiriesRef.current && !forceRefresh) return;
+    
+    fetchingEnquiriesRef.current = true;
+    setEnquiriesLoading(true);
+    try {
+      // Build query params
+      const params = new URLSearchParams();
+      params.append('page', enquiryPage.toString());
+      params.append('limit', enquiryLimit.toString());
+      if (enquiryEnabledFilters.dateRange && enquiryFilters.dateFrom) params.append('enquiryDate', enquiryFilters.dateFrom);
+      
+      // Fetch grouped data
+      const groupedParams = new URLSearchParams();
+        if (enquiryEnabledFilters.dateRange && enquiryFilters.dateFrom) groupedParams.append('enquiryDate', enquiryFilters.dateFrom);
+      
+      const [paginatedResponse, groupedResponse] = await Promise.all([
+        apiClient.get(`${API_ENDPOINTS.ENQUIRIES_DEPARTMENT_HEAD()}?${params.toString()}`),
+        apiClient.get(`${API_ENDPOINTS.ENQUIRIES_DEPARTMENT_HEAD()}?${groupedParams.toString()}`)
+      ]);
+      
+      if (paginatedResponse.success && groupedResponse.success) {
+        // Filter by current salesperson (username or email)
+        const filterBySalesperson = (enquiryList) => {
+          if (!salespersonIdentifier) return enquiryList;
+          return enquiryList.filter(enquiry => {
+            const enquirySalesperson = enquiry.salesperson || '';
+            const enquiryTelecaller = enquiry.telecaller || '';
+            const identifierLower = salespersonIdentifier.toLowerCase().trim();
+            return enquirySalesperson.toLowerCase().trim() === identifierLower ||
+                   enquiryTelecaller.toLowerCase().trim() === identifierLower;
+          });
+        };
+        
+        const allEnquiries = paginatedResponse.data?.enquiries || [];
+        const allGrouped = groupedResponse.data?.groupedByDate || {};
+        
+        // Filter enquiries by salesperson
+        const filteredEnquiries = filterBySalesperson(allEnquiries);
+        const filteredGrouped = {};
+        Object.keys(allGrouped).forEach(date => {
+          const dateEnquiries = filterBySalesperson(allGrouped[date]);
+          if (dateEnquiries.length > 0) {
+            filteredGrouped[date] = dateEnquiries;
+          }
+        });
+        
+        setEnquiries(filteredEnquiries);
+        setEnquiriesGroupedByDate(filteredGrouped);
+        setEnquiryTotal(filteredEnquiries.length);
+        
+        // Update total based on filtered results
+        setEnquiryTotal(filteredEnquiries.length);
+        
+        // Update last fetch key
+        lastEnquiryFetchRef.current = { page: enquiryPage, limit: enquiryLimit, date: enquiryFilters.dateFrom || '' };
+      }
+    } catch (error) {
+      console.error('Error fetching enquiries:', error);
+    } finally {
+      setEnquiriesLoading(false);
+      fetchingEnquiriesRef.current = false;
+    }
+  }, [activeTab, enquiryPage, enquiryLimit, enquiryFilters.dateFrom, enquiryEnabledFilters.dateRange, salespersonIdentifier]);
+
+  // Fetch enquiries when tab changes or filters/pagination change
+  React.useEffect(() => {
+    if (activeTab !== 'enquiry') {
+      enquiryInitialLoadRef.current = false;
+      lastEnquiryFetchRef.current = { page: 0, limit: 0, date: '' };
+      return;
+    }
+
+    // Prevent multiple simultaneous calls
+    if (fetchingEnquiriesRef.current) return;
+    
+    // Check if we need to fetch (avoid unnecessary calls)
+    const currentFetchKey = `${enquiryPage}-${enquiryLimit}-${enquiryFilters.dateFrom || ''}`;
+    const lastFetchKey = `${lastEnquiryFetchRef.current.page}-${lastEnquiryFetchRef.current.limit}-${lastEnquiryFetchRef.current.date}`;
+    if (currentFetchKey === lastFetchKey && enquiryInitialLoadRef.current) {
+      return;
+    }
+
+    const loadEnquiries = async () => {
+      fetchingEnquiriesRef.current = true;
+      setEnquiriesLoading(true);
+      try {
+        // Build query params
+        const params = new URLSearchParams();
+        params.append('page', enquiryPage.toString());
+        params.append('limit', enquiryLimit.toString());
+        if (enquiryEnabledFilters.dateRange && enquiryFilters.dateFrom) params.append('enquiryDate', enquiryFilters.dateFrom);
+        
+        // Fetch grouped data
+        const groupedParams = new URLSearchParams();
+        if (enquiryEnabledFilters.dateRange && enquiryFilters.dateFrom) groupedParams.append('enquiryDate', enquiryFilters.dateFrom);
+        
+        const [paginatedResponse, groupedResponse] = await Promise.all([
+          apiClient.get(`${API_ENDPOINTS.ENQUIRIES_DEPARTMENT_HEAD()}?${params.toString()}`),
+          apiClient.get(`${API_ENDPOINTS.ENQUIRIES_DEPARTMENT_HEAD()}?${groupedParams.toString()}`)
+        ]);
+        
+        if (paginatedResponse.success && groupedResponse.success) {
+          // Filter by current salesperson (username or email)
+          const filterBySalesperson = (enquiryList) => {
+            if (!salespersonIdentifier) return enquiryList;
+            return enquiryList.filter(enquiry => {
+              const enquirySalesperson = enquiry.salesperson || '';
+              const enquiryTelecaller = enquiry.telecaller || '';
+              const identifierLower = salespersonIdentifier.toLowerCase().trim();
+              return enquirySalesperson.toLowerCase().trim() === identifierLower ||
+                     enquiryTelecaller.toLowerCase().trim() === identifierLower;
+            });
+          };
+          
+          const allEnquiries = paginatedResponse.data?.enquiries || [];
+          const allGrouped = groupedResponse.data?.groupedByDate || {};
+          
+          // Filter enquiries by salesperson
+          const filteredEnquiries = filterBySalesperson(allEnquiries);
+          const filteredGrouped = {};
+          Object.keys(allGrouped).forEach(date => {
+            const dateEnquiries = filterBySalesperson(allGrouped[date]);
+            if (dateEnquiries.length > 0) {
+              filteredGrouped[date] = dateEnquiries;
+            }
+          });
+          
+        setEnquiries(filteredEnquiries);
+        setEnquiriesGroupedByDate(filteredGrouped);
+        
+        // Update total will be set after client-side filtering
+          enquiryInitialLoadRef.current = true;
+        }
+      } catch (error) {
+        console.error('Error fetching enquiries:', error);
+      } finally {
+        setEnquiriesLoading(false);
+        fetchingEnquiriesRef.current = false;
+      }
+    };
+
+    loadEnquiries();
+  }, [activeTab, enquiryPage, enquiryLimit, enquiryFilters.dateFrom, enquiryEnabledFilters.dateRange, salespersonIdentifier]);
+
+  // Debounce search query for enquiries
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedEnquirySearchQuery(enquirySearchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [enquirySearchQuery]);
+
+  // Extract unique filter options from enquiries
+  const enquiryUniqueFilterOptions = React.useMemo(() => {
+    const allEnquiries = enquiries || []
+    return {
+      states: [...new Set(allEnquiries.map(e => e.state).filter(s => s && s !== 'N/A'))].sort(),
+      divisions: [...new Set(allEnquiries.map(e => e.division).filter(d => d && d !== 'N/A'))].sort(),
+      products: [...new Set(allEnquiries.map(e => e.enquired_product || e.product_name).filter(p => p && p !== 'N/A'))].sort(),
+      followUpStatuses: [...new Set(allEnquiries.map(e => e.follow_up_status).filter(s => s && s !== 'N/A'))].sort(),
+      salesStatuses: [...new Set(allEnquiries.map(e => e.sales_status).filter(s => s && s !== 'N/A'))].sort(),
+      salespersons: [...new Set(allEnquiries.map(e => e.salesperson).filter(s => s && s !== 'N/A'))].sort(),
+      telecallers: [...new Set(allEnquiries.map(e => e.telecaller).filter(t => t && t !== 'N/A'))].sort()
+    }
+  }, [enquiries])
+
+  // Filter and sort enquiries client-side
+  const filteredEnquiries = React.useMemo(() => {
+    let filtered = [...enquiries];
+    
+    // Apply search query - search in customer name, business, address, state, product, etc.
+    if (debouncedEnquirySearchQuery && debouncedEnquirySearchQuery.trim()) {
+      const query = debouncedEnquirySearchQuery.toLowerCase().trim();
+      filtered = filtered.filter(e => {
+        const customerName = (e.customer_name || e.customer || e.name || '').toLowerCase();
+        const business = (e.business || '').toLowerCase();
+        const address = (e.address || '').toLowerCase();
+        const state = (e.state || '').toLowerCase();
+        const product = ((e.enquired_product || e.product_name || '')).toLowerCase();
+        const division = (e.division || '').toLowerCase();
+        const phone = String(e.phone || e.mobile || '').toLowerCase();
+        
+        return customerName.includes(query) || 
+               business.includes(query) || 
+               address.includes(query) ||
+               state.includes(query) ||
+               product.includes(query) ||
+               division.includes(query) ||
+               phone.includes(query);
+      });
+    }
+    
+    // Apply filters
+    Object.entries(enquiryFilters).forEach(([key, value]) => {
+      if (enquiryEnabledFilters[key] && value) {
+        if (key === 'dateRange' || key === 'dateFrom' || key === 'dateTo') {
+          // Date range filtering is handled separately
+        } else {
+          // Handle product field which might be enquired_product or product_name
+          if (key === 'product') {
+            filtered = filtered.filter(e => {
+              const productValue = e.enquired_product || e.product_name || '';
+              return String(productValue).toLowerCase() === String(value).toLowerCase();
+            });
+          } else {
+            const fieldMap = {
+              state: 'state',
+              division: 'division',
+              followUpStatus: 'follow_up_status',
+              salesStatus: 'sales_status',
+              salesperson: 'salesperson',
+              telecaller: 'telecaller'
+            }
+            if (fieldMap[key]) {
+              filtered = filtered.filter(e => {
+                const fieldValue = e[fieldMap[key]] || '';
+                return String(fieldValue).toLowerCase() === String(value).toLowerCase();
+              });
+            }
+          }
+        }
+      }
+    });
+    
+    // Date range filter
+    if (enquiryEnabledFilters.dateRange) {
+      if (enquiryFilters.dateFrom) {
+        filtered = filtered.filter(e => {
+          const enquiryDate = e.enquiry_date || e.date || '';
+          return enquiryDate >= enquiryFilters.dateFrom;
+        });
+      }
+      if (enquiryFilters.dateTo) {
+        filtered = filtered.filter(e => {
+          const enquiryDate = e.enquiry_date || e.date || '';
+          return enquiryDate <= enquiryFilters.dateTo;
+        });
+      }
+    }
+    
+    // Apply sorting
+    if (enquirySortBy && enquirySortBy !== 'none') {
+      filtered = filtered.sort((a, b) => {
+        let aVal = a[enquirySortBy];
+        let bVal = b[enquirySortBy];
+        
+        if (enquirySortBy === 'enquiry_date' || enquirySortBy === 'date') {
+          aVal = aVal ? new Date(aVal).getTime() : 0;
+          bVal = bVal ? new Date(bVal).getTime() : 0;
+        } else if (typeof aVal === 'string') {
+          aVal = aVal.toLowerCase();
+          bVal = (bVal || '').toLowerCase();
+        }
+        
+        if (aVal < bVal) return enquirySortOrder === 'asc' ? -1 : 1;
+        if (aVal > bVal) return enquirySortOrder === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    
+    return filtered;
+  }, [enquiries, debouncedEnquirySearchQuery, enquiryFilters, enquiryEnabledFilters, enquirySortBy, enquirySortOrder]);
+
+  // Group filtered enquiries by date
+  const filteredEnquiriesGroupedByDate = React.useMemo(() => {
+    const grouped = {};
+    filteredEnquiries.forEach(enquiry => {
+      const date = enquiry.enquiry_date || enquiry.date || '';
+      if (date) {
+        if (!grouped[date]) {
+          grouped[date] = [];
+        }
+        grouped[date].push(enquiry);
+      }
+    });
+    return grouped;
+  }, [filteredEnquiries]);
+
+  // Update enquiry total based on filtered results
+  React.useEffect(() => {
+    if (activeTab === 'enquiry') {
+      setEnquiryTotal(filteredEnquiries.length);
+      // Reset to page 1 when search query changes
+      if (debouncedEnquirySearchQuery) {
+        setEnquiryPage(1);
+      }
+    }
+  }, [filteredEnquiries, activeTab, debouncedEnquirySearchQuery]);
+
+  // Enquiry filter handlers
+  const handleEnquiryAdvancedFilterChange = React.useCallback((filterKey, value) => {
+    setEnquiryFilters(prev => ({ ...prev, [filterKey]: value }));
+    setEnquiryPage(1);
+  }, []);
+
+  const handleEnquiryToggleFilterSection = React.useCallback((filterKey) => {
+    setEnquiryEnabledFilters(prev => ({ ...prev, [filterKey]: !prev[filterKey] }));
+    if (enquiryEnabledFilters[filterKey]) {
+      if (filterKey === 'dateRange') {
+        setEnquiryFilters(prev => ({ ...prev, dateFrom: '', dateTo: '' }));
+      } else {
+        setEnquiryFilters(prev => ({ ...prev, [filterKey]: '' }));
+      }
+    }
+  }, [enquiryEnabledFilters]);
+
+  const handleEnquiryClearFilters = React.useCallback(() => {
+    setEnquiryFilters({ state: '', division: '', product: '', followUpStatus: '', salesStatus: '', salesperson: '', telecaller: '', dateFrom: '', dateTo: '' });
+    setEnquiryEnabledFilters({ state: false, division: false, product: false, followUpStatus: false, salesStatus: false, salesperson: false, telecaller: false, dateRange: false });
+    setEnquiryPage(1);
+  }, []);
+
+  const handleEnquirySortChange = React.useCallback((newSortBy) => {
+    setEnquirySortBy(newSortBy);
+    setEnquiryPage(1);
+  }, []);
+
+  const handleEnquirySortOrderChange = React.useCallback((newSortOrder) => {
+    setEnquirySortOrder(newSortOrder);
+    setEnquiryPage(1);
+  }, []);
+
+  // Close enquiry filter panel when clicking outside
+  React.useEffect(() => {
+    if (!showEnquiryFilters) return;
+    
+    const handleClickOutside = (event) => {
+      const filterPanel = document.getElementById('enquiry-filter-panel');
+      const filterButton = document.getElementById('enquiry-filter-button');
+      if (filterPanel && !filterPanel.contains(event.target) && !filterButton?.contains(event.target)) {
+        setShowEnquiryFilters(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showEnquiryFilters]);
+
+  if (initialLoading && activeTab === 'leads') {
+    return <DashboardSkeleton />;
+  }
+
+  return (
+    <main className={`flex-1 overflow-auto p-3 sm:p-4 md:p-6 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      {/* Tabs */}
+      <div className={`border-b mb-4 sm:mb-6 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+        <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('leads')}
+            className={`py-2 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2 whitespace-nowrap ${
+              activeTab === 'leads'
+                ? 'border-blue-500 text-blue-600'
+                : isDarkMode 
+                  ? 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <FileText className="w-3 h-3 sm:w-4 sm:h-4" />
+            Leads
+          </button>
+          <button
+            onClick={() => setActiveTab('enquiry')}
+            className={`py-2 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2 whitespace-nowrap ${
+              activeTab === 'enquiry'
+                ? 'border-blue-500 text-blue-600'
+                : isDarkMode 
+                  ? 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Package className="w-3 h-3 sm:w-4 sm:h-4" />
+            Enquiry
+          </button>
+        </nav>
+      </div>
+
+      {activeTab === 'leads' && (
+        <>
+      {/* Search and Action Bar */}
+      <div className="mb-4 sm:mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4">
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 w-full sm:w-auto">
+            <div className="flex shadow-lg rounded-xl overflow-hidden flex-1 sm:flex-initial">
+              <input 
+                type="text" 
+                placeholder="Search items..." 
+                value={leadsHook.searchQuery} 
+                onChange={(e) => leadsHook.setSearchQuery(e.target.value)} 
+                className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64 ${
+                  isDarkMode 
+                    ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-400' 
+                    : 'bg-white border-gray-200 text-gray-900 placeholder-gray-500'
+                }`} 
+              />
+              <button className={`px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md`}>
+                <Search className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => leadsHook.setShowFilterPanel(!leadsHook.showFilterPanel)} 
+              className={`p-2.5 rounded-xl border-2 inline-flex items-center relative transition-all duration-200 shadow-md ${
+                leadsHook.showFilterPanel 
+                  ? 'bg-gradient-to-r from-blue-50 to-purple-50 border-blue-300 shadow-blue-200/50' 
+                  : isDarkMode 
+                    ? 'bg-gray-800 border-gray-700 hover:bg-gray-700' 
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+              }`} 
+              id="filter-button"
+            >
+              <Filter className={`h-4 w-4 ${leadsHook.showFilterPanel ? 'text-blue-600' : isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} />
+              {Object.values(leadsHook.enabledFilters).some(Boolean) && (
+                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-gradient-to-r from-blue-500 to-purple-500 rounded-full shadow-lg">
+                  {Object.values(leadsHook.enabledFilters).filter(Boolean).length}
+                </span>
+              )}
+            </button>
+            <button 
+              onClick={handleRefresh} 
+              disabled={isRefreshing} 
+              className={`p-2.5 rounded-xl border-2 transition-all duration-200 shadow-md ${
+                isDarkMode 
+                  ? 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300' 
+                  : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-600'
+              } disabled:opacity-50`} 
+              data-refresh-btn
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <button 
+              onClick={() => setShowAddCustomer(true)} 
+              className="p-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg shadow-blue-500/30" 
+              title="Add Lead"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+            <button 
+              onClick={() => setShowImportModal(true)} 
+              className="p-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all duration-200 shadow-lg shadow-purple-500/30" 
+              title="Import Leads"
+            >
+              <Upload className="h-4 w-4" />
+            </button>
+            <button 
+              onClick={() => setShowCreateTagModal(true)} 
+              className="p-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg shadow-green-500/30" 
+              title="Create Tag"
+            >
+              <Tag className="h-4 w-4" />
+            </button>
+            {selectedLeadsForTag.length > 0 && (
+              <button 
+                onClick={() => setShowBulkActions(true)} 
+                className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 text-sm font-semibold transition-all duration-200 shadow-lg shadow-indigo-500/30"
+                title="Bulk Actions"
+              >
+                Bulk Actions ({selectedLeadsForTag.length})
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Tags */}
+        <div className="mt-4 flex items-center gap-1.5 flex-wrap">
+          <button 
+            onClick={() => handleTagSelect('all')} 
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
+              leadsHook.selectedTag === 'all' 
+                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md' 
+                : isDarkMode 
+                  ? 'bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700' 
+                  : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            All
+          </button>
+          {(() => {
+            const tagMap = new Map()
+            leadsHook.customers.forEach(c => {
+              if (c.customerType && c.customerType !== 'N/A') {
+                const lowerTag = c.customerType.toLowerCase()
+                if (!tagMap.has(lowerTag)) {
+                  tagMap.set(lowerTag, c.customerType)
+                }
+              }
+            })
+            return leadsHook.tags.map(tag => {
+              const displayTag = tagMap.get(tag) || tag
+              return (
+                <button 
+                  key={tag} 
+                  onClick={() => handleTagSelect(tag)} 
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
+                    leadsHook.selectedTag.toLowerCase() === tag
+                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md' 
+                      : isDarkMode 
+                        ? 'bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700' 
+                        : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {displayTag}
+                </button>
+              )
+            })
+          })()}
+        </div>
+      </div>
+
+      {/* Filters */}
+      <LeadFilters {...leadsHook} sortBy={leadsHook.sortBy} setSortBy={leadsHook.setSortBy} sortOrder={leadsHook.sortOrder} setSortOrder={leadsHook.setSortOrder} handleSortChange={leadsHook.handleSortChange} handleSortOrderChange={leadsHook.handleSortOrderChange} />
+
+      {/* Customer Table */}
+        <div className={`rounded-xl shadow-xl overflow-hidden ${
+          isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'
+        }`}>
+        <div className="overflow-x-auto -mx-3 sm:mx-0">
+          <table className="w-full">
+            <thead className={`bg-gradient-to-r from-blue-50 via-purple-50 to-blue-50 border-b-2 ${
+              isDarkMode ? 'from-gray-800 via-gray-750 to-gray-800 border-gray-700' : 'border-blue-200'
+            }`}>
+              <tr>
+                <th className="px-4 py-4 text-left text-xs font-bold uppercase w-12">
+                  <input
+                    type="checkbox"
+                    checked={selectedLeadsForTag.length > 0 && selectedLeadsForTag.length === leadsHook.paginatedCustomers.length}
+                    onChange={handleSelectAllLeadsForTag}
+                    className={`w-4 h-4 rounded border-2 focus:ring-2 focus:ring-blue-500 ${
+                      isDarkMode 
+                        ? 'text-blue-500 bg-gray-700 border-gray-600' 
+                        : 'text-blue-600 bg-white border-gray-300'
+                    }`}
+                  />
+                </th>
+                {columnVisibility.leadId && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <Hash className="h-4 w-4 text-purple-600" />
+                      <span>LEAD ID</span>
+                    </div>
+                  </th>
+                )}
+                {(columnVisibility.namePhone || columnVisibility.email) && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-blue-600" />
+                      <span>CUSTOMER</span>
+                    </div>
+                  </th>
+                )}
+                {columnVisibility.business && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-purple-600" />
+                      <span>BUSINESS</span>
+                    </div>
+                  </th>
+                )}
+                {columnVisibility.productType && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <Package className="h-4 w-4 text-green-600" />
+                      <span>Product Type</span>
+                    </div>
+                  </th>
+                )}
+                {columnVisibility.gstNo && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <Hash className="h-4 w-4 text-orange-600" />
+                      <span>GST No</span>
+                    </div>
+                  </th>
+                )}
+                {columnVisibility.address && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-red-600" />
+                      <span>ADDRESS</span>
+                    </div>
+                  </th>
+                )}
+                {columnVisibility.state && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <Globe className="h-4 w-4 text-indigo-600" />
+                      <span>STATE</span>
+                    </div>
+                  </th>
+                )}
+                {columnVisibility.division && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-cyan-600" />
+                      <span>Division</span>
+                    </div>
+                  </th>
+                )}
+                {columnVisibility.customerType && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <Tag className="h-4 w-4 text-pink-600" />
+                      <span>Customer Type</span>
+                    </div>
+                  </th>
+                )}
+                {columnVisibility.leadSource && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-emerald-600" />
+                      <span>Lead Source</span>
+                    </div>
+                  </th>
+                )}
+                {columnVisibility.salesStatus && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-yellow-600" />
+                      <span>SALES STATUS</span>
+                    </div>
+                  </th>
+                )}
+                {columnVisibility.followUpStatus && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-teal-600" />
+                      <span>FOLLOW UP STATUS</span>
+                    </div>
+                  </th>
+                )}
+                {columnVisibility.followUpDate && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      <span>Follow Up Date</span>
+                    </div>
+                  </th>
+                )}
+                {columnVisibility.followUpTime && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      <span>Follow Up Time</span>
+                    </div>
+                  </th>
+                )}
+                {columnVisibility.date && (
+                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      <span>Date</span>
+                    </div>
+                  </th>
+                )}
+                <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <div className="flex items-center gap-2">
+                    <MoreHorizontal className="h-4 w-4" />
+                    <span>Actions</span>
+                    <button 
+                      onClick={() => setShowColumnModal(true)} 
+                      className={`p-1.5 rounded-lg transition-all duration-200 ${
+                        isDarkMode 
+                          ? 'hover:bg-gray-700 text-gray-300' 
+                          : 'hover:bg-gray-100 text-gray-600'
+                      }`} 
+                      title="Column Settings"
+                    >
+                      <Settings className="h-4 w-4" />
+                    </button>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
+              {leadsHook.paginatedCustomers.map((customer) => (
+                <tr key={customer.id} className={`transition-colors duration-150 ${
+                  isDarkMode ? 'hover:bg-gray-700/50' : 'hover:bg-blue-50/50'
+                }`}>
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedLeadsForTag.includes(customer.id)}
+                      onChange={() => handleToggleLeadForTag(customer.id)}
+                      className={`w-4 h-4 rounded border-2 focus:ring-2 focus:ring-blue-500 ${
+                        isDarkMode 
+                          ? 'text-blue-500 bg-gray-700 border-gray-600' 
+                          : 'text-blue-600 bg-white border-gray-300'
+                      }`}
+                    />
+                  </td>
+                  {columnVisibility.leadId && (
+                    <td className={`px-4 py-3 text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={`Lead ID: ${customer.id}`}>
+                      {customer.id}
+                    </td>
+                  )}
+                  {(columnVisibility.namePhone || columnVisibility.email) && (
+                    <td className="px-4 py-3">
+                      <div className="space-y-1">
+                        {columnVisibility.namePhone && (
+                          <div className={`font-semibold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={customer.name}>
+                            {truncateText(customer.name, 30)}
+                          </div>
+                        )}
+                        {columnVisibility.namePhone && (
+                          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} title={customer.phone}>
+                            {truncateText(customer.phone, 15)}
+                          </div>
+                        )}
+                        {columnVisibility.email && customer.email !== 'N/A' && (
+                          <div className="flex items-center gap-1">
+                            <Mail className={`h-3 w-3 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                            <a 
+                              href={`mailto:${customer.email}`} 
+                              className={`text-sm ${isDarkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'}`}
+                              title={customer.email}
+                            >
+                              {truncateText(customer.email, 25)}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                  {columnVisibility.business && (
+                    <td className={`px-4 py-3 text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={customer.business}>
+                      {truncateText(customer.business, 30)}
+                    </td>
+                  )}
+                  {columnVisibility.productType && (
+                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.productName !== 'N/A' ? customer.productName : ''}>
+                      {customer.productName !== 'N/A' ? truncateText(customer.productName, 20) : '-'}
+                    </td>
+                  )}
+                  {columnVisibility.gstNo && (
+                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.gstNo !== 'N/A' ? customer.gstNo : ''}>
+                      {customer.gstNo !== 'N/A' ? truncateText(customer.gstNo, 15) : '-'}
+                    </td>
+                  )}
+                  {columnVisibility.address && (
+                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.address}>
+                      <div className="whitespace-pre-line">{truncateText(customer.address, 60)}</div>
+                    </td>
+                  )}
+                  {columnVisibility.state && (
+                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.state}>
+                      {truncateText(customer.state, 20)}
+                    </td>
+                  )}
+                  {columnVisibility.division && (
+                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.division || ''}>
+                      {customer.division ? truncateText(customer.division, 20) : '-'}
+                    </td>
+                  )}
+                  {columnVisibility.customerType && (
+                    <td className="px-4 py-3">
+                      <span className={`px-3 py-1 text-xs font-medium rounded-full bg-gradient-to-r from-blue-100 to-purple-100 text-blue-800 border border-blue-200 shadow-sm ${
+                        isDarkMode ? 'from-blue-900/50 to-purple-900/50 text-blue-200 border-blue-700' : ''
+                      }`} title={customer.customerType}>
+                        {truncateText(customer.customerType, 15)}
+                      </span>
+                    </td>
+                  )}
+                  {columnVisibility.leadSource && (
+                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.enquiryBy !== 'N/A' ? customer.enquiryBy : ''}>
+                      {customer.enquiryBy !== 'N/A' ? truncateText(customer.enquiryBy, 20) : '-'}
+                    </td>
+                  )}
+                  {columnVisibility.salesStatus && (
+                    <td className="px-4 py-3">
+                      <div className="space-y-1">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
+                          isDarkMode 
+                            ? getSalesStatusColorDark(customer.salesStatus)
+                            : getSalesStatusColor(customer.salesStatus)
+                        }`}>
+                          {StatusConverter.toTitleStatus(customer.salesStatus)}
+                        </span>
+                        {customer.salesStatusRemark && (
+                          <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} title={customer.salesStatusRemark}>
+                            "{truncateText(customer.salesStatusRemark, 40)}"
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                  {columnVisibility.followUpStatus && (
+                    <td className="px-4 py-3">
+                      <div className="space-y-1">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
+                          isDarkMode 
+                            ? getFollowUpStatusColorDark(customer.followUpStatus)
+                            : getFollowUpStatusColor(customer.followUpStatus)
+                        }`}>
+                          {StatusConverter.toTitleStatus(customer.followUpStatus)}
+                        </span>
+                        {customer.followUpRemark && (
+                          <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} title={customer.followUpRemark}>
+                            "{truncateText(customer.followUpRemark, 40)}"
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                  {columnVisibility.followUpDate && (
+                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      {customer.followUpDate || '-'}
+                    </td>
+                  )}
+                  {columnVisibility.followUpTime && (
+                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      {customer.followUpTime || '-'}
+                    </td>
+                  )}
+                  {columnVisibility.date && (
+                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      {customer.date ? new Date(customer.date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}
+                    </td>
+                  )}
+                  <td className="px-4 py-3">
+                    <div className="relative action-menu-container">
+                      <button 
+                        onClick={() => setActionMenuOpen(actionMenuOpen === customer.id ? null : customer.id)} 
+                        className={`p-2 rounded-lg transition-all duration-200 shadow-sm ${
+                          isDarkMode 
+                            ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`} 
+                        title="Actions"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                      {actionMenuOpen === customer.id && (
+                        <div className={`absolute right-0 top-full mt-1 z-50 rounded-lg shadow-xl border min-w-[180px] ${
+                          isDarkMode 
+                            ? 'bg-gray-800 border-gray-700' 
+                            : 'bg-white border-gray-200'
+                        }`} style={{ boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+                          <button 
+                            onClick={() => { handleView(customer); setActionMenuOpen(null) }} 
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                              isDarkMode 
+                                ? 'hover:bg-gray-700 text-gray-300' 
+                                : 'hover:bg-blue-50 text-gray-700'
+                            }`}
+                          >
+                            <Eye className="h-4 w-4 text-blue-600" />
+                            <span>View</span>
+                          </button>
+                          <button 
+                            onClick={() => { handleEdit(customer); setActionMenuOpen(null) }} 
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                              isDarkMode 
+                                ? 'hover:bg-gray-700 text-gray-300' 
+                                : 'hover:bg-green-50 text-gray-700'
+                            }`}
+                          >
+                            <Pencil className="h-4 w-4 text-green-600" />
+                            <span>Edit</span>
+                          </button>
+                          <button 
+                            onClick={() => { handleEditLeadStatus(customer); setActionMenuOpen(null) }} 
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                              isDarkMode 
+                                ? 'hover:bg-gray-700 text-gray-300' 
+                                : 'hover:bg-orange-50 text-gray-700'
+                            }`}
+                          >
+                            <Settings className="h-4 w-4 text-orange-600" />
+                            <span>Update Status</span>
+                          </button>
+                          <button 
+                            onClick={() => { handleQuotation(customer); setActionMenuOpen(null) }} 
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                              isDarkMode 
+                                ? 'hover:bg-gray-700 text-gray-300' 
+                                : 'hover:bg-purple-50 text-gray-700'
+                            }`}
+                          >
+                            <FileText className="h-4 w-4 text-purple-600" />
+                            <span>Create Quotation</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        <div className={`px-4 py-4 border-t-2 flex items-center justify-between ${
+          isDarkMode ? 'border-gray-700 bg-gray-800/50' : 'border-blue-200 bg-gradient-to-r from-blue-50/50 to-purple-50/50'
+        }`}>
+          <div className="flex items-center gap-3">
+            <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Page <span className="font-bold text-blue-600">{leadsHook.currentPage}</span> of <span className="font-bold text-purple-600">{totalPages}</span>
+            </span>
+            <select 
+              value={leadsHook.itemsPerPage} 
+              onChange={(e) => { leadsHook.setItemsPerPage(Number(e.target.value)); leadsHook.setCurrentPage(1) }} 
+              className={`ml-2 px-3 py-1.5 border-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                isDarkMode 
+                  ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600' 
+                  : 'bg-white border-gray-300 text-gray-700 hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500'
+              }`}
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => leadsHook.setCurrentPage(1)} 
+              disabled={leadsHook.currentPage === 1} 
+              className={`px-4 py-2 border-2 rounded-lg text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isDarkMode 
+                  ? 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 disabled:hover:bg-gray-700' 
+                  : 'bg-white border-gray-300 text-gray-700 hover:bg-blue-50 hover:border-blue-400 disabled:hover:bg-white'
+              }`}
+            >
+              First
+            </button>
+            <button 
+              onClick={goToPreviousPage} 
+              disabled={leadsHook.currentPage === 1} 
+              className={`px-4 py-2 border-2 rounded-lg text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isDarkMode 
+                  ? 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 disabled:hover:bg-gray-700' 
+                  : 'bg-white border-gray-300 text-gray-700 hover:bg-blue-50 hover:border-blue-400 disabled:hover:bg-white'
+              }`}
+            >
+              Previous
+            </button>
+            <button 
+              onClick={goToNextPage} 
+              disabled={leadsHook.currentPage === totalPages} 
+              className={`px-4 py-2 border-2 rounded-lg text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isDarkMode 
+                  ? 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 disabled:hover:bg-gray-700' 
+                  : 'bg-white border-gray-300 text-gray-700 hover:bg-purple-50 hover:border-purple-400 disabled:hover:bg-white'
+              }`}
+            >
+              Next
+            </button>
+            <button 
+              onClick={() => leadsHook.setCurrentPage(totalPages)} 
+              disabled={leadsHook.currentPage === totalPages} 
+              className={`px-4 py-2 border-2 rounded-lg text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isDarkMode 
+                  ? 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 disabled:hover:bg-gray-700' 
+                  : 'bg-white border-gray-300 text-gray-700 hover:bg-purple-50 hover:border-purple-400 disabled:hover:bg-white'
+              }`}
+            >
+              Last
+            </button>
+          </div>
+        </div>
+      </div>
+        </>
+      )}
+
+      {activeTab === 'enquiry' && (
+        <>
+          {/* Enquiry Search and Action Bar */}
+          <div className="mb-4 sm:mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4">
+              <div className="flex items-center gap-2 sm:gap-3 flex-1 w-full sm:w-auto">
+                <div className="flex shadow-lg rounded-xl overflow-hidden flex-1 sm:flex-initial">
+                  <input 
+                    type="text" 
+                    placeholder="Search items..." 
+                    value={enquirySearchQuery} 
+                    onChange={(e) => setEnquirySearchQuery(e.target.value)} 
+                    className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64 ${
+                      isDarkMode 
+                        ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-400' 
+                        : 'bg-white border-gray-200 text-gray-900 placeholder-gray-500'
+                    }`} 
+                  />
+                  <button className={`px-3 sm:px-4 py-2 sm:py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md flex-shrink-0`}>
+                    <Search className="h-3 w-3 sm:h-4 sm:w-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setShowEnquiryFilters(!showEnquiryFilters)} 
+                  className={`p-2.5 rounded-xl border-2 inline-flex items-center relative transition-all duration-200 shadow-md ${
+                    showEnquiryFilters 
+                      ? 'bg-gradient-to-r from-blue-50 to-purple-50 border-blue-300 shadow-blue-200/50' 
+                      : isDarkMode 
+                        ? 'bg-gray-800 border-gray-700 hover:bg-gray-700' 
+                        : 'bg-white border-gray-200 hover:bg-gray-50'
+                  }`} 
+                  id="enquiry-filter-button"
+                >
+                  <Filter className={`h-4 w-4 ${showEnquiryFilters ? 'text-blue-600' : isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} />
+                  {Object.values(enquiryEnabledFilters).some(Boolean) && (
+                    <span className="absolute -top-1 -right-1 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-gradient-to-r from-blue-500 to-purple-500 rounded-full shadow-lg">
+                      {Object.values(enquiryEnabledFilters).filter(Boolean).length}
+                    </span>
+                  )}
+                </button>
+                <button 
+                  onClick={() => fetchEnquiries(true)} 
+                  disabled={enquiriesLoading} 
+                  className={`p-2.5 rounded-xl border-2 transition-all duration-200 shadow-md ${
+                    isDarkMode 
+                      ? 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300' 
+                      : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-600'
+                  } disabled:opacity-50`}
+                >
+                  <RefreshCw className={`h-4 w-4 ${enquiriesLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Enquiry Filters */}
+          <EnquiryFilters 
+            showFilterPanel={showEnquiryFilters}
+            setShowFilterPanel={setShowEnquiryFilters}
+            enabledFilters={enquiryEnabledFilters}
+            advancedFilters={enquiryFilters}
+            getUniqueFilterOptions={enquiryUniqueFilterOptions}
+            handleAdvancedFilterChange={handleEnquiryAdvancedFilterChange}
+            toggleFilterSection={handleEnquiryToggleFilterSection}
+            clearAdvancedFilters={handleEnquiryClearFilters}
+            sortBy={enquirySortBy}
+            setSortBy={setEnquirySortBy}
+            sortOrder={enquirySortOrder}
+            setSortOrder={setEnquirySortOrder}
+            handleSortChange={handleEnquirySortChange}
+            handleSortOrderChange={handleEnquirySortOrderChange}
+          />
+
+          {/* Enquiry Table */}
+          {enquiriesLoading && enquiryPage === 1 ? (
+            <DashboardSkeleton />
+          ) : (
+            <>
+              <EnquiryTable 
+                enquiries={filteredEnquiries}
+                loading={enquiriesLoading}
+                groupedByDate={filteredEnquiriesGroupedByDate}
+                onRefresh={() => fetchEnquiries(true)}
+                visibleColumns={{
+                  customer_name: true,
+                  business: true,
+                  address: true,
+                  state: true,
+                  division: true,
+                  enquired_product: true,
+                  product_quantity: true,
+                  follow_up_status: false,
+                  follow_up_remark: false,
+                  sales_status: false,
+                  salesperson: false,
+                  telecaller: false,
+                  enquiry_date: false
+                }}
+              />
+              
+              {/* Enquiry Pagination */}
+              {enquiryTotal > 0 && (
+                <div className={`mt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 px-4 py-4 border-t rounded-lg overflow-x-auto ${
+                  isDarkMode
+                    ? 'bg-gray-800 border-gray-700'
+                    : 'bg-white border-gray-200'
+                }`}>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 min-w-0">
+                    <span className={`text-xs sm:text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Show:</span>
+                    <select
+                      value={enquiryLimit}
+                      onChange={(e) => {
+                        setEnquiryPage(1);
+                        setEnquiryLimit(Number(e.target.value));
+                      }}
+                      className={`px-3 py-1 border rounded-md text-xs sm:text-sm flex-shrink-0 ${
+                        isDarkMode
+                          ? 'bg-gray-700 border-gray-600 text-gray-100'
+                          : 'bg-white border-gray-300'
+                      }`}
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                    <span className={`text-xs sm:text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      Showing {((enquiryPage - 1) * enquiryLimit) + 1} to {Math.min(enquiryPage * enquiryLimit, enquiryTotal)} of {enquiryTotal} enquiries
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                    <button
+                      onClick={() => setEnquiryPage(1)}
+                      disabled={enquiryPage === 1}
+                      className={`px-2 sm:px-3 py-1 border rounded text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap ${
+                        isDarkMode
+                          ? 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'
+                          : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      First
+                    </button>
+                    <button
+                      onClick={() => setEnquiryPage(p => Math.max(1, p - 1))}
+                      disabled={enquiryPage === 1}
+                      className={`px-2 sm:px-3 py-1 border rounded text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap ${
+                        isDarkMode
+                          ? 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'
+                          : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      Previous
+                    </button>
+                    <span className={`text-xs sm:text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      Page {enquiryPage} of {Math.ceil(enquiryTotal / enquiryLimit) || 1}
+                    </span>
+                    <button
+                      onClick={() => setEnquiryPage(p => p < Math.ceil(enquiryTotal / enquiryLimit) ? p + 1 : p)}
+                      disabled={enquiryPage >= Math.ceil(enquiryTotal / enquiryLimit)}
+                      className={`px-2 sm:px-3 py-1 border rounded text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap ${
+                        isDarkMode
+                          ? 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'
+                          : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      Next
+                    </button>
+                    <button
+                      onClick={() => setEnquiryPage(Math.ceil(enquiryTotal / enquiryLimit))}
+                      disabled={enquiryPage >= Math.ceil(enquiryTotal / enquiryLimit)}
+                      className={`px-2 sm:px-3 py-1 border rounded text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap ${
+                        isDarkMode
+                          ? 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'
+                          : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      Last
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {/* Modals */}
+      {viewingCustomer && <CustomerDetailSidebar customer={viewingCustomer} onClose={() => setViewingCustomer(null)} onEdit={() => { setEditingCustomer(viewingCustomer); setViewingCustomer(null); setShowAddCustomer(true) }} onQuotation={handleQuotation} quotations={quotationHook.quotations} onViewQuotation={handleViewQuotation} onEditQuotation={handleEditQuotation} onSendQuotation={quotationHook.handleSendQuotation} onDeleteQuotation={quotationHook.handleDeleteQuotation} onCreatePI={(quotation, customer) => { setSelectedQuotationForPI(quotation); setViewingCustomerForQuotation(customer); setShowCreatePIModal(true); setViewingCustomer(null) }} quotationPIs={piHook.quotationPIs} piHook={piHook} onViewPI={piHook.handleViewPI} />}
+      {showAddCustomer && <AddCustomerForm onClose={() => { setShowAddCustomer(false); setEditingCustomer(null) }} onSave={handleSaveCustomer} editingCustomer={editingCustomer} />}
+      
+      {/* Duplicate Lead Modal */}
+      {showDuplicateModal && duplicateLeadInfo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[110]">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                    <X className="h-6 w-6 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">Duplicate Lead Found</h3>
+                    <p className="text-sm text-gray-600">This lead already exists in the system</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowDuplicateModal(false)
+                    setDuplicateLeadInfo(null)
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <p className="text-sm font-medium text-red-800 mb-2">Lead not added due to duplicate entry.</p>
+                <div className="space-y-2 text-sm text-gray-700">
+                  <div>
+                    <span className="font-semibold">Business Name:</span>{' '}
+                    <span className="text-gray-900">{duplicateLeadInfo.business || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold">Assigned Salesperson:</span>{' '}
+                    <span className="text-gray-900">
+                      {duplicateLeadInfo.assignedSalesperson && duplicateLeadInfo.assignedSalesperson !== 'N/A' 
+                        ? duplicateLeadInfo.assignedSalesperson 
+                        : 'Contact to your Department Head'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex justify-end">
+                <button
+                  onClick={() => {
+                    setShowDuplicateModal(false)
+                    setDuplicateLeadInfo(null)
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {showCreateQuotation && viewingCustomerForQuotation && <CreateQuotationForm customer={viewingCustomerForQuotation} user={user} existingQuotation={editingQuotation} onClose={() => { setShowCreateQuotation(false); setViewingCustomerForQuotation(null); setEditingQuotation(null) }} onSave={handleSaveQuotation} />}
+      {showCreatePIModal && selectedQuotationForPI && viewingCustomerForQuotation && <CreatePIForm quotation={selectedQuotationForPI} customer={viewingCustomerForQuotation} user={user} modal={true} onClose={async (savedPI) => { 
+        setShowCreatePIModal(false)
+        if (selectedQuotationForPI?.id) {
+          await piHook.fetchPIsForQuotation(selectedQuotationForPI.id)
+        }
+        setTimeout(() => {
+          setSelectedQuotationForPI(null)
+        }, 100)
+      }} />}
+      {quotationHook.showQuotationPopup && quotationHook.quotationPopupData && <QuotationPreview quotationData={quotationHook.quotationPopupData} companyBranches={companyBranches} user={user} onClose={() => quotationHook.setShowQuotationPopup(false)} />}
+      {piHook.showPIPreview && piHook.savedPiPreview && (
+        <PIPreview
+          // Merge core PI preview data with template + branch metadata
+          piData={{
+            ...piHook.savedPiPreview.data,
+            template: piHook.savedPiPreview.template,
+            selectedBranch: piHook.savedPiPreview.selectedBranch
+          }}
+          companyBranches={companyBranches}
+          user={user}
+          onClose={() => piHook.setShowPIPreview(false)}
+        />
+      )}
+      <ImportLeadsModal show={showImportModal} onClose={() => setShowImportModal(false)} onImportSuccess={handleImportSuccess} />
+      <ColumnVisibilityModal show={showColumnModal} onClose={() => setShowColumnModal(false)} columns={{ leadId: 'Lead ID', namePhone: 'Name/Phone', email: 'Email', business: 'Business', productType: 'Product Type', gstNo: 'GST No', address: 'Address', state: 'State', division: 'Division', customerType: 'Customer Type', leadSource: 'Lead Source', salesStatus: 'Sales Status', followUpStatus: 'Follow Up Status', followUpDate: 'Follow Up Date', followUpTime: 'Follow Up Time', date: 'Date' }} visibleColumns={columnVisibility} onToggleColumn={handleToggleColumn} />
+      <TagManager showCreateTagModal={showCreateTagModal} setShowCreateTagModal={setShowCreateTagModal} newTagName={newTagName} setNewTagName={setNewTagName} selectedLeadsForTag={selectedLeadsForTag} setSelectedLeadsForTag={setSelectedLeadsForTag} customers={leadsHook.customers} setCustomers={leadsHook.setCustomers} isCreatingTag={isCreatingTag} setIsCreatingTag={setIsCreatingTag} handleToggleLeadForTag={handleToggleLeadForTag} handleSelectAllLeadsForTag={handleSelectAllLeadsForTag} />
+      
+      {/* Bulk Actions Modal */}
+      {showBulkActions && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[110]">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Bulk Actions ({selectedLeadsForTag.length} selected)
+              </h3>
+              <button
+                onClick={() => {
+                  setShowBulkActions(false)
+                  setBulkTagValue('')
+                  setBulkSkuValue('')
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Action Type
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="tag"
+                      checked={bulkActionType === 'tag'}
+                      onChange={(e) => setBulkActionType(e.target.value)}
+                      className="mr-2"
+                    />
+                    <span>Create/Add Tag</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="sku"
+                      checked={bulkActionType === 'sku'}
+                      onChange={(e) => setBulkActionType(e.target.value)}
+                      className="mr-2"
+                    />
+                    <span>Change SKU/Product Type</span>
+                  </label>
+                </div>
+              </div>
+
+              {bulkActionType === 'tag' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tag Name
+                  </label>
+                  <input
+                    type="text"
+                    value={bulkTagValue}
+                    onChange={(e) => setBulkTagValue(e.target.value)}
+                    placeholder="Enter tag name"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    SKU/Product Type
+                  </label>
+                  <input
+                    type="text"
+                    value={bulkSkuValue}
+                    onChange={(e) => setBulkSkuValue(e.target.value)}
+                    placeholder="Enter SKU or Product Type"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowBulkActions(false)
+                  setBulkTagValue('')
+                  setBulkSkuValue('')
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={bulkActionType === 'tag' ? handleBulkTagChange : handleBulkSkuChange}
+                disabled={isCreatingTag}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              >
+                {isCreatingTag ? 'Processing...' : 'Apply'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Lead Status Modal */}
+      {showEditLeadStatusModal && selectedCustomerForLeadStatus && (
+        <EditLeadStatusModal
+          lead={selectedCustomerForLeadStatus}
+          onClose={() => {
+            setShowEditLeadStatusModal(false);
+            setSelectedCustomerForLeadStatus(null);
+          }}
+          onSave={handleUpdateLeadStatus}
+        />
+      )}
+    </main>
+  )
+}

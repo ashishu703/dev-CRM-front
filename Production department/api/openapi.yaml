@@ -1,0 +1,320 @@
+openapi: 3.0.3
+info:
+  title: Production Department API
+  version: 1.0.0
+  description: Core endpoints for PPC, Production, QC, Maintenance, and Stock
+servers:
+  - url: http://localhost:4000/api
+paths:
+  /ppc/plans:
+    get:
+      summary: List PPC plans
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PpcPlan'
+    post:
+      summary: Create PPC plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PpcPlanCreate'
+      responses:
+        '201': { description: Created }
+  /ppc/plans/{id}:
+    get:
+      summary: Get PPC plan
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PpcPlan' }
+    patch:
+      summary: Update PPC plan status or fields
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PpcPlanUpdate' }
+      responses:
+        '200': { description: Updated }
+
+  /production/work-orders:
+    get:
+      summary: List work orders
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WorkOrder' }
+    post:
+      summary: Create work order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkOrderCreate' }
+      responses:
+        '201': { description: Created }
+  /production/work-orders/{id}/assignments:
+    post:
+      summary: Assign machine(s) to operations
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkOrderAssignment' }
+      responses:
+        '200': { description: Assigned }
+  /production/work-orders/{id}/start:
+    post:
+      summary: Start work order execution
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Started }
+  /production/work-orders/{id}/complete:
+    post:
+      summary: Complete work order and book quantities
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Completion' }
+      responses:
+        '200': { description: Completed }
+
+  /qc/inspection-lots:
+    get:
+      summary: List inspection lots
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/InspectionLot' }
+    post:
+      summary: Create inspection lot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InspectionLotCreate' }
+      responses:
+        '201': { description: Created }
+  /qc/ncrs:
+    post:
+      summary: Create NCR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NcrCreate' }
+      responses:
+        '201': { description: Created }
+
+  /maintenance/orders:
+    get:
+      summary: List maintenance orders
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MaintenanceOrder' }
+    post:
+      summary: Create maintenance order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MaintenanceOrderCreate' }
+      responses:
+        '201': { description: Created }
+  /maintenance/orders/{id}/complete:
+    post:
+      summary: Complete maintenance order
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Completed }
+
+  /stock/items:
+    get:
+      summary: List stock items
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/StockItem' }
+  /stock/movements:
+    post:
+      summary: Create stock movement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StockMovementCreate' }
+      responses:
+        '201': { description: Created }
+
+components:
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+
+    PpcPlan:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        name: { type: string }
+        status: { type: string, enum: ['Draft','Approved','Closed'] }
+    PpcPlanCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [itemId, quantity, dueDate]
+            properties:
+              itemId: { $ref: '#/components/schemas/UUID' }
+              quantity: { type: number }
+              dueDate: { type: string, format: date }
+    PpcPlanUpdate:
+      type: object
+      properties:
+        status: { type: string, enum: ['Draft','Approved','Closed'] }
+
+    WorkOrder:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        itemId: { $ref: '#/components/schemas/UUID' }
+        quantity: { type: number }
+        status: { type: string, enum: ['Planned','Released','InProgress','Hold','Completed','Closed'] }
+        dueDate: { type: string, format: date }
+    WorkOrderCreate:
+      type: object
+      required: [itemId, quantity, dueDate]
+      properties:
+        itemId: { $ref: '#/components/schemas/UUID' }
+        quantity: { type: number }
+        dueDate: { type: string, format: date }
+    WorkOrderAssignment:
+      type: object
+      properties:
+        operations:
+          type: array
+          items:
+            type: object
+            required: [operationSeq, machineId]
+            properties:
+              operationSeq: { type: integer }
+              machineId: { $ref: '#/components/schemas/UUID' }
+    Completion:
+      type: object
+      required: [goodQty]
+      properties:
+        goodQty: { type: number }
+        scrapQty: { type: number, default: 0 }
+
+    InspectionLot:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        itemId: { $ref: '#/components/schemas/UUID' }
+        quantity: { type: number }
+        status: { type: string, enum: ['Open','Accepted','Rejected'] }
+    InspectionLotCreate:
+      type: object
+      required: [itemId, quantity]
+      properties:
+        itemId: { $ref: '#/components/schemas/UUID' }
+        quantity: { type: number }
+        source: { type: string, enum: ['Receipt','WOOperation','Shipment'] }
+
+    NcrCreate:
+      type: object
+      required: [inspectionLotId, description]
+      properties:
+        inspectionLotId: { $ref: '#/components/schemas/UUID' }
+        description: { type: string }
+
+    MaintenanceOrder:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        assetId: { $ref: '#/components/schemas/UUID' }
+        orderType: { type: string, enum: ['Preventive','Corrective'] }
+        status: { type: string, enum: ['Planned','InProgress','Completed','Closed'] }
+    MaintenanceOrderCreate:
+      type: object
+      required: [assetId, orderType]
+      properties:
+        assetId: { $ref: '#/components/schemas/UUID' }
+        orderType: { type: string, enum: ['Preventive','Corrective'] }
+
+    StockItem:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        itemId: { $ref: '#/components/schemas/UUID' }
+        warehouseId: { $ref: '#/components/schemas/UUID' }
+        quantity: { type: number }
+    StockMovementCreate:
+      type: object
+      required: [itemId, quantity]
+      properties:
+        itemId: { $ref: '#/components/schemas/UUID' }
+        quantity: { type: number }
+        warehouseId: { $ref: '#/components/schemas/UUID' }
+        binId: { $ref: '#/components/schemas/UUID' }
+        source: { type: string }

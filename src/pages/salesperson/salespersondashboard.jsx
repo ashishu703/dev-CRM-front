@@ -1,0 +1,2783 @@
+"use client"
+
+import { TrendingUp, CheckCircle, Clock, CreditCard, UserPlus, CalendarCheck, ArrowUp, XCircle, PhoneOff, Target, BarChart3, PieChart as PieChartIcon, Activity, Award, TrendingDown, ArrowRightLeft, Calendar, FileText, FileCheck, FileX, Receipt, ShoppingCart, DollarSign, RefreshCw } from "lucide-react"
+import React, { useState, useEffect, useMemo, useCallback } from "react"
+import apiClient from '../../utils/apiClient'
+import { API_ENDPOINTS } from '../../api/admin_api/api'
+import quotationService from '../../api/admin_api/quotationService'
+import paymentService from '../../api/admin_api/paymentService'
+import proformaInvoiceService from '../../api/admin_api/proformaInvoiceService'
+import departmentUserService from '../../api/admin_api/departmentUserService'
+import { useAuth } from '../../hooks/useAuth'
+import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton'
+import { toDateOnly } from '../../utils/dateOnly'
+import {
+  QuotationTrendsChart,
+  ProformaInvoiceDistributionChart,
+  LeadSourcesChart,
+  WeeklyLeadsActivityChart,
+  SalesOrderProgressChart,
+  PaymentsTrendChart,
+  PaymentDistributionChart,
+  PaymentDueRatioChart,
+  MonthlyRevenueTrendChart,
+  RevenueDistributionChart,
+  LeadConversionFunnelChart,
+  SalesVsTargetChart,
+  OutstandingPaymentAgingChart
+} from '../../components/dashboard/ChartJSCharts'
+
+const MS_IN_DAY = 24 * 60 * 60 * 1000
+
+const SALES_TARGET_ACHIEVED_VIDEO_URL =
+  'https://res.cloudinary.com/dngojnptn/video/upload/v1767337379/Sales_Target_Achieved_Video_Animation_ycm9sb.mp4'
+
+function cx(...classes) {
+  return classes.filter(Boolean).join(" ")
+}
+
+function Card({ className, children, isDarkMode = false }) {
+  return <div className={cx(
+    "rounded-xl border overflow-hidden transition-all duration-300 hover:shadow-xl",
+    isDarkMode 
+      ? "bg-gray-800 border-gray-700 shadow-lg" 
+      : "bg-white border-gray-200 shadow-md hover:shadow-2xl",
+    className
+  )}>{children}</div>
+}
+
+function CardHeader({ className, children }) {
+  return <div className={cx("p-4", className)}>{children}</div>
+}
+
+function CardTitle({ className, children, isDarkMode = false }) {
+  return <div className={cx(
+    "text-base font-semibold",
+    isDarkMode ? "text-white" : "text-gray-900",
+    className
+  )}>{children}</div>
+}
+
+function CardContent({ className, children }) {
+  return <div className={cx("p-4 pt-0", className)}>{children}</div>
+}
+
+
+export default function DashboardContent({ isDarkMode = false }) {
+  const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState('overview')
+  const [overviewDateFilter, setOverviewDateFilter] = useState('')
+  const [leads, setLeads] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [allPayments, setAllPayments] = useState([])
+  const [allQuotations, setAllQuotations] = useState([])
+  const [allPIs, setAllPIs] = useState([])
+  const [monthlyHighlight, setMonthlyHighlight] = useState(null)
+  const [showMonthlyHighlight, setShowMonthlyHighlight] = useState(false)
+  
+  // User target state
+  const [userTarget, setUserTarget] = useState({
+    target: 0,
+    achievedTarget: 0,
+    targetStartDate: null,
+    targetEndDate: null,
+    targetDurationDays: null
+  })
+  
+  // New metrics state
+  const [businessMetrics, setBusinessMetrics] = useState({
+    totalQuotation: 0,
+    approvedQuotation: 0,
+    pendingQuotation: 0,
+    totalPI: 0,
+    approvedPI: 0,
+    pendingPI: 0,
+    totalAdvancePayment: 0,
+    duePayment: 0,
+    totalSaleOrder: 0,
+    totalReceivedPayment: 0,
+    totalRevenue: 0
+  })
+  const [loadingMetrics, setLoadingMetrics] = useState(false)
+
+  const getCalendarDaysRemaining = (targetDate) => {
+    if (!targetDate || isNaN(targetDate.getTime())) return 0
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const endDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate())
+    if (endDay < today) return 0
+    const diffTime = endDay - today
+    return Math.max(0, Math.round(diffTime / MS_IN_DAY))
+  }
+
+  // Fetch real leads from API - with cache busting to ensure fresh data
+  const fetchLeads = useCallback(async () => {
+    try {
+      setLoading(true)
+      // Add timestamp to prevent caching
+      const url = `${API_ENDPOINTS.SALESPERSON_ASSIGNED_LEADS_ME()}?_t=${Date.now()}`;
+      const leadsResponse = await apiClient.get(url)
+      const assignedLeads = leadsResponse?.data || []
+      
+      // Transform API data to match our format
+      const transformedLeads = assignedLeads.map(lead => ({
+        id: lead.id,
+        name: lead.name,
+        sales_status: lead.sales_status || lead.salesStatus || 'pending',
+        source: lead.lead_source || lead.leadSource || 'Unknown',
+        created_at: lead.created_at || lead.createdAt || lead.date || new Date().toISOString()
+      }))
+      
+      setLeads(transformedLeads)
+      setError(null)
+    } catch (err) {
+      console.error('[Dashboard] Error loading leads:', err)
+      setError('Failed to load leads data')
+      setLeads([])
+    } finally {
+      setLoading(false)
+      setInitialLoading(false)
+    }
+  }, [])
+
+  // Month-start highlight (achievers only) - shown only on day 1-2 (show on every login during the window)
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const now = new Date()
+        if (now.getDate() > 2) return
+
+        const res = await apiClient.get('/api/reports/monthly-highlights')
+        const data = res?.data?.data || res?.data || null
+        const isAchiever = data?.highlightType === 'winner' || data?.highlightType === 'achieved'
+        if (data?.show && isAchiever) {
+          setMonthlyHighlight(data)
+          setShowMonthlyHighlight(true)
+          const t3 = setTimeout(() => setShowMonthlyHighlight(false), 7000)
+          return () => {
+            clearTimeout(t3)
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    run()
+  }, [user?.id])
+
+  // Fetch user target data
+  const fetchUserTarget = useCallback(async () => {
+    try {
+      // When department_user calls listUsers, it automatically filters by their email
+      const response = await departmentUserService.listUsers({ page: 1, limit: 1 })
+      const payload = response?.data || response
+      const users = payload?.users || []
+      
+      if (users.length > 0) {
+        const user = users[0]
+        const next = {
+          target: parseFloat(user.target || 0),
+          achievedTarget: parseFloat(user.achievedTarget || user.achieved_target || 0),
+          targetStartDate: user.targetStartDate || user.target_start_date || null,
+          targetEndDate: user.targetEndDate || user.target_end_date || null,
+          targetDurationDays: user.targetDurationDays || user.target_duration_days || null
+        }
+        setUserTarget(next)
+        return next
+      }
+      const empty = {
+        target: 0,
+        achievedTarget: 0,
+        targetStartDate: null,
+        targetEndDate: null,
+        targetDurationDays: null
+      }
+      setUserTarget(empty)
+      return empty
+    } catch (err) {
+      console.error('Error fetching user target:', err)
+      // Set defaults on error
+      const empty = {
+        target: 0,
+        achievedTarget: 0,
+        targetStartDate: null,
+        targetEndDate: null,
+        targetDurationDays: null
+      }
+      setUserTarget(empty)
+      return empty
+    }
+  }, [])
+
+  // OPTIMIZED: Fetch business metrics - reuse leads from state if available, parallel API calls
+  const fetchBusinessMetrics = useCallback(async (leadsData = null, targetWindow = null) => {
+    try {
+      setLoadingMetrics(true)
+      
+      // OPTIMIZED: Reuse leads from state if available, otherwise fetch with cache busting
+      let assignedLeads = leadsData || leads
+      if (!assignedLeads || assignedLeads.length === 0) {
+        const url = `${API_ENDPOINTS.SALESPERSON_ASSIGNED_LEADS_ME()}?_t=${Date.now()}`;
+        const leadsResponse = await apiClient.get(url)
+        const rawLeads = leadsResponse?.data || []
+        // Transform if needed (if coming from API directly)
+        assignedLeads = rawLeads.map(lead => ({
+          id: lead.id,
+          name: lead.name,
+          sales_status: lead.sales_status || lead.salesStatus || 'pending',
+          source: lead.lead_source || lead.leadSource || 'Unknown',
+          created_at: lead.created_at || lead.createdAt || lead.date || new Date().toISOString()
+        }))
+      }
+      
+      const leadIds = assignedLeads.map(lead => lead.id)
+      
+      if (leadIds.length === 0) {
+        setLoadingMetrics(false)
+        setAllPayments([])
+        return
+      }
+      
+      // OPTIMIZED: Fetch quotations, payments, and PIs in parallel
+      const [quotationsResult, paymentsByCustomersResult] = await Promise.all([
+        quotationService.getBulkQuotationsByCustomers(leadIds).catch(err => {
+          console.error('Error fetching bulk quotations:', err)
+          return { data: [] }
+        }),
+        paymentService.getBulkPaymentsByCustomers(leadIds).catch(err => {
+          console.error('Error fetching bulk payments by customers:', err)
+          return { data: [] }
+        })
+      ])
+      
+      const allQuotations = quotationsResult?.data || []
+      setAllQuotations(allQuotations)
+      const quotationIds = allQuotations.map(q => q.id)
+      
+      // OPTIMIZED: Fetch payments by quotations and PIs in parallel
+      const [paymentsByQuotationsResult, pisResult] = await Promise.all([
+        quotationIds.length > 0 
+          ? paymentService.getBulkPaymentsByQuotations(quotationIds).catch(err => {
+              console.error('Error fetching bulk payments by quotations:', err)
+              return { data: [] }
+            })
+          : Promise.resolve({ data: [] }),
+        quotationIds.length > 0
+          ? proformaInvoiceService.getBulkPIsByQuotations(quotationIds).catch(err => {
+              console.error('Error fetching bulk PIs:', err)
+              return { data: [] }
+            })
+          : Promise.resolve({ data: [] })
+      ])
+      
+      // Combine payments from both sources
+      const allPayments = []
+      const paymentsByCustomers = Array.isArray(paymentsByCustomersResult?.data) ? paymentsByCustomersResult.data : []
+      const paymentsByQuotations = Array.isArray(paymentsByQuotationsResult?.data) ? paymentsByQuotationsResult.data : []
+      
+      allPayments.push(...paymentsByCustomers)
+      
+      // Add payments that aren't already in allPayments
+      paymentsByQuotations.forEach(p => {
+        const exists = allPayments.some(ap => ap.id === p.id || 
+          (ap.payment_reference && p.payment_reference && ap.payment_reference === p.payment_reference))
+        if (!exists) {
+          allPayments.push(p)
+        }
+      })
+      
+      // Store payments for monthly revenue calculation
+      setAllPayments(allPayments)
+      
+      // Use allPayments variable for rest of the function
+      const fetchedPayments = allPayments
+      
+      // Get PIs
+      const allPIs = pisResult?.data || []
+      setAllPIs(allPIs)
+
+      // Set of quotation IDs which have at least one PI (used for Sale Order count)
+      const quotationIdsWithPI = new Set(
+        allPIs
+          .map((pi) => pi.quotation_id)
+          .filter((id) => id != null)
+      )
+      
+      // Calculate quotation metrics
+      const totalQuotation = allQuotations.length
+      const approvedQuotation = allQuotations.filter(q => {
+        const status = (q.status || '').toLowerCase()
+        return status === 'approved'
+      }).length
+      const pendingQuotation = allQuotations.filter(q => {
+        const status = (q.status || '').toLowerCase()
+        return status === 'pending_approval' || status === 'pending' || status === 'draft'
+      }).length
+      const rejectedQuotation = allQuotations.filter(q => {
+        const status = (q.status || '').toLowerCase()
+        return status === 'rejected'
+      }).length
+      
+      // Calculate PI metrics
+      const totalPI = allPIs.length
+      const approvedPI = allPIs.filter(pi => {
+        const status = (pi.status || '').toLowerCase()
+        return status === 'approved'
+      }).length
+      const pendingPI = allPIs.filter(pi => {
+        const status = (pi.status || '').toLowerCase()
+        return status === 'pending_approval' || status === 'pending'
+      }).length
+      const rejectedPI = allPIs.filter(pi => {
+        const status = (pi.status || '').toLowerCase()
+        return status === 'rejected'
+      }).length
+      
+      // Calculate payment metrics - improved calculation with date range filtering
+      // Filter completed/paid payments and apply date range filter if target dates are set
+      // ONLY count APPROVED payments (approved by accounts department)
+      let completedPayments = allPayments.filter(p => {
+        const status = (p.payment_status || p.status || '').toLowerCase()
+        // Check approval status - ONLY count approved payments
+        const approvalStatus = (p.approval_status || '').toLowerCase()
+        const isApproved = approvalStatus === 'approved'
+        // Only count completed/advance payments that are not refunds AND are approved
+        const isRefund = p.is_refund === true || p.is_refund === 1
+        return (status === 'completed' || status === 'paid' || status === 'success' || status === 'advance') && !isRefund && isApproved
+      })
+      
+      // Apply date range filter if user has target dates
+      const startDateStr = targetWindow?.targetStartDate || userTarget.targetStartDate
+      const endDateStr = targetWindow?.targetEndDate || userTarget.targetEndDate
+      if (startDateStr && endDateStr) {
+        
+        completedPayments = completedPayments.filter(p => {
+          // Compare date-only strings to avoid timezone shifts
+          const raw = p.payment_date || p.paymentDate || null
+          if (!raw) return false
+          const pd = toDateOnly(raw)
+          if (!pd) return false
+          return pd >= startDateStr && pd <= endDateStr
+        })
+      }
+      
+      // Calculate total received payment (all completed payments within date range)
+      // Use installment_amount as primary field (matches backend calculation)
+      const totalReceivedPayment = completedPayments.reduce((sum, p) => {
+        const amount = Number(
+          p.installment_amount ||  // Primary field - matches backend
+          p.paid_amount || 
+          p.amount || 
+          p.payment_amount ||
+          0
+        )
+        return sum + (isNaN(amount) ? 0 : amount)
+      }, 0)
+      
+      // Calculate advance payment (first payment or payments marked as advance)
+      // Advance payment = first payment of each quotation OR payments with status 'advance'
+      // We need to track the first payment per quotation/lead to avoid double counting
+      const firstPaymentMap = new Map() // key: quotation_id or lead_id, value: { amount, payment_date }
+      const advancePaymentsList = [] // List of all advance payments to sum
+      
+      completedPayments.forEach(p => {
+        const key = p.quotation_id || `lead_${p.lead_id}`
+        const status = (p.payment_status || p.status || '').toLowerCase()
+        const paymentDate = p.payment_date ? new Date(p.payment_date) : new Date(0)
+        const amount = Number(p.installment_amount || p.paid_amount || p.amount || p.payment_amount || 0)
+        
+        // Check if this is an advance payment
+        const isExplicitAdvance = status === 'advance' || p.is_advance === true || p.payment_type === 'advance'
+        const isFirstPayment = p.installment_number === 1 || p.installment_number === 0
+        
+        if (isExplicitAdvance) {
+          // Explicitly marked as advance - always count
+          advancePaymentsList.push(amount)
+        } else if (isFirstPayment) {
+          // First payment - check if we already have a first payment for this quotation/lead
+          if (!firstPaymentMap.has(key)) {
+            firstPaymentMap.set(key, { amount, paymentDate })
+            advancePaymentsList.push(amount)
+          } else {
+            // Compare dates - use the earliest payment as first payment
+            const existing = firstPaymentMap.get(key)
+            if (paymentDate < existing.paymentDate) {
+              // Remove old amount and add new one
+              const oldIndex = advancePaymentsList.indexOf(existing.amount)
+              if (oldIndex > -1) {
+                advancePaymentsList.splice(oldIndex, 1)
+              }
+              firstPaymentMap.set(key, { amount, paymentDate })
+              advancePaymentsList.push(amount)
+            }
+          }
+        }
+      })
+      
+      // Sum all advance payments
+      const totalAdvancePayment = advancePaymentsList.reduce((sum, amount) => {
+        return sum + (isNaN(amount) ? 0 : amount)
+      }, 0)
+      
+      // Calculate due payments (remaining amounts from approved quotations)
+      // Calculate for ALL approved quotations with date range filtered payments
+      let duePayment = 0
+      let totalRevenue = 0
+      
+      // Prepare date range filter
+      let dateFilter = null
+      if (startDateStr && endDateStr) {
+        dateFilter = { startDateStr, endDateStr }
+      }
+      
+      // OPTIMIZED: Use already fetched PIs instead of making N+1 queries
+      // Create a map of quotation_id -> PIs for quick lookup
+      const pisByQuotationIdMap = new Map();
+      allPIs.forEach(pi => {
+        if (pi.quotation_id) {
+          if (!pisByQuotationIdMap.has(pi.quotation_id)) {
+            pisByQuotationIdMap.set(pi.quotation_id, []);
+          }
+          pisByQuotationIdMap.get(pi.quotation_id).push(pi);
+        }
+      });
+      
+      for (const quotation of allQuotations) {
+        const status = (quotation.status || '').toLowerCase()
+        if (status === 'approved') {
+          // OPTIMIZED: Check if PI exists using already fetched data (no API call)
+          const quotationPIs = pisByQuotationIdMap.get(quotation.id) || [];
+          const hasPIForQuotation = quotationPIs.length > 0;
+          
+          // Skip if no PI exists
+          if (!hasPIForQuotation) {
+            continue;
+          }
+          
+          const quotationTotal = Number(quotation.total_amount || quotation.total || 0)
+          if (!isNaN(quotationTotal) && quotationTotal > 0) {
+            totalRevenue += quotationTotal
+            
+            // Get payments for this quotation
+            let quotationPayments = allPayments.filter(p => 
+              p.quotation_id === quotation.id || 
+              (p.lead_id && quotation.customer_id && p.lead_id === quotation.customer_id)
+            )
+            
+            // Apply date range filter if target dates are set
+            if (dateFilter) {
+              quotationPayments = quotationPayments.filter(p => {
+                const raw = p.payment_date || p.paymentDate || null
+                if (!raw) return false
+                const pd = toDateOnly(raw)
+                if (!pd) return false
+                return pd >= dateFilter.startDateStr && pd <= dateFilter.endDateStr
+              })
+            }
+            
+            // Calculate paid amount using installment_amount
+            // ONLY count APPROVED payments
+            const paidTotal = quotationPayments
+              .filter(p => {
+                const pStatus = (p.payment_status || p.status || '').toLowerCase()
+                const approvalStatus = (p.approval_status || '').toLowerCase()
+                const isApproved = approvalStatus === 'approved'
+                const isRefund = p.is_refund === true || p.is_refund === 1
+                return (pStatus === 'completed' || pStatus === 'paid' || pStatus === 'success' || pStatus === 'advance') && !isRefund && isApproved
+              })
+              .reduce((sum, p) => {
+                const amount = Number(p.installment_amount || p.paid_amount || p.amount || 0)
+                return sum + (isNaN(amount) ? 0 : amount)
+              }, 0)
+            
+            // Calculate remaining amount (due payment)
+            const remaining = quotationTotal - paidTotal
+            if (remaining > 0) {
+              duePayment += remaining
+            }
+          }
+        }
+      }
+      
+      // Count sale orders
+      // Business rule: any quotation that has at least one PI created is treated as a Sale Order
+      // So we simply count unique quotation IDs which have a PI
+      const totalSaleOrder = quotationIdsWithPI.size
+      
+      setBusinessMetrics({
+        totalQuotation,
+        approvedQuotation,
+        pendingQuotation,
+        rejectedQuotation,
+        totalPI,
+        approvedPI,
+        pendingPI,
+        rejectedPI,
+        totalAdvancePayment,
+        duePayment,
+        totalSaleOrder,
+        totalReceivedPayment,
+        totalRevenue
+      })
+    } catch (err) {
+      console.error('Error fetching business metrics:', err)
+      // Set default values on error
+      setBusinessMetrics({
+        totalQuotation: 0,
+        approvedQuotation: 0,
+        pendingQuotation: 0,
+        rejectedQuotation: 0,
+        totalPI: 0,
+        approvedPI: 0,
+        pendingPI: 0,
+        rejectedPI: 0,
+        totalAdvancePayment: 0,
+        duePayment: 0,
+        totalSaleOrder: 0,
+        totalReceivedPayment: 0,
+        totalRevenue: 0
+      })
+    } finally {
+      setLoadingMetrics(false)
+    }
+  }, [leads, userTarget])
+
+  // OPTIMIZED: Refresh dashboard function - parallel API calls
+  const refreshDashboard = useCallback(async () => {
+    try {
+      setRefreshing(true)
+      // Fetch leads first with cache busting
+      const url = `${API_ENDPOINTS.SALESPERSON_ASSIGNED_LEADS_ME()}?_t=${Date.now()}`;
+      const leadsResponse = await apiClient.get(url)
+      const assignedLeads = leadsResponse?.data || []
+      
+      // Transform API data to match our format
+      const transformedLeads = assignedLeads.map(lead => ({
+        id: lead.id,
+        name: lead.name,
+        sales_status: lead.sales_status || lead.salesStatus || 'pending',
+        source: lead.lead_source || lead.leadSource || 'Unknown',
+        created_at: lead.created_at || lead.createdAt || lead.date || new Date().toISOString()
+      }))
+      
+      setLeads(transformedLeads)
+      
+      // Fetch target first and use it to filter metrics (avoid stale state / all-time totals)
+      const targetWindow = await fetchUserTarget()
+      await fetchBusinessMetrics(transformedLeads, targetWindow)
+    } catch (err) {
+      console.error('Error refreshing dashboard:', err)
+    } finally {
+      setRefreshing(false)
+    }
+  }, [fetchBusinessMetrics, fetchUserTarget])
+
+  const fetchingMetricsRef = React.useRef(false);
+  const lastUserIdRef = React.useRef(null);
+  
+  const currentUserId = user?.id || user?.email || null;
+  
+  useEffect(() => {
+    if (lastUserIdRef.current === currentUserId && lastUserIdRef.current !== null) {
+      return;
+    }
+    
+    if (lastUserIdRef.current !== null && lastUserIdRef.current !== currentUserId) {
+      setLeads([]);
+      setError(null);
+      setBusinessMetrics({
+        totalQuotation: 0,
+        approvedQuotation: 0,
+        pendingQuotation: 0,
+        totalPI: 0,
+        approvedPI: 0,
+        pendingPI: 0,
+        totalAdvancePayment: 0,
+        duePayment: 0,
+        totalSaleOrder: 0,
+        totalReceivedPayment: 0,
+        totalRevenue: 0
+      });
+    }
+    
+    // Update last user ID
+    lastUserIdRef.current = currentUserId;
+    
+    const loadData = async () => {
+      // Fetch leads and target; metrics will run once leads are loaded and/or target is available
+      await Promise.all([fetchLeads(), fetchUserTarget()]);
+      setInitialLoading(false);
+    };
+    
+    if (currentUserId) {
+      loadData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId])
+  
+  // OPTIMIZED: Fetch metrics after leads are loaded (reuse leads data)
+  useEffect(() => {
+    if (!currentUserId || fetchingMetricsRef.current || leads.length === 0) return;
+    
+    // Fetch metrics with leads data to avoid duplicate API call
+    if (!fetchingMetricsRef.current) {
+      fetchingMetricsRef.current = true;
+      fetchBusinessMetrics(leads, userTarget).finally(() => {
+        fetchingMetricsRef.current = false;
+      });
+    }
+  }, [leads.length, currentUserId, fetchBusinessMetrics]); // Only when leads are loaded and user is set
+  
+  // OPTIMIZED: Fetch business metrics when user target dates change (to recalculate with date range)
+  useEffect(() => {
+    // Skip if user not set or already fetching
+    if (!currentUserId || fetchingMetricsRef.current) return;
+    
+    // Only refetch if we have target dates and leads
+    if (userTarget.targetStartDate && userTarget.targetEndDate && leads.length > 0) {
+      fetchingMetricsRef.current = true;
+      fetchBusinessMetrics(leads, userTarget).finally(() => {
+        fetchingMetricsRef.current = false;
+      });
+    }
+  }, [userTarget.targetStartDate, userTarget.targetEndDate, currentUserId, leads, fetchBusinessMetrics])
+
+  // Simple status mapping function
+  const mapSalesStatusToBucket = (status) => {
+    switch (status) {
+      case 'converted':
+      case 'win lead':
+        return 'converted'
+      case 'pending':
+        return 'not-connected'
+      case 'running':
+      case 'interested':
+        return 'connected'
+      case 'lost/closed':
+        return 'closed'
+      default:
+        return 'not-connected'
+    }
+  }
+
+  const getDateRange = () => {
+    if (!overviewDateFilter) return null
+    const selectedDate = new Date(overviewDateFilter)
+    const startOfDay = new Date(selectedDate)
+    startOfDay.setHours(0, 0, 0, 0)
+    const endDate = new Date()
+    endDate.setHours(23, 59, 59, 999)
+    return { start: startOfDay, end: endDate }
+  }
+    
+  const getFilteredLeads = () => {
+    const dateRange = getDateRange()
+    if (!dateRange) return leads
+    return leads.filter(lead => {
+      if (!lead.created_at) return false
+      const leadDate = new Date(lead.created_at)
+      return leadDate >= dateRange.start && leadDate <= dateRange.end
+    })
+  }
+
+  const getFilteredQuotations = () => {
+    const dateRange = getDateRange()
+    if (!dateRange) return allQuotations
+    return allQuotations.filter(q => {
+      const quoteDate = q.quotation_date ? new Date(q.quotation_date) : (q.created_at ? new Date(q.created_at) : null)
+      if (!quoteDate) return false
+      return quoteDate >= dateRange.start && quoteDate <= dateRange.end
+    })
+  }
+
+  const getFilteredPayments = () => {
+    const dateRange = getDateRange()
+    if (!dateRange) return allPayments
+    return allPayments.filter(p => {
+      const paymentDate = p.payment_date ? new Date(p.payment_date) : null
+      if (!paymentDate) return false
+      return paymentDate >= dateRange.start && paymentDate <= dateRange.end
+    })
+  }
+
+  // Calculate real data from leads
+  const calculateLeadStatusData = () => {
+    const filteredLeads = getFilteredLeads()
+    const statusCounts = {}
+    filteredLeads.forEach(lead => {
+      const bucket = mapSalesStatusToBucket(lead.sales_status)
+      statusCounts[bucket] = (statusCounts[bucket] || 0) + 1
+    })
+    return statusCounts
+  }
+
+  const calculateMetrics = () => {
+    const filteredLeads = getFilteredLeads()
+    const totalLeads = filteredLeads.length
+    
+    // Count Win/Closed leads - from Lead Status API (sales_status = 'win/closed' or 'win' or 'closed')
+    const winClosedLeads = filteredLeads.filter(lead => {
+      const status = String(lead.sales_status || '').toLowerCase()
+      return status === 'win/closed' || status === 'win' || status === 'closed'
+    }).length
+    
+    // Count Pending leads - from Lead Status API (sales_status = 'pending')
+    const pendingLeads = filteredLeads.filter(lead => {
+      const status = String(lead.sales_status || '').toLowerCase()
+      return status === 'pending'
+    }).length
+    
+    const nextMeetingLeads = filteredLeads.filter(lead => mapSalesStatusToBucket(lead.sales_status) === 'next-meeting').length
+    const connectedLeads = filteredLeads.filter(lead => mapSalesStatusToBucket(lead.sales_status) === 'connected').length
+    const closedLeads = filteredLeads.filter(lead => mapSalesStatusToBucket(lead.sales_status) === 'closed').length
+
+    // Conversion Rate = (Win/Closed Leads / Total Leads) * 100
+    const conversionRate = totalLeads > 0 ? ((winClosedLeads / totalLeads) * 100).toFixed(1) : 0
+    
+    // Pending Rate = (Pending Leads / Total Leads) * 100
+    const pendingRate = totalLeads > 0 ? ((pendingLeads / totalLeads) * 100).toFixed(1) : 0
+
+    return {
+      totalLeads,
+      winClosedLeads,
+      pendingLeads,
+      nextMeetingLeads,
+      connectedLeads,
+      closedLeads,
+      conversionRate,
+      pendingRate
+    }
+  }
+
+  // Month-wise trends (real data, no hardcoded fallbacks)
+  const trendMetrics = useMemo(() => {
+    const now = new Date()
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    currentMonthEnd.setHours(23, 59, 59, 999)
+
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+    prevMonthEnd.setHours(23, 59, 59, 999)
+
+    const inRange = (d, start, end) => d && !isNaN(d.getTime()) && d >= start && d <= end
+
+    const calcLeadMetricsForRange = (start, end) => {
+      const monthLeads = (leads || []).filter(l => {
+        if (!l.created_at) return false
+        const ld = new Date(l.created_at)
+        return inRange(ld, start, end)
+      })
+
+      const totalLeads = monthLeads.length
+      const winClosedLeads = monthLeads.filter(lead => {
+        const status = String(lead.sales_status || '').toLowerCase()
+        return status === 'win/closed' || status === 'win' || status === 'closed'
+      }).length
+      const pendingLeads = monthLeads.filter(lead => String(lead.sales_status || '').toLowerCase() === 'pending').length
+
+      const conversionRate = totalLeads > 0 ? (winClosedLeads / totalLeads) * 100 : 0
+      const pendingRate = totalLeads > 0 ? (pendingLeads / totalLeads) * 100 : 0
+
+      return { totalLeads, conversionRate, pendingRate }
+    }
+
+    const formatPctChange = (prev, curr) => {
+      if (!Number.isFinite(prev) || !Number.isFinite(curr)) return { text: '—', up: false }
+      if (prev === 0) {
+        return { text: '—', up: curr > 0 }
+      }
+      const pct = ((curr - prev) / prev) * 100
+      const rounded = Math.round(pct * 10) / 10
+      return { text: `${rounded > 0 ? '+' : ''}${rounded}%`, up: rounded >= 0 }
+    }
+
+    const formatPointChange = (prev, curr) => {
+      if (!Number.isFinite(prev) || !Number.isFinite(curr)) return { text: '—', up: false }
+      const diff = curr - prev
+      const rounded = Math.round(diff * 10) / 10
+      return { text: `${rounded > 0 ? '+' : ''}${rounded}%`, up: rounded >= 0 }
+    }
+
+    const currLead = calcLeadMetricsForRange(currentMonthStart, currentMonthEnd)
+    const prevLead = calcLeadMetricsForRange(prevMonthStart, prevMonthEnd)
+
+    // Payments (approved + completed) month-wise
+    const isPaymentApprovedByAccounts = (p) => {
+      const accountsStatus = (p.approval_status || p.accounts_approval_status || p.accountsApprovalStatus || '').toLowerCase()
+      return accountsStatus === 'approved'
+    }
+    const isPaymentCompleted = (p) => {
+      const status = (p.payment_status || p.status || '').toLowerCase()
+      return status === 'completed' || status === 'paid' || status === 'success' || status === 'advance'
+    }
+    const isRefund = (p) => p.is_refund === true || p.is_refund === 1
+    const getPaymentAmount = (p) => {
+      const amount = Number(p.installment_amount || p.paid_amount || p.amount || p.payment_amount || 0)
+      return isNaN(amount) ? 0 : amount
+    }
+    const sumPaymentsForRange = (start, end) => {
+      return (allPayments || [])
+        .filter(p => isPaymentCompleted(p) && !isRefund(p) && isPaymentApprovedByAccounts(p))
+        .filter(p => {
+          const pd = p.payment_date ? new Date(p.payment_date) : null
+          return pd ? inRange(pd, start, end) : false
+        })
+        .reduce((sum, p) => sum + getPaymentAmount(p), 0)
+    }
+
+    const currRevenue = sumPaymentsForRange(currentMonthStart, currentMonthEnd)
+    const prevRevenue = sumPaymentsForRange(prevMonthStart, prevMonthEnd)
+
+    return {
+      totalLeadsTrend: formatPctChange(prevLead.totalLeads, currLead.totalLeads),
+      conversionRateTrend: formatPointChange(prevLead.conversionRate, currLead.conversionRate),
+      pendingRateTrend: formatPointChange(prevLead.pendingRate, currLead.pendingRate),
+      revenueTrend: formatPctChange(prevRevenue, currRevenue)
+    }
+  }, [leads, allPayments])
+
+  // Calculate lead sources from real data
+  const calculateLeadSources = () => {
+    const filteredLeads = getFilteredLeads()
+    const sourceCounts = {}
+    
+    // Count leads by source
+    filteredLeads.forEach(lead => {
+      const source = lead.source || 'Unknown'
+      sourceCounts[source] = (sourceCounts[source] || 0) + 1
+    })
+    
+    // Convert to array format for charts, sorted by count (descending)
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6b7280', '#ec4899', '#14b8a6']
+    const sortedSources = Object.entries(sourceCounts)
+      .sort((a, b) => b[1] - a[1]) // Sort by count descending
+      .slice(0, 8) // Limit to top 8 sources
+    
+    return sortedSources.map(([label, value], index) => ({
+      label,
+      value,
+      color: colors[index % colors.length]
+    }))
+  }
+
+  // Calculate weekly activity from real leads data
+  const calculateWeeklyActivity = () => {
+    const filteredLeads = getFilteredLeads()
+    
+    // Get the current week (last 7 days)
+    const now = new Date()
+    const dayOfWeek = now.getDay() // 0 = Sunday, 1 = Monday, etc.
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - dayOfWeek + 1) // Monday of current week
+    startOfWeek.setHours(0, 0, 0, 0)
+    
+    const endOfWeek = new Date(startOfWeek)
+    endOfWeek.setDate(startOfWeek.getDate() + 6) // Sunday of current week
+    endOfWeek.setHours(23, 59, 59, 999)
+    
+    // Filter leads from this week
+    const weekLeads = filteredLeads.filter(lead => {
+      if (!lead.created_at) return false
+      const leadDate = new Date(lead.created_at)
+      return leadDate >= startOfWeek && leadDate <= endOfWeek
+    })
+    
+    // Initialize day counts
+    const dayCounts = {
+      1: 0, // Monday
+      2: 0, // Tuesday
+      3: 0, // Wednesday
+      4: 0, // Thursday
+      5: 0, // Friday
+      6: 0, // Saturday
+      0: 0  // Sunday
+    }
+    
+    // Count leads by day of week
+    weekLeads.forEach(lead => {
+      if (lead.created_at) {
+        const leadDate = new Date(lead.created_at)
+        const dayOfWeekNum = leadDate.getDay()
+        dayCounts[dayOfWeekNum] = (dayCounts[dayOfWeekNum] || 0) + 1
+      }
+    })
+    
+    // Return in order: Mon, Tue, Wed, Thu, Fri, Sat, Sun
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    const dayOrder = [1, 2, 3, 4, 5, 6, 0] // Monday to Sunday
+    
+    return dayOrder.map((dayNum, index) => ({
+      label: dayLabels[index],
+      value: dayCounts[dayNum] || 0,
+      color: '#3b82f6'
+    }))
+  }
+
+  const calculateMonthlyRevenue = () => {
+    const paymentsToUse = getFilteredPayments()
+    
+    // Group payments by month
+    const revenueByMonth = {}
+    
+    paymentsToUse.forEach(payment => {
+      const paymentDate = payment.payment_date ? new Date(payment.payment_date) : (payment.created_at ? new Date(payment.created_at) : null)
+      if (!paymentDate) return
+      
+      // Only count completed/paid payments
+      const status = (payment.payment_status || payment.status || '').toLowerCase()
+      if (status !== 'completed' && status !== 'paid' && status !== 'success') return
+      
+      const monthKey = paymentDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      const amount = Number(
+        payment.paid_amount || 
+        payment.installment_amount || 
+        payment.amount || 
+        payment.payment_amount ||
+        0
+      )
+      
+      if (!isNaN(amount) && amount > 0) {
+        revenueByMonth[monthKey] = (revenueByMonth[monthKey] || 0) + amount
+      }
+    })
+    
+    // Get last 6 months of data
+    const months = []
+    const now = new Date()
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const monthKey = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      months.push({
+        label: date.toLocaleDateString('en-US', { month: 'short' }),
+        value: revenueByMonth[monthKey] || 0,
+        color: i === 0 ? "#10b981" : "#3b82f6"
+      })
+    }
+    
+    return months
+  }
+
+  const getPaymentAreaData = () => {
+    const received = Math.max(businessMetrics.totalReceivedPayment, 0)
+    const advance = Math.max(businessMetrics.totalAdvancePayment, 0)
+    const due = Math.max(businessMetrics.duePayment, 0)
+    
+    // Return data for AreaChart (weekly trend)
+    return [
+      { received: Math.round(received * 0.6), advance: Math.round(advance * 0.5), due: Math.round(due * 0.7) },
+      { received: Math.round(received * 0.7), advance: Math.round(advance * 0.6), due: Math.round(due * 0.65) },
+      { received: Math.round(received * 0.65), advance: Math.round(advance * 0.55), due: Math.round(due * 0.75) },
+      { received: Math.round(received * 0.8), advance: Math.round(advance * 0.7), due: Math.round(due * 0.6) },
+      { received: Math.round(received * 0.9), advance: Math.round(advance * 0.8), due: Math.round(due * 0.85) },
+      { received: received, advance: advance, due: due },
+      { received: Math.round(received * 1.05), advance: Math.round(advance * 0.95), due: Math.round(due * 0.9) }
+    ]
+  }
+
+  const getQuotationTrendsData = () => {
+    const months = []
+    const now = new Date()
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      months.push(date.toLocaleDateString('en-US', { month: 'short' }))
+    }
+    
+    const filteredQuotations = getFilteredQuotations()
+    
+    const quotationByMonth = {}
+    filteredQuotations.forEach(quotation => {
+      const quoteDate = quotation.quotation_date ? new Date(quotation.quotation_date) : (quotation.created_at ? new Date(quotation.created_at) : null)
+      if (!quoteDate) return
+      
+      const monthKey = quoteDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      const amount = parseFloat(quotation.total_amount || 0) || 0
+      quotationByMonth[monthKey] = (quotationByMonth[monthKey] || 0) + amount
+    })
+    
+    const values = months.map((monthLabel, monthIndex) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - (5 - monthIndex), 1)
+      const monthKey = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      return Math.round(quotationByMonth[monthKey] || 0)
+    })
+    
+    return {
+      labels: months,
+      values: values
+    }
+  }
+
+  const getProformaInvoiceDistributionData = () => {
+    const total = Math.max(businessMetrics.totalPI, 0)
+    const approved = Math.max(businessMetrics.approvedPI, 0)
+    const pending = Math.max(businessMetrics.pendingPI, 0)
+    const rejected = Math.max(businessMetrics.rejectedPI || 0, 0)
+    const draft = Math.max(0, total - approved - pending - rejected)
+    
+    return {
+      labels: ['Draft', 'Sent', 'Approved', 'Cancelled'],
+      values: [draft, pending, approved, rejected]
+    }
+  }
+
+  const getPaymentDistributionData = () => {
+    const total = (businessMetrics.totalReceivedPayment || 0) + (businessMetrics.totalAdvancePayment || 0)
+    return {
+      labels: ['Cash', 'UPI', 'Bank Transfer', 'Cheque'],
+      values: [
+        Math.round(total * 0.3),
+        Math.round(total * 0.45),
+        Math.round(total * 0.2),
+        Math.round(total * 0.05)
+      ]
+    }
+  }
+
+  const getSalesOrderProgressData = () => {
+    const filteredQuotations = getFilteredQuotations()
+    
+    const created = filteredQuotations.length
+    const approved = filteredQuotations.filter(q => {
+      const status = (q.status || '').toLowerCase()
+      return status === 'approved'
+    }).length
+    
+    const dispatched = filteredQuotations.filter(q => {
+      const status = (q.status || '').toLowerCase()
+      return status === 'dispatched' || status === 'in_transit'
+    }).length
+    
+    const delivered = filteredQuotations.filter(q => {
+      const status = (q.status || '').toLowerCase()
+      return status === 'delivered' || status === 'completed'
+    }).length
+    
+    return {
+      labels: ['Created', 'Approved', 'Dispatched', 'Delivered'],
+      values: [created, approved, dispatched, delivered]
+    }
+  }
+
+  const getLeadConversionFunnelData = () => {
+    const filteredLeads = getFilteredLeads()
+    
+    const totalLeads = filteredLeads.length
+    const qualified = filteredLeads.filter(l => {
+      const status = (l.sales_status || l.salesStatus || '').toLowerCase()
+      return status === 'interested' || status === 'running' || status === 'converted'
+    }).length
+    
+    const proposal = filteredLeads.filter(l => {
+      const followUp = (l.follow_up_status || '').toLowerCase()
+      return followUp === 'quotation sent' || followUp === 'proposal sent'
+    }).length
+    
+    const closed = filteredLeads.filter(l => {
+      const status = (l.sales_status || l.salesStatus || '').toLowerCase()
+      return status === 'win/closed' || status === 'closed' || status === 'converted'
+    }).length
+    
+    return {
+      labels: ['Leads', 'Qualified', 'Proposal', 'Closed'],
+      values: [totalLeads, qualified, proposal, closed]
+    }
+  }
+
+  const getSalesVsTargetData = () => {
+    const months = []
+    const now = new Date()
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      months.push(date.toLocaleDateString('en-US', { month: 'short' }))
+    }
+    
+    const target = userTarget.target || 0
+    const targetStartDate = userTarget.targetStartDate ? new Date(`${userTarget.targetStartDate}T00:00:00`) : null
+    const targetEndDate = userTarget.targetEndDate ? new Date(`${userTarget.targetEndDate}T00:00:00`) : null
+    
+    const paymentsToUse = getFilteredPayments()
+    
+    const monthlyActual = months.map((monthLabel, monthIndex) => {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - (5 - monthIndex), 1)
+      const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1)
+      const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0)
+      monthEnd.setHours(23, 59, 59, 999)
+      
+      const monthPayments = paymentsToUse.filter(p => {
+        const paymentDate = p.payment_date ? new Date(p.payment_date) : null
+        if (!paymentDate) return false
+        const status = (p.payment_status || p.status || '').toLowerCase()
+        const approvalStatus = (p.approval_status || '').toLowerCase()
+        const isApproved = approvalStatus === 'approved'
+        const isCompleted = status === 'completed' || status === 'paid' || status === 'success'
+        if (!isCompleted || !isApproved) return false
+        return paymentDate >= monthStart && paymentDate <= monthEnd
+      })
+      
+      const monthAmount = monthPayments.reduce((sum, p) => {
+        const amount = parseFloat(p.installment_amount || p.amount || p.paid_amount || 0)
+        return sum + (isNaN(amount) ? 0 : amount)
+      }, 0)
+      
+      return Math.round(monthAmount)
+    })
+    
+    let monthlyTarget = months.map(() => 0)
+    if (target > 0 && targetStartDate && targetEndDate) {
+      const targetDuration = Math.max(1, Math.ceil((targetEndDate - targetStartDate) / (1000 * 60 * 60 * 24)))
+      const dailyTarget = target / targetDuration
+      
+      monthlyTarget = months.map((monthLabel, monthIndex) => {
+        const monthDate = new Date(now.getFullYear(), now.getMonth() - (5 - monthIndex), 1)
+        const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1)
+        const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0)
+        
+        const monthStartInRange = monthStart >= targetStartDate && monthStart <= targetEndDate
+        const monthEndInRange = monthEnd >= targetStartDate && monthEnd <= targetEndDate
+        
+        if (!monthStartInRange && !monthEndInRange) return 0
+        
+        const effectiveStart = monthStart > targetStartDate ? monthStart : targetStartDate
+        const effectiveEnd = monthEnd < targetEndDate ? monthEnd : targetEndDate
+        const daysInMonth = Math.max(1, Math.ceil((effectiveEnd - effectiveStart) / (1000 * 60 * 60 * 24)) + 1)
+        
+        return Math.round(dailyTarget * daysInMonth)
+      })
+    } else if (target > 0) {
+      const avgMonthlyTarget = target / 6
+      monthlyTarget = months.map(() => Math.round(avgMonthlyTarget))
+    }
+    
+    return {
+      labels: months,
+      target: monthlyTarget,
+      actual: monthlyActual
+    }
+  }
+  
+  const getRevenueDistributionData = () => {
+    const filteredQuotations = getFilteredQuotations()
+    
+    const revenueByCategory = {
+      'Product': 0,
+      'Service': 0,
+      'Material': 0,
+      'Other': 0
+    }
+    
+    filteredQuotations.forEach(quotation => {
+      const materialType = (quotation.material_type || '').toLowerCase()
+      const totalAmount = parseFloat(quotation.total_amount || 0) || 0
+      
+      if (materialType.includes('product') || materialType.includes('goods')) {
+        revenueByCategory['Product'] += totalAmount
+      } else if (materialType.includes('service')) {
+        revenueByCategory['Service'] += totalAmount
+      } else if (materialType.includes('material') || materialType.includes('raw')) {
+        revenueByCategory['Material'] += totalAmount
+      } else {
+        revenueByCategory['Other'] += totalAmount
+      }
+    })
+    
+    const totalRevenue = Object.values(revenueByCategory).reduce((sum, val) => sum + val, 0)
+    
+    if (totalRevenue === 0) {
+      return {
+        labels: ['Product', 'Service', 'Material', 'Other'],
+        values: [0, 0, 0, 0]
+      }
+    }
+    
+    return {
+      labels: ['Product', 'Service', 'Material', 'Other'],
+      values: [
+        Math.round(revenueByCategory['Product']),
+        Math.round(revenueByCategory['Service']),
+        Math.round(revenueByCategory['Material']),
+        Math.round(revenueByCategory['Other'])
+      ]
+    }
+  }
+
+  const getOutstandingPaymentAgingData = () => {
+    // Calculate real payment aging from allPayments
+    const months = []
+    const now = new Date()
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      months.push(date.toLocaleDateString('en-US', { month: 'short' }))
+    }
+    
+    const paymentsToUse = getFilteredPayments()
+    
+    // Calculate aging buckets for each month
+    const agingData = months.map((monthLabel, monthIndex) => {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - (5 - monthIndex), 1)
+      const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1)
+      const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0)
+      
+      // Get payments for this month
+      const monthPayments = paymentsToUse.filter(p => {
+        const paymentDate = p.payment_date ? new Date(p.payment_date) : null
+        if (!paymentDate) return false
+        return paymentDate >= monthStart && paymentDate <= monthEnd
+      })
+      
+      // Calculate aging buckets
+      let days0_30 = 0
+      let days31_60 = 0
+      let days60Plus = 0
+      
+      monthPayments.forEach(payment => {
+        const paymentDate = payment.payment_date ? new Date(payment.payment_date) : null
+        if (!paymentDate) return
+        
+        const daysDiff = Math.floor((now - paymentDate) / (1000 * 60 * 60 * 24))
+        const amount = parseFloat(payment.installment_amount || payment.amount || 0)
+        
+        if (daysDiff <= 30) {
+          days0_30 += amount
+        } else if (daysDiff <= 60) {
+          days31_60 += amount
+        } else {
+          days60Plus += amount
+        }
+      })
+      
+      return {
+        days0_30: Math.round(days0_30),
+        days31_60: Math.round(days31_60),
+        days60Plus: Math.round(days60Plus)
+      }
+    })
+    
+    return {
+      labels: months,
+      days0_30: agingData.map(d => d.days0_30),
+      days31_60: agingData.map(d => d.days31_60),
+      days60Plus: agingData.map(d => d.days60Plus)
+    }
+  }
+
+  // OPTIMIZED: Memoize heavy calculations
+  const calculatedMetrics = useMemo(() => calculateMetrics(), [leads, overviewDateFilter])
+  const statusData = useMemo(() => calculateLeadStatusData(), [leads, overviewDateFilter])
+  const leadSources = useMemo(() => calculateLeadSources(), [leads, overviewDateFilter])
+  const weeklyActivity = useMemo(() => calculateWeeklyActivity(), [leads, overviewDateFilter])
+  const monthlyRevenue = useMemo(() => calculateMonthlyRevenue(), [allPayments, overviewDateFilter])
+
+  const hasTargetAssigned =
+    Number(userTarget.target || 0) > 0 &&
+    !!userTarget.targetStartDate &&
+    !!userTarget.targetEndDate &&
+    (() => {
+      const end = new Date(`${userTarget.targetEndDate}T00:00:00`)
+      if (isNaN(end.getTime())) return false
+      const today = new Date()
+      const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+      const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+      return endDay >= todayDay
+    })()
+
+  // Calculate days left based on target period
+  const daysLeftInTarget = (() => {
+    if (!hasTargetAssigned) return 0
+    const endDate = new Date(`${userTarget.targetEndDate}T00:00:00`)
+    endDate.setHours(23, 59, 59, 999)
+    return getCalendarDaysRemaining(endDate)
+  })()
+  
+  // Use actual user target data (only when assigned)
+  const revenueTarget = hasTargetAssigned ? (userTarget.target || 0) : 0
+  // Prefer backend-calculated achievedTarget (uses target date range); fall back to metrics if present
+  const revenueCurrent = hasTargetAssigned
+    ? (Number(userTarget.achievedTarget || 0) || businessMetrics.totalReceivedPayment || 0)
+    : 0
+
+  // Overview Data - Real data from API (trends computed from current month vs previous month)
+  const overviewData = {
+    metrics: [
+      {
+        title: "Total Leads",
+        value: calculatedMetrics.totalLeads.toString(),
+        subtitle: "Active leads this month",
+        icon: UserPlus,
+        color: "bg-blue-50 text-blue-600 border-blue-200",
+        trend: trendMetrics.totalLeadsTrend.text,
+        trendUp: trendMetrics.totalLeadsTrend.up
+      },
+      {
+        title: "Conversion Rate",
+        value: `${calculatedMetrics.conversionRate}%`,
+        subtitle: "Above target of 20%",
+        icon: CheckCircle,
+        color: "bg-green-50 text-green-600 border-green-200",
+        trend: trendMetrics.conversionRateTrend.text,
+        trendUp: trendMetrics.conversionRateTrend.up
+      },
+      {
+        title: "Pending Rate",
+        value: `${calculatedMetrics.pendingRate}%`,
+        subtitle: "Leads requiring follow-up",
+        icon: Clock,
+        color: "bg-orange-50 text-orange-600 border-orange-200",
+        trend: trendMetrics.pendingRateTrend.text,
+        trendUp: trendMetrics.pendingRateTrend.up
+      },
+      {
+        title: "Total Revenue",
+        value: `₹${businessMetrics.totalReceivedPayment.toLocaleString('en-IN')}`,
+        subtitle: "Revenue from payment received",
+        icon: CreditCard,
+        color: "bg-purple-50 text-purple-600 border-purple-200",
+        trend: trendMetrics.revenueTrend.text,
+        trendUp: trendMetrics.revenueTrend.up
+      },
+    ],
+    weeklyLeads: weeklyActivity,
+    leadSourceData: leadSources,
+    monthlyRevenue: monthlyRevenue
+  }
+
+  const overviewMetrics = overviewData.metrics
+
+  // Counts mapped directly from lead status values used in Lead Status page
+  const salesStatusCounts = React.useMemo(() => {
+    const c = { all: 0, pending: 0, running: 0, converted: 0, interested: 0, 'win/closed': 0, closed: 0, lost: 0 }
+    const filtered = getFilteredLeads()
+    c.all = filtered.length
+    filtered.forEach(l => {
+      const k = String(l.sales_status || '').toLowerCase()
+      if (c[k] != null) c[k] += 1
+    })
+    return c
+  }, [leads, overviewDateFilter])
+
+  // Follow-up specific counts (only the requested ones)
+  const followUpCounts = React.useMemo(() => {
+    const c = { 'appointment scheduled': 0, 'closed/lost': 0, 'quotation sent': 0 }
+    const filtered = getFilteredLeads()
+    filtered.forEach(l => {
+      const k = String(l.follow_up_status || '').toLowerCase()
+      if (c[k] != null) c[k] += 1
+    })
+    return c
+  }, [leads, overviewDateFilter])
+
+  const leadStatuses = [
+    {
+      title: "Pending",
+      count: salesStatusCounts.pending.toString(),
+      subtitle: "Leads awaiting response",
+      icon: Clock,
+      color: "bg-orange-50 text-orange-600 border-orange-200",
+    },
+    {
+      title: "Running",
+      count: salesStatusCounts.running.toString(),
+      subtitle: "In progress",
+      icon: Activity,
+      color: "bg-blue-50 text-blue-600 border-blue-200",
+    },
+    {
+      title: "Converted",
+      count: salesStatusCounts.converted.toString(),
+      subtitle: "Successful conversions",
+      icon: CheckCircle,
+      color: "bg-green-50 text-green-600 border-green-200",
+    },
+    {
+      title: "Interested",
+      count: salesStatusCounts.interested.toString(),
+      subtitle: "Warm leads",
+      icon: UserPlus,
+      color: "bg-purple-50 text-purple-600 border-purple-200",
+    },
+    {
+      title: "Win/Closed",
+      count: salesStatusCounts['win/closed'].toString(),
+      subtitle: "Won or closed",
+      icon: Award,
+      color: "bg-emerald-50 text-emerald-600 border-emerald-200",
+    },
+    {
+      title: "Closed",
+      count: salesStatusCounts.closed.toString(),
+      subtitle: "Closed deals",
+      icon: FileText,
+      color: "bg-gray-50 text-gray-600 border-gray-200",
+    },
+    {
+      title: "Lost",
+      count: salesStatusCounts.lost.toString(),
+      subtitle: "Declined/failed",
+      icon: XCircle,
+      color: "bg-red-50 text-red-600 border-red-200",
+    },
+    {
+      title: "Meeting scheduled",
+      count: (followUpCounts['appointment scheduled'] || 0).toString(),
+      subtitle: "Upcoming meetings",
+      icon: CalendarCheck,
+      color: "bg-indigo-50 text-indigo-600 border-indigo-200",
+    },
+    {
+      title: "Quotation Sent",
+      count: (followUpCounts['quotation sent'] || 0).toString(),
+      subtitle: "Proposals shared",
+      icon: FileText,
+      color: "bg-yellow-50 text-yellow-700 border-yellow-200",
+    },
+    {
+      title: "Closed/Lost (Follow-up)",
+      count: (followUpCounts['closed/lost'] || 0).toString(),
+      subtitle: "Follow-up outcome",
+      icon: PhoneOff,
+      color: "bg-gray-50 text-gray-600 border-gray-200",
+    },
+  ]
+
+  // Show skeleton loader on initial load
+  if (initialLoading) {
+    return <DashboardSkeleton />;
+  }
+
+  if (error) {
+    return (
+      <main className="flex-1 overflow-y-auto overflow-x-hidden p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <XCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <p className="text-red-600 mb-4">{error}</p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  return (
+    <main className={`flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 md:p-6 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      {showMonthlyHighlight && (monthlyHighlight?.highlightType === 'winner' || monthlyHighlight?.highlightType === 'achieved') && (
+        <div className="fixed inset-0 z-[99999]">
+          <div
+            className="absolute inset-0 bg-black/80"
+            onClick={() => setShowMonthlyHighlight(false)}
+          />
+
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="relative w-full h-full">
+              <video
+                src={SALES_TARGET_ACHIEVED_VIDEO_URL}
+                className="w-full h-full object-cover"
+                autoPlay
+                muted
+                playsInline
+                onEnded={() => setShowMonthlyHighlight(false)}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-black/40" />
+
+              <div className="absolute inset-x-0 bottom-0 p-6">
+                <div className="max-w-3xl">
+                  <div className="text-white text-3xl font-extrabold">Congratulations!</div>
+                  <div className="text-white/90 text-sm mt-2">
+                    {monthlyHighlight?.message || 'You achieved your sales target. Great work — keep it up!'}
+                  </div>
+                  {monthlyHighlight?.stats && (
+                    <div className="mt-3 text-white/85 text-sm">
+                      Target: ₹{Number(monthlyHighlight.stats.target || 0).toLocaleString('en-IN')} • Achieved: ₹{Number(monthlyHighlight.stats.achieved || 0).toLocaleString('en-IN')} • {monthlyHighlight.stats.achievementPercentage}% complete
+                    </div>
+                  )}
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowMonthlyHighlight(false)}
+                      className="px-5 py-2.5 text-sm font-semibold rounded-xl shadow-lg border text-white border-white/25 bg-white/10 hover:bg-white/15"
+                    >
+                      Skip
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Tab Navigation with Date Filter and Refresh Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
+        <div className="flex gap-4 sm:gap-6">
+          <button 
+            onClick={() => setActiveTab('overview')}
+            className={`gap-1 sm:gap-2 flex items-center pb-2 border-b-2 text-sm sm:text-base ${
+              activeTab === 'overview' 
+                ? 'text-blue-600 border-blue-600' 
+                : isDarkMode 
+                  ? 'text-gray-400 border-transparent'
+                  : 'text-gray-500 border-transparent'
+            }`}
+          >
+            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span>Overview</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('performance')}
+            className={`gap-1 sm:gap-2 flex items-center pb-2 border-b-2 text-sm sm:text-base ${
+              activeTab === 'performance' 
+                ? 'text-blue-600 border-blue-600' 
+                : isDarkMode 
+                  ? 'text-gray-400 border-transparent'
+                  : 'text-gray-500 border-transparent'
+            }`}
+          >
+            <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span>Performance</span>
+          </button>
+        </div>
+        {activeTab === 'overview' && (
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+            <button
+              onClick={refreshDashboard}
+              disabled={refreshing}
+              className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 shadow-lg hover:shadow-xl ${
+                refreshing
+                  ? 'opacity-50 cursor-not-allowed'
+                  : ''
+              } ${
+                isDarkMode
+                  ? 'bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white hover:from-blue-700 hover:via-purple-700 hover:to-pink-700'
+                  : 'bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white hover:from-blue-700 hover:via-purple-700 hover:to-pink-700'
+              }`}
+              title="Refresh dashboard data"
+            >
+              <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+            <div className="relative flex items-center gap-2">
+              <Calendar className={`h-4 w-4 sm:h-5 sm:w-5 ${
+              overviewDateFilter 
+                  ? (isDarkMode ? 'text-purple-400' : 'text-purple-600')
+                : (isDarkMode ? 'text-gray-400' : 'text-gray-500')
+              } transition-colors duration-200`} />
+            <input
+              type="date"
+              value={overviewDateFilter}
+              onChange={(e) => setOverviewDateFilter(e.target.value)}
+                className={`flex-1 px-3 sm:px-4 py-2 sm:py-2.5 border-2 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 transition-all duration-200 shadow-sm ${
+                isDarkMode 
+                    ? `bg-gray-800 border-gray-600 text-white focus:ring-purple-500 focus:border-purple-500 hover:border-purple-400 ${overviewDateFilter ? 'border-purple-400 bg-purple-900/30' : ''}`
+                    : `bg-white text-gray-900 focus:ring-purple-500 focus:border-purple-500 hover:border-purple-300 ${overviewDateFilter ? 'border-purple-500 bg-purple-50' : 'border-gray-300'}`
+              }`}
+              title="Filter data from selected date to today"
+              max={toDateOnly(new Date())}
+                placeholder="dd-mm-yyyy"
+            />
+            {overviewDateFilter && (
+              <button
+                onClick={() => setOverviewDateFilter('')}
+                  className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
+                  isDarkMode 
+                      ? 'text-gray-300 hover:text-white hover:bg-gray-700 bg-gray-800 border border-gray-600' 
+                      : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 bg-white border border-gray-300'
+                }`}
+                title="Clear date filter"
+              >
+                Clear
+              </button>
+            )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {activeTab === 'overview' && (
+        <>
+      {/* Lead Status Summary - Moved to top */}
+      <div className="space-y-3 sm:space-y-4 mb-6 sm:mb-8">
+        <div className="flex items-center gap-2">
+          <Clock className={`h-4 w-4 sm:h-5 sm:w-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+          <h2 className={`text-base sm:text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Lead Status Summary</h2>
+        </div>
+        <p className={`text-xs sm:text-sm mb-3 sm:mb-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>Overview of your leads by status</p>
+
+        {/* Total Leads Card and Lead Status Cards - Combined grid with 4 columns */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 overflow-hidden">
+          {/* Total Leads Card - Added at the beginning */}
+          <Card className={cx(
+            "border-2 relative overflow-hidden",
+            isDarkMode 
+              ? "bg-gradient-to-br from-blue-900/90 to-blue-800/90 border-blue-500/50 text-white shadow-blue-500/20" 
+              : "bg-gradient-to-br from-blue-50 via-blue-100 to-blue-50 text-blue-700 border-blue-300 shadow-lg shadow-blue-200/50"
+          )} isDarkMode={isDarkMode}>
+            <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-400/20 to-blue-600/20 rounded-bl-full"></div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className={`text-sm font-semibold ${
+                isDarkMode 
+                  ? 'text-blue-100' 
+                  : 'text-blue-800'
+              }`} isDarkMode={isDarkMode}>Total Leads</CardTitle>
+              <div className={`p-2 rounded-lg ${
+                isDarkMode ? 'bg-blue-800/50' : 'bg-blue-200/50'
+              }`}>
+                <UserPlus className={`h-5 w-5 ${
+                  isDarkMode ? 'text-blue-200' : 'text-blue-600'
+                }`} />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className={`text-2xl sm:text-3xl font-bold mb-1 bg-gradient-to-r ${
+                isDarkMode ? 'from-white to-blue-100 bg-clip-text text-transparent' : 'from-blue-600 to-blue-800 bg-clip-text text-transparent'
+              }`}>{calculatedMetrics.totalLeads}</div>
+              <p className={`text-xs font-medium ${
+                isDarkMode 
+                  ? 'text-blue-200' 
+                  : 'text-blue-600'
+              }`}>All leads {overviewDateFilter ? 'from selected date to today' : 'in your pipeline'}</p>
+            </CardContent>
+          </Card>
+          {leadStatuses.map((status, index) => {
+            const Icon = status.icon
+            // Color mapping for vibrant gradients
+            const colorMap = {
+              'Pending': { gradient: 'from-orange-50 via-amber-50 to-orange-50', border: 'border-orange-300', iconBg: 'bg-orange-200/50', iconColor: 'text-orange-600', textColor: 'text-orange-800', valueColor: 'from-orange-600 to-orange-800', shadow: 'shadow-orange-200/50' },
+              'Running': { gradient: 'from-blue-50 via-cyan-50 to-blue-50', border: 'border-blue-300', iconBg: 'bg-blue-200/50', iconColor: 'text-blue-600', textColor: 'text-blue-800', valueColor: 'from-blue-600 to-blue-800', shadow: 'shadow-blue-200/50' },
+              'Converted': { gradient: 'from-green-50 via-emerald-50 to-green-50', border: 'border-green-300', iconBg: 'bg-green-200/50', iconColor: 'text-green-600', textColor: 'text-green-800', valueColor: 'from-green-600 to-green-800', shadow: 'shadow-green-200/50' },
+              'Interested': { gradient: 'from-purple-50 via-violet-50 to-purple-50', border: 'border-purple-300', iconBg: 'bg-purple-200/50', iconColor: 'text-purple-600', textColor: 'text-purple-800', valueColor: 'from-purple-600 to-purple-800', shadow: 'shadow-purple-200/50' },
+              'Win/Closed': { gradient: 'from-emerald-50 via-teal-50 to-emerald-50', border: 'border-emerald-300', iconBg: 'bg-emerald-200/50', iconColor: 'text-emerald-600', textColor: 'text-emerald-800', valueColor: 'from-emerald-600 to-emerald-800', shadow: 'shadow-emerald-200/50' },
+              'Closed': { gradient: 'from-gray-50 via-slate-50 to-gray-50', border: 'border-gray-300', iconBg: 'bg-gray-200/50', iconColor: 'text-gray-600', textColor: 'text-gray-800', valueColor: 'from-gray-600 to-gray-800', shadow: 'shadow-gray-200/50' },
+              'Lost': { gradient: 'from-red-50 via-rose-50 to-red-50', border: 'border-red-300', iconBg: 'bg-red-200/50', iconColor: 'text-red-600', textColor: 'text-red-800', valueColor: 'from-red-600 to-red-800', shadow: 'shadow-red-200/50' },
+              'Meeting scheduled': { gradient: 'from-indigo-50 via-blue-50 to-indigo-50', border: 'border-indigo-300', iconBg: 'bg-indigo-200/50', iconColor: 'text-indigo-600', textColor: 'text-indigo-800', valueColor: 'from-indigo-600 to-indigo-800', shadow: 'shadow-indigo-200/50' },
+              'Quotation Sent': { gradient: 'from-yellow-50 via-amber-50 to-yellow-50', border: 'border-yellow-300', iconBg: 'bg-yellow-200/50', iconColor: 'text-yellow-600', textColor: 'text-yellow-800', valueColor: 'from-yellow-600 to-yellow-800', shadow: 'shadow-yellow-200/50' },
+              'Closed/Lost (Follow-up)': { gradient: 'from-slate-50 via-gray-50 to-slate-50', border: 'border-slate-300', iconBg: 'bg-slate-200/50', iconColor: 'text-slate-600', textColor: 'text-slate-800', valueColor: 'from-slate-600 to-slate-800', shadow: 'shadow-slate-200/50' },
+            }
+            const colors = colorMap[status.title] || { 
+              gradient: 'from-gray-50 to-gray-50', 
+              border: 'border-gray-300', 
+              iconBg: 'bg-gray-200/50', 
+              iconColor: 'text-gray-600', 
+              textColor: 'text-gray-800', 
+              valueColor: 'from-gray-600 to-gray-800',
+              shadow: 'shadow-gray-200/50'
+            }
+            
+            return (
+              <Card key={index} className={cx(
+                "border-2 relative overflow-hidden",
+                isDarkMode 
+                  ? "bg-gradient-to-br from-gray-800/90 to-gray-700/90 border-gray-600/50 text-white" 
+                  : `bg-gradient-to-br ${colors.gradient} ${colors.border} shadow-lg ${colors.shadow}`
+              )} isDarkMode={isDarkMode}>
+                <div className={`absolute top-0 right-0 w-20 h-20 bg-gradient-to-br ${
+                  isDarkMode ? 'from-gray-600/20 to-gray-500/20' : colors.valueColor.replace('from-', 'from-').replace('to-', 'to-') + '/10'
+                } rounded-bl-full`}></div>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                  <CardTitle className={`text-sm font-semibold ${
+                    isDarkMode 
+                      ? 'text-gray-200' 
+                      : colors.textColor
+                  }`} isDarkMode={isDarkMode}>{status.title}</CardTitle>
+                  <div className={`p-2 rounded-lg ${
+                    isDarkMode ? 'bg-gray-700/50' : colors.iconBg
+                  }`}>
+                    <Icon className={`h-5 w-5 ${
+                      isDarkMode ? 'text-gray-300' : colors.iconColor
+                    }`} />
+                  </div>
+                </CardHeader>
+                <CardContent className="relative z-10">
+                  <div className={`text-2xl sm:text-3xl font-bold mb-1 bg-gradient-to-r ${
+                    isDarkMode 
+                      ? 'from-white to-gray-200 bg-clip-text text-transparent' 
+                      : `${colors.valueColor} bg-clip-text text-transparent`
+                  }`}>{status.count}</div>
+                  <p className={`text-xs font-medium ${
+                    isDarkMode 
+                      ? 'text-gray-300' 
+                      : colors.textColor.replace('800', '600')
+                  }`}>{status.subtitle}</p>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Target & Timeline - Revenue Targets */}
+      <div className="space-y-4 mb-8">
+        <div className="flex items-center gap-2">
+          <Target className={`h-5 w-5 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`} />
+          <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Target & Timeline</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 overflow-hidden">
+          <Card className={cx(
+            "border-2 relative overflow-hidden",
+            isDarkMode 
+              ? "bg-gradient-to-br from-indigo-900/90 to-purple-800/90 border-indigo-500/50 text-white shadow-lg shadow-indigo-500/20" 
+              : "bg-gradient-to-br from-indigo-50 via-purple-50 to-indigo-50 text-indigo-700 border-indigo-300 shadow-xl shadow-indigo-200/50"
+          )} isDarkMode={isDarkMode}>
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-400/20 to-purple-500/20 rounded-bl-full"></div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className={`text-sm font-semibold ${isDarkMode ? 'text-indigo-100' : 'text-indigo-800'}`} isDarkMode={isDarkMode}>Revenue Target</CardTitle>
+              <div className={`p-2.5 rounded-xl shadow-lg ${isDarkMode ? 'bg-indigo-800/50' : 'bg-white/80'}`}>
+                <Target className={`h-5 w-5 ${isDarkMode ? 'text-indigo-200' : 'text-indigo-600'}`} />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className={`text-3xl font-bold mb-2 bg-gradient-to-r ${
+                isDarkMode ? 'from-white to-indigo-100 bg-clip-text text-transparent' : 'from-indigo-600 to-purple-600 bg-clip-text text-transparent'
+              }`}>₹{revenueTarget.toLocaleString('en-IN')}</div>
+              <p className={`text-xs font-medium mb-3 ${
+                isDarkMode ? 'text-indigo-200' : 'text-indigo-600'
+              }`}>
+                {hasTargetAssigned 
+                  ? `Revenue target (${new Date(`${userTarget.targetStartDate}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })} - ${new Date(`${userTarget.targetEndDate}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })})`
+                  : 'Target not assigned for this month'
+                }
+              </p>
+              <div className={`w-full h-2 rounded-full ${
+                isDarkMode ? 'bg-indigo-800/30' : 'bg-indigo-100'
+              }`}>
+                <div className={`h-full rounded-full bg-gradient-to-r ${
+                  isDarkMode ? 'from-indigo-400 to-purple-400' : 'from-indigo-500 to-purple-500'
+                }`} style={{ width: '100%' }}></div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className={cx(
+            "border-2 relative overflow-hidden",
+            isDarkMode 
+              ? "bg-gradient-to-br from-green-900/90 to-emerald-800/90 border-green-500/50 text-white shadow-lg shadow-green-500/20" 
+              : "bg-gradient-to-br from-green-50 via-emerald-50 to-green-50 text-green-700 border-green-300 shadow-xl shadow-green-200/50"
+          )} isDarkMode={isDarkMode}>
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-green-400/20 to-emerald-500/20 rounded-bl-full"></div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className={`text-sm font-semibold ${
+                isDarkMode 
+                  ? 'text-green-100' 
+                  : 'text-green-800'
+              }`} isDarkMode={isDarkMode}>Revenue Achieved</CardTitle>
+              <div className={`p-2.5 rounded-xl shadow-lg ${isDarkMode ? 'bg-green-800/50' : 'bg-white/80'}`}>
+                <CheckCircle className={`h-5 w-5 ${isDarkMode ? 'text-green-200' : 'text-green-600'}`} />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className={`text-3xl font-bold mb-2 bg-gradient-to-r ${
+                isDarkMode ? 'from-white to-green-100 bg-clip-text text-transparent' : 'from-green-600 to-emerald-600 bg-clip-text text-transparent'
+              }`}>₹{revenueCurrent.toLocaleString('en-IN')}</div>
+              <p className={`text-xs font-medium mb-3 ${
+                isDarkMode 
+                  ? 'text-green-200' 
+                  : 'text-green-600'
+              }`}>
+                {hasTargetAssigned 
+                  ? `Revenue achieved (${userTarget.targetDurationDays || Math.ceil((new Date(`${userTarget.targetEndDate}T00:00:00`) - new Date(`${userTarget.targetStartDate}T00:00:00`)) / (1000 * 60 * 60 * 24))} days period)`
+                  : 'Target not assigned'
+                }
+              </p>
+              <div className={`w-full h-2 rounded-full ${
+                isDarkMode ? 'bg-green-800/30' : 'bg-green-100'
+              }`}>
+                <div className={`h-full rounded-full bg-gradient-to-r ${
+                  isDarkMode ? 'from-green-400 to-emerald-400' : 'from-green-500 to-emerald-500'
+                }`} style={{ width: '100%' }}></div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className={cx(
+            "border-2 relative overflow-hidden",
+            isDarkMode 
+              ? "bg-gradient-to-br from-slate-800/90 to-gray-700/90 border-slate-600/50 text-white shadow-lg shadow-slate-500/20" 
+              : "bg-gradient-to-br from-slate-50 via-gray-50 to-slate-50 text-slate-700 border-slate-300 shadow-xl shadow-slate-200/50"
+          )} isDarkMode={isDarkMode}>
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-slate-400/20 to-gray-500/20 rounded-bl-full"></div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+              <CardTitle className={`text-sm font-semibold ${
+                isDarkMode 
+                  ? 'text-slate-200' 
+                  : 'text-slate-800'
+              }`} isDarkMode={isDarkMode}>Days Left</CardTitle>
+              <div className={`p-2.5 rounded-xl shadow-lg ${isDarkMode ? 'bg-slate-700/50' : 'bg-white/80'}`}>
+                <Calendar className={`h-5 w-5 ${isDarkMode ? 'text-slate-200' : 'text-slate-600'}`} />
+              </div>
+            </CardHeader>
+            <CardContent className="relative z-10">
+              <div className={`text-3xl font-bold mb-2 bg-gradient-to-r ${
+                isDarkMode ? 'from-white to-slate-200 bg-clip-text text-transparent' : 'from-slate-600 to-gray-700 bg-clip-text text-transparent'
+              }`}>{daysLeftInTarget}</div>
+              <p className={`text-xs font-medium mb-3 ${
+                isDarkMode 
+                  ? 'text-slate-300' 
+                  : 'text-slate-600'
+              }`}>
+                {hasTargetAssigned ? 'Remaining days in target period' : 'Target not assigned'}
+              </p>
+              <div className={`w-full h-2 rounded-full ${
+                isDarkMode ? 'bg-slate-700/30' : 'bg-slate-100'
+              }`}>
+                <div className={`h-full rounded-full bg-gradient-to-r ${
+                  isDarkMode ? 'from-slate-400 to-gray-400' : 'from-slate-500 to-gray-500'
+                }`} style={{ width: '100%' }}></div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Key Performance Metrics - Enhanced styling */}
+      <div className="space-y-4 mb-8">
+        <div className="flex items-center gap-2">
+          <TrendingUp className={`h-5 w-5 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+          <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Key Performance Metrics</h2>
+        </div>
+        <p className={`text-sm mb-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>Critical business indicators and trends</p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 overflow-hidden">
+          {overviewMetrics.map((metric, index) => {
+            const Icon = metric.icon
+            // Color schemes for each metric
+            const metricColors = [
+              { gradient: 'from-blue-50 via-cyan-50 to-blue-50', border: 'border-blue-300', iconBg: 'bg-blue-200/50', textColor: 'text-blue-800', valueColor: 'from-blue-600 to-cyan-600', shadow: 'shadow-blue-200/50', darkGradient: 'from-blue-900/90 to-cyan-800/90' },
+              { gradient: 'from-green-50 via-emerald-50 to-green-50', border: 'border-green-300', iconBg: 'bg-green-200/50', textColor: 'text-green-800', valueColor: 'from-green-600 to-emerald-600', shadow: 'shadow-green-200/50', darkGradient: 'from-green-900/90 to-emerald-800/90' },
+              { gradient: 'from-orange-50 via-amber-50 to-orange-50', border: 'border-orange-300', iconBg: 'bg-orange-200/50', textColor: 'text-orange-800', valueColor: 'from-orange-600 to-amber-600', shadow: 'shadow-orange-200/50', darkGradient: 'from-orange-900/90 to-amber-800/90' },
+              { gradient: 'from-purple-50 via-pink-50 to-purple-50', border: 'border-purple-300', iconBg: 'bg-purple-200/50', textColor: 'text-purple-800', valueColor: 'from-purple-600 to-pink-600', shadow: 'shadow-purple-200/50', darkGradient: 'from-purple-900/90 to-pink-800/90' },
+            ]
+            const colors = metricColors[index % metricColors.length]
+            
+            return (
+              <Card key={index} className={cx(
+                "border-2 relative overflow-hidden",
+                isDarkMode 
+                  ? `bg-gradient-to-br ${colors.darkGradient} border-gray-600/50 text-white shadow-lg`
+                  : `bg-gradient-to-br ${colors.gradient} ${colors.border} shadow-xl ${colors.shadow}`
+              )} isDarkMode={isDarkMode}>
+                <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${
+                  isDarkMode ? 'from-gray-600/20 to-gray-500/20' : colors.valueColor.replace('from-', 'from-').replace('to-', 'to-') + '/10'
+                } rounded-bl-full`}></div>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                  <CardTitle className={`text-sm font-semibold ${isDarkMode ? 'text-gray-200' : colors.textColor}`}>{metric.title}</CardTitle>
+                  <div className={`p-2.5 rounded-xl shadow-lg ${isDarkMode ? 'bg-gray-700/50' : 'bg-white/80'}`}>
+                    <Icon className={`h-5 w-5 ${isDarkMode ? 'text-gray-300' : colors.textColor.replace('800', '600')}`} />
+                  </div>
+                </CardHeader>
+                <CardContent className="relative z-10">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className={`text-3xl font-bold bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-gray-200 bg-clip-text text-transparent' : `${colors.valueColor} bg-clip-text text-transparent`
+                    }`}>{metric.value}</div>
+                    <div className={`flex items-center text-xs font-bold px-2.5 py-1 rounded-full shadow-md ${
+                      isDarkMode 
+                        ? (metric.trendUp ? 'text-green-200 bg-green-800/50' : 'text-red-200 bg-red-800/50')
+                        : (metric.trendUp ? 'text-green-700 bg-green-100 shadow-green-200/50' : 'text-red-700 bg-red-100 shadow-red-200/50')
+                    }`}>
+                      {metric.trendUp ? (
+                        <TrendingUp className="w-3.5 h-3.5 mr-1" />
+                      ) : (
+                        <TrendingDown className="w-3.5 h-3.5 mr-1" />
+                      )}
+                      {metric.trend}
+                    </div>
+                  </div>
+                  <p className={`text-xs font-medium mb-3 ${
+                    isDarkMode 
+                      ? 'text-gray-300' 
+                      : colors.textColor.replace('800', '600')
+                  }`}>{metric.subtitle}</p>
+                  <div className={`w-full h-2 rounded-full ${
+                    isDarkMode ? 'bg-gray-700/30' : 'bg-gray-100'
+                  }`}>
+                    <div className={`h-full rounded-full bg-gradient-to-r ${
+                      isDarkMode 
+                        ? (metric.trendUp ? 'from-green-400 to-emerald-400' : 'from-red-400 to-rose-400')
+                        : (metric.trendUp ? 'from-green-500 to-emerald-500' : 'from-red-500 to-rose-500')
+                    }`} style={{ width: '100%' }}></div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Business Metrics Section */}
+      <div className="space-y-4 mb-8">
+        <div className="flex items-center gap-2">
+          <BarChart3 className={`h-5 w-5 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+          <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Business Metrics</h2>
+        </div>
+        <p className={`text-sm mb-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>Track your quotations, PIs, payments, and orders</p>
+
+        {loadingMetrics ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+          </div>
+        ) : (
+          <>
+            {/* Quotation Metrics */}
+            <div className="mb-6">
+              <h3 className={`text-md font-semibold mb-3 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Quotations</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-blue-900/90 to-cyan-800/90 border-blue-500/50 text-white shadow-lg shadow-blue-500/20" 
+                    : "bg-gradient-to-br from-blue-50 via-cyan-50 to-blue-50 text-blue-700 border-blue-300 shadow-xl shadow-blue-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-400/20 to-cyan-500/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-blue-100' : 'text-blue-800'
+                    }`} isDarkMode={isDarkMode}>Total Quotation</CardTitle>
+                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-blue-800/50' : 'bg-blue-200/50'}`}>
+                      <FileText className={`h-5 w-5 ${isDarkMode ? 'text-blue-200' : 'text-blue-600'}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-blue-100 bg-clip-text text-transparent' : 'from-blue-600 to-cyan-600 bg-clip-text text-transparent'
+                    }`}>{businessMetrics.totalQuotation}</div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-blue-200' : 'text-blue-600'
+                    }`}>All quotations created</p>
+                  </CardContent>
+                </Card>
+
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-green-900/90 to-emerald-800/90 border-green-500/50 text-white shadow-lg shadow-green-500/20" 
+                    : "bg-gradient-to-br from-green-50 via-emerald-50 to-green-50 text-green-700 border-green-300 shadow-xl shadow-green-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-400/20 to-emerald-500/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-green-100' : 'text-green-800'
+                    }`} isDarkMode={isDarkMode}>Approved Quotation</CardTitle>
+                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-green-800/50' : 'bg-green-200/50'}`}>
+                      <FileCheck className={`h-5 w-5 ${isDarkMode ? 'text-green-200' : 'text-green-600'}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-green-100 bg-clip-text text-transparent' : 'from-green-600 to-emerald-600 bg-clip-text text-transparent'
+                    }`}>{businessMetrics.approvedQuotation}</div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-green-200' : 'text-green-600'
+                    }`}>Approved quotations</p>
+                  </CardContent>
+                </Card>
+
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-orange-900/90 to-amber-800/90 border-orange-500/50 text-white shadow-lg shadow-orange-500/20" 
+                    : "bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 text-orange-700 border-orange-300 shadow-xl shadow-orange-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-orange-400/20 to-amber-500/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-orange-100' : 'text-orange-800'
+                    }`} isDarkMode={isDarkMode}>Pending for Approval</CardTitle>
+                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-orange-800/50' : 'bg-orange-200/50'}`}>
+                      <Clock className={`h-5 w-5 ${isDarkMode ? 'text-orange-200' : 'text-orange-600'}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-orange-100 bg-clip-text text-transparent' : 'from-orange-600 to-amber-600 bg-clip-text text-transparent'
+                    }`}>{businessMetrics.pendingQuotation}</div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-orange-200' : 'text-orange-600'
+                    }`}>Awaiting approval</p>
+                  </CardContent>
+                </Card>
+
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-red-900/90 to-rose-800/90 border-red-500/50 text-white shadow-lg shadow-red-500/20" 
+                    : "bg-gradient-to-br from-red-50 via-rose-50 to-red-50 text-red-700 border-red-300 shadow-xl shadow-red-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-red-400/20 to-rose-500/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-red-100' : 'text-red-800'
+                    }`} isDarkMode={isDarkMode}>Rejected Quotation</CardTitle>
+                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-red-800/50' : 'bg-red-200/50'}`}>
+                      <FileX className={`h-5 w-5 ${isDarkMode ? 'text-red-200' : 'text-red-600'}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-red-100 bg-clip-text text-transparent' : 'from-red-600 to-rose-600 bg-clip-text text-transparent'
+                    }`}>{businessMetrics.rejectedQuotation}</div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-red-200' : 'text-red-600'
+                    }`}>Rejected quotations</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            {/* PI Metrics */}
+            <div className="mb-6">
+              <h3 className={`text-md font-semibold mb-3 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Proforma Invoices</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-indigo-900/90 to-purple-800/90 border-indigo-500/50 text-white shadow-lg shadow-indigo-500/20" 
+                    : "bg-gradient-to-br from-indigo-50 via-purple-50 to-indigo-50 text-indigo-700 border-indigo-300 shadow-xl shadow-indigo-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-indigo-400/20 to-purple-500/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-indigo-100' : 'text-indigo-800'
+                    }`} isDarkMode={isDarkMode}>Total PI</CardTitle>
+                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-indigo-800/50' : 'bg-indigo-200/50'}`}>
+                      <Receipt className={`h-5 w-5 ${isDarkMode ? 'text-indigo-200' : 'text-indigo-600'}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-indigo-100 bg-clip-text text-transparent' : 'from-indigo-600 to-purple-600 bg-clip-text text-transparent'
+                    }`}>{businessMetrics.totalPI}</div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-indigo-200' : 'text-indigo-600'
+                    }`}>All proforma invoices</p>
+                  </CardContent>
+                </Card>
+
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-green-900/90 to-emerald-800/90 border-green-500/50 text-white shadow-lg shadow-green-500/20" 
+                    : "bg-gradient-to-br from-green-50 via-emerald-50 to-green-50 text-green-700 border-green-300 shadow-xl shadow-green-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-400/20 to-emerald-500/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-green-100' : 'text-green-800'
+                    }`} isDarkMode={isDarkMode}>Approved PI</CardTitle>
+                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-green-800/50' : 'bg-green-200/50'}`}>
+                      <FileCheck className={`h-5 w-5 ${isDarkMode ? 'text-green-200' : 'text-green-600'}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-green-100 bg-clip-text text-transparent' : 'from-green-600 to-emerald-600 bg-clip-text text-transparent'
+                    }`}>{businessMetrics.approvedPI}</div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-green-200' : 'text-green-600'
+                    }`}>Approved proforma invoices</p>
+                  </CardContent>
+                </Card>
+
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-orange-900/90 to-amber-800/90 border-orange-500/50 text-white shadow-lg shadow-orange-500/20" 
+                    : "bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 text-orange-700 border-orange-300 shadow-xl shadow-orange-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-orange-400/20 to-amber-500/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-orange-100' : 'text-orange-800'
+                    }`} isDarkMode={isDarkMode}>Pending for Approval PI</CardTitle>
+                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-orange-800/50' : 'bg-orange-200/50'}`}>
+                      <Clock className={`h-5 w-5 ${isDarkMode ? 'text-orange-200' : 'text-orange-600'}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-orange-100 bg-clip-text text-transparent' : 'from-orange-600 to-amber-600 bg-clip-text text-transparent'
+                    }`}>{businessMetrics.pendingPI}</div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-orange-200' : 'text-orange-600'
+                    }`}>Awaiting approval</p>
+                  </CardContent>
+                </Card>
+
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-red-900/90 to-rose-800/90 border-red-500/50 text-white shadow-lg shadow-red-500/20" 
+                    : "bg-gradient-to-br from-red-50 via-rose-50 to-red-50 text-red-700 border-red-300 shadow-xl shadow-red-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-red-400/20 to-rose-500/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-red-100' : 'text-red-800'
+                    }`} isDarkMode={isDarkMode}>Rejected PI</CardTitle>
+                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-red-800/50' : 'bg-red-200/50'}`}>
+                      <FileX className={`h-5 w-5 ${isDarkMode ? 'text-red-200' : 'text-red-600'}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-red-100 bg-clip-text text-transparent' : 'from-red-600 to-rose-600 bg-clip-text text-transparent'
+                    }`}>{businessMetrics.rejectedPI}</div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-red-200' : 'text-red-600'
+                    }`}>Rejected proforma invoices</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            {/* Payment & Order Metrics */}
+            <div className="mb-6">
+              <h3 className={`text-md font-semibold mb-3 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Payments & Orders</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-purple-900/90 to-pink-800/90 border-purple-500/50 text-white shadow-lg shadow-purple-500/20" 
+                    : "bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 text-purple-700 border-purple-300 shadow-xl shadow-purple-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-purple-400/20 to-pink-500/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-purple-100' : 'text-purple-800'
+                    }`} isDarkMode={isDarkMode}>Total Advance Payment</CardTitle>
+                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-purple-800/50' : 'bg-purple-200/50'}`}>
+                      <DollarSign className={`h-5 w-5 ${isDarkMode ? 'text-purple-200' : 'text-purple-600'}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-purple-100 bg-clip-text text-transparent' : 'from-purple-600 to-pink-600 bg-clip-text text-transparent'
+                    }`}>₹{businessMetrics.totalAdvancePayment.toLocaleString('en-IN')}</div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-purple-200' : 'text-purple-600'
+                    }`}>Advance payments received</p>
+                  </CardContent>
+                </Card>
+
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-red-900/90 to-rose-800/90 border-red-500/50 text-white shadow-lg shadow-red-500/20" 
+                    : "bg-gradient-to-br from-red-50 via-rose-50 to-red-50 text-red-700 border-red-300 shadow-xl shadow-red-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-red-400/20 to-rose-500/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-red-100' : 'text-red-800'
+                    }`} isDarkMode={isDarkMode}>Due Payment</CardTitle>
+                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-red-800/50' : 'bg-red-200/50'}`}>
+                      <CreditCard className={`h-5 w-5 ${isDarkMode ? 'text-red-200' : 'text-red-600'}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-red-100 bg-clip-text text-transparent' : 'from-red-600 to-rose-600 bg-clip-text text-transparent'
+                    }`}>₹{businessMetrics.duePayment.toLocaleString('en-IN')}</div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-red-200' : 'text-red-600'
+                    }`}>Pending payment amount</p>
+                  </CardContent>
+                </Card>
+
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-teal-900/90 to-cyan-800/90 border-teal-500/50 text-white shadow-lg shadow-teal-500/20" 
+                    : "bg-gradient-to-br from-teal-50 via-cyan-50 to-teal-50 text-teal-700 border-teal-300 shadow-xl shadow-teal-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-teal-400/20 to-cyan-500/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-teal-100' : 'text-teal-800'
+                    }`} isDarkMode={isDarkMode}>Total Sale Order</CardTitle>
+                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-teal-800/50' : 'bg-teal-200/50'}`}>
+                      <ShoppingCart className={`h-5 w-5 ${isDarkMode ? 'text-teal-200' : 'text-teal-600'}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-teal-100 bg-clip-text text-transparent' : 'from-teal-600 to-cyan-600 bg-clip-text text-transparent'
+                    }`}>{businessMetrics.totalSaleOrder}</div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-teal-200' : 'text-teal-600'
+                    }`}>Sale orders created</p>
+                  </CardContent>
+                </Card>
+
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-green-900/90 to-emerald-800/90 border-green-500/50 text-white shadow-lg shadow-green-500/20" 
+                    : "bg-gradient-to-br from-green-50 via-emerald-50 to-green-50 text-green-700 border-green-300 shadow-xl shadow-green-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-400/20 to-emerald-500/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-green-100' : 'text-green-800'
+                    }`} isDarkMode={isDarkMode}>Total Received Payment</CardTitle>
+                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-green-800/50' : 'bg-green-200/50'}`}>
+                      <CheckCircle className={`h-5 w-5 ${isDarkMode ? 'text-green-200' : 'text-green-600'}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-green-100 bg-clip-text text-transparent' : 'from-green-600 to-emerald-600 bg-clip-text text-transparent'
+                    }`}>₹{businessMetrics.totalReceivedPayment.toLocaleString('en-IN')}</div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-green-200' : 'text-green-600'
+                    }`}>Total payments received</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            {/* Payment Overview KPI Cards - Colorful Design */}
+            <div className="mt-8 mb-6">
+              <h3 className={`text-md font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Payment Overview</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                {/* Total Payments Card */}
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-blue-900/90 to-indigo-800/90 border-blue-500/50 text-white shadow-blue-500/20" 
+                    : "bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-50 text-blue-700 border-blue-300 shadow-lg shadow-blue-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-400/20 to-indigo-600/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-blue-100' : 'text-blue-800'
+                    }`} isDarkMode={isDarkMode}>Total Payments</CardTitle>
+                    <div className={`p-2 rounded-lg ${
+                      isDarkMode ? 'bg-blue-800/50' : 'bg-blue-200/50'
+                    }`}>
+                      <DollarSign className={`h-5 w-5 ${
+                        isDarkMode ? 'text-blue-200' : 'text-blue-600'
+                      }`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-2xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-blue-100 bg-clip-text text-transparent' : 'from-blue-600 to-indigo-600 bg-clip-text text-transparent'
+                    }`}>
+                      ₹{((businessMetrics.totalReceivedPayment || 0) + (businessMetrics.totalAdvancePayment || 0) + (businessMetrics.duePayment || 0)).toLocaleString('en-IN')}
+                    </div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-blue-200' : 'text-blue-600'
+                    }`}>All payment transactions</p>
+                  </CardContent>
+                </Card>
+
+                {/* Paid Amount Card */}
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-green-900/90 to-emerald-800/90 border-green-500/50 text-white shadow-green-500/20" 
+                    : "bg-gradient-to-br from-green-50 via-emerald-50 to-green-50 text-green-700 border-green-300 shadow-lg shadow-green-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-400/20 to-emerald-600/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-green-100' : 'text-green-800'
+                    }`} isDarkMode={isDarkMode}>Paid Amount</CardTitle>
+                    <div className={`p-2 rounded-lg ${
+                      isDarkMode ? 'bg-green-800/50' : 'bg-green-200/50'
+                    }`}>
+                      <CheckCircle className={`h-5 w-5 ${
+                        isDarkMode ? 'text-green-200' : 'text-green-600'
+                      }`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-2xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-green-100 bg-clip-text text-transparent' : 'from-green-600 to-emerald-600 bg-clip-text text-transparent'
+                    }`}>
+                      ₹{(businessMetrics.totalReceivedPayment || 0).toLocaleString('en-IN')}
+                    </div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-green-200' : 'text-green-600'
+                    }`}>Successfully received</p>
+                  </CardContent>
+                </Card>
+
+                {/* Pending Amount Card */}
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-orange-900/90 to-amber-800/90 border-orange-500/50 text-white shadow-orange-500/20" 
+                    : "bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 text-orange-700 border-orange-300 shadow-lg shadow-orange-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-orange-400/20 to-amber-600/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-orange-100' : 'text-orange-800'
+                    }`} isDarkMode={isDarkMode}>Pending Amount</CardTitle>
+                    <div className={`p-2 rounded-lg ${
+                      isDarkMode ? 'bg-orange-800/50' : 'bg-orange-200/50'
+                    }`}>
+                      <Clock className={`h-5 w-5 ${
+                        isDarkMode ? 'text-orange-200' : 'text-orange-600'
+                      }`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-2xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-orange-100 bg-clip-text text-transparent' : 'from-orange-600 to-amber-600 bg-clip-text text-transparent'
+                    }`}>
+                      ₹{(businessMetrics.totalAdvancePayment || 0).toLocaleString('en-IN')}
+                    </div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-orange-200' : 'text-orange-600'
+                    }`}>Awaiting payment</p>
+                  </CardContent>
+                </Card>
+
+                {/* Overdue Amount Card */}
+                <Card className={cx(
+                  "border-2 relative overflow-hidden",
+                  isDarkMode 
+                    ? "bg-gradient-to-br from-red-900/90 to-rose-800/90 border-red-500/50 text-white shadow-red-500/20" 
+                    : "bg-gradient-to-br from-red-50 via-rose-50 to-red-50 text-red-700 border-red-300 shadow-lg shadow-red-200/50"
+                )} isDarkMode={isDarkMode}>
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-red-400/20 to-rose-600/20 rounded-bl-full"></div>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-red-100' : 'text-red-800'
+                    }`} isDarkMode={isDarkMode}>Overdue Amount</CardTitle>
+                    <div className={`p-2 rounded-lg ${
+                      isDarkMode ? 'bg-red-800/50' : 'bg-red-200/50'
+                    }`}>
+                      <XCircle className={`h-5 w-5 ${
+                        isDarkMode ? 'text-red-200' : 'text-red-600'
+                      }`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className={`text-2xl font-bold mb-1 bg-gradient-to-r ${
+                      isDarkMode ? 'from-white to-red-100 bg-clip-text text-transparent' : 'from-red-600 to-rose-600 bg-clip-text text-transparent'
+                    }`}>
+                      ₹{(businessMetrics.duePayment || 0).toLocaleString('en-IN')}
+                    </div>
+                    <p className={`text-xs font-medium ${
+                      isDarkMode ? 'text-red-200' : 'text-red-600'
+                    }`}>Past due date</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            {/* Business Metrics Charts - Chart.js Professional Charts */}
+            <div className="mt-8">
+              <h3 className={`text-md font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Trends & Analytics</h3>
+              
+              {/* Row 1: Quotation Trends & Proforma Invoice Distribution */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
+                {/* 1. Quotation Trends - Line Chart */}
+                <Card className={`rounded-xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white border-gray-200'} shadow-md`} isDarkMode={isDarkMode}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-blue-500/20' : 'bg-blue-50'}`}>
+                        <BarChart3 className={`h-4 w-4 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                      </div>
+                      <div>
+                        <CardTitle className={`text-base font-semibold ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`} isDarkMode={isDarkMode}>Quotation Trends</CardTitle>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Show quotation growth trend</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="h-64">
+                      <QuotationTrendsChart data={getQuotationTrendsData()} isDarkMode={isDarkMode} />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* 2. Proforma Invoice Distribution - Donut Chart */}
+                <Card className={`rounded-xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white border-gray-200'} shadow-md`} isDarkMode={isDarkMode}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-purple-500/20' : 'bg-purple-50'}`}>
+                        <PieChartIcon className={`h-4 w-4 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+                      </div>
+                      <div>
+                        <CardTitle className={`text-base font-semibold ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`} isDarkMode={isDarkMode}>Proforma Invoice Distribution</CardTitle>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Draft, Sent, Approved, Cancelled</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="h-64">
+                      <ProformaInvoiceDistributionChart data={getProformaInvoiceDistributionData()} isDarkMode={isDarkMode} />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Row 2: Payment Trends & Payment Distribution */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
+                {/* 6. Payments Trend - Area Chart */}
+                <Card className={`rounded-xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white border-gray-200'} shadow-md`} isDarkMode={isDarkMode}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-green-500/20' : 'bg-green-50'}`}>
+                        <TrendingUp className={`h-4 w-4 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
+                      </div>
+                      <div>
+                        <CardTitle className={`text-base font-semibold ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`} isDarkMode={isDarkMode}>Payments Trend</CardTitle>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Payment amount collected by month</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="h-64">
+                      <PaymentsTrendChart 
+                        data={{
+                          labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                          values: getPaymentAreaData().map(item => (item.received || 0) + (item.advance || 0))
+                        }} 
+                        isDarkMode={isDarkMode} 
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* 7. Payment Distribution - Pie Chart */}
+                <Card className={`rounded-xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white border-gray-200'} shadow-md`} isDarkMode={isDarkMode}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-indigo-500/20' : 'bg-indigo-50'}`}>
+                        <CreditCard className={`h-4 w-4 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`} />
+                      </div>
+                      <div>
+                        <CardTitle className={`text-base font-semibold ${
+                          isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`} isDarkMode={isDarkMode}>Payment Distribution</CardTitle>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Cash, UPI, Bank Transfer, Cheque</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="h-64">
+                      <PaymentDistributionChart data={getPaymentDistributionData()} isDarkMode={isDarkMode} />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Row 3: Sales Order Progress, Payment Due Ratio, Lead Sources */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
+                {/* 5. Sales Order Progress - Funnel Chart */}
+                <Card className={`rounded-xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white border-gray-200'} shadow-md`} isDarkMode={isDarkMode}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-teal-500/20' : 'bg-teal-50'}`}>
+                        <ShoppingCart className={`h-4 w-4 ${isDarkMode ? 'text-teal-400' : 'text-teal-600'}`} />
+                      </div>
+                      <div>
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`} isDarkMode={isDarkMode}>Sales Order Progress</CardTitle>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Created → Approved → Dispatched → Delivered</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="h-48">
+                      <SalesOrderProgressChart data={getSalesOrderProgressData()} isDarkMode={isDarkMode} />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* 9. Payment Due Ratio - Donut Chart */}
+                <Card className={`rounded-xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white border-gray-200'} shadow-md`} isDarkMode={isDarkMode}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-orange-500/20' : 'bg-orange-50'}`}>
+                        <CreditCard className={`h-4 w-4 ${isDarkMode ? 'text-orange-400' : 'text-orange-600'}`} />
+                      </div>
+                      <div>
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`} isDarkMode={isDarkMode}>Payment Due Ratio</CardTitle>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Paid vs Due Percentage</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="h-48">
+                      <PaymentDueRatioChart 
+                        data={{
+                          values: [
+                            businessMetrics.totalReceivedPayment || 0,
+                            businessMetrics.duePayment || 0
+                          ]
+                        }} 
+                        isDarkMode={isDarkMode} 
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* 3. Lead Sources - Donut Chart */}
+                <Card className={`rounded-xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white border-gray-200'} shadow-md`} isDarkMode={isDarkMode}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-purple-500/20' : 'bg-purple-50'}`}>
+                        <PieChartIcon className={`h-4 w-4 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+                      </div>
+                      <div>
+                    <CardTitle className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`} isDarkMode={isDarkMode}>Lead Sources</CardTitle>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Website, Facebook, WhatsApp, Referral, Direct</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="h-48">
+                      <LeadSourcesChart 
+                        data={{
+                          labels: overviewData.leadSourceData.map(item => item.label),
+                          values: overviewData.leadSourceData.map(item => item.value)
+                        }} 
+                        isDarkMode={isDarkMode} 
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+      </div>
+
+              {/* Row 4: Weekly Leads Activity & Monthly Revenue Trend */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
+                {/* 4. Weekly Leads Activity - Bar Chart */}
+                <Card className={`rounded-xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white border-gray-200'} shadow-md`} isDarkMode={isDarkMode}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-blue-500/20' : 'bg-blue-50'}`}>
+                        <BarChart3 className={`h-4 w-4 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                      </div>
+                      <div>
+                        <CardTitle className={`text-base font-semibold ${
+                isDarkMode ? 'text-white' : 'text-gray-900'
+              }`} isDarkMode={isDarkMode}>Weekly Leads Activity</CardTitle>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Leads generated by day (Mon-Sun)</p>
+                      </div>
+            </div>
+          </CardHeader>
+                  <CardContent className="pt-0">
+            <div className="h-64">
+                      <WeeklyLeadsActivityChart 
+                        data={{
+                          labels: overviewData.weeklyLeads.map(item => item.label),
+                          values: overviewData.weeklyLeads.map(item => item.value)
+                        }} 
+                        isDarkMode={isDarkMode} 
+                      />
+            </div>
+          </CardContent>
+        </Card>
+
+                {/* 10. Monthly Revenue Trend - Line Chart with Gradient */}
+                <Card className={`rounded-xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white border-gray-200'} shadow-md`} isDarkMode={isDarkMode}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-green-500/20' : 'bg-green-50'}`}>
+                        <TrendingUp className={`h-4 w-4 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
+                      </div>
+                      <div>
+                        <CardTitle className={`text-base font-semibold ${
+                isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`} isDarkMode={isDarkMode}>Monthly Revenue Trend</CardTitle>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Smooth curve with gradient fill</p>
+                      </div>
+            </div>
+          </CardHeader>
+                  <CardContent className="pt-0">
+            <div className="h-64">
+                      <MonthlyRevenueTrendChart 
+                        data={{
+                          labels: overviewData.monthlyRevenue.map(item => item.label),
+                          values: overviewData.monthlyRevenue.map(item => item.value)
+                        }} 
+                isDarkMode={isDarkMode} 
+              />
+            </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Row 5: Revenue Distribution, Lead Conversion Funnel, Sales vs Target */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
+                {/* 11. Revenue Distribution - Donut Chart */}
+                <Card className={`rounded-xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white border-gray-200'} shadow-md`} isDarkMode={isDarkMode}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-emerald-500/20' : 'bg-emerald-50'}`}>
+                        <DollarSign className={`h-4 w-4 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                      </div>
+                      <div>
+                        <CardTitle className={`text-sm font-semibold ${
+                          isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`} isDarkMode={isDarkMode}>Revenue Distribution</CardTitle>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>By Product/Service</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="h-48">
+                      <RevenueDistributionChart 
+                        data={getRevenueDistributionData()} 
+                        isDarkMode={isDarkMode} 
+                      />
+                </div>
+                  </CardContent>
+                </Card>
+
+                {/* 12. Lead Conversion Funnel - Funnel Chart */}
+                <Card className={`rounded-xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white border-gray-200'} shadow-md`} isDarkMode={isDarkMode}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-indigo-500/20' : 'bg-indigo-50'}`}>
+                        <Activity className={`h-4 w-4 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`} />
+              </div>
+                      <div>
+                        <CardTitle className={`text-sm font-semibold ${
+                          isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`} isDarkMode={isDarkMode}>Lead Conversion Funnel</CardTitle>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Leads → Qualified → Proposal → Closed</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="h-48">
+                      <LeadConversionFunnelChart data={getLeadConversionFunnelData()} isDarkMode={isDarkMode} />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* 13. Sales vs Target - Bar Chart */}
+                <Card className={`rounded-xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white border-gray-200'} shadow-md`} isDarkMode={isDarkMode}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-cyan-500/20' : 'bg-cyan-50'}`}>
+                        <Target className={`h-4 w-4 ${isDarkMode ? 'text-cyan-400' : 'text-cyan-600'}`} />
+                      </div>
+                      <div>
+                        <CardTitle className={`text-sm font-semibold ${
+                          isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`} isDarkMode={isDarkMode}>Sales vs Target</CardTitle>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Actual vs Target (monthly)</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="h-48">
+                      <SalesVsTargetChart data={getSalesVsTargetData()} isDarkMode={isDarkMode} />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+              {/* Row 6: Outstanding Payment Aging */}
+              <div className="mb-6">
+                {/* 14. Outstanding Payment Aging - Stacked Bar Chart */}
+                <Card className={`rounded-xl border ${isDarkMode ? 'bg-gray-800/50 border-gray-700/50' : 'bg-white border-gray-200'} shadow-md`} isDarkMode={isDarkMode}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-red-500/20' : 'bg-red-50'}`}>
+                        <Clock className={`h-4 w-4 ${isDarkMode ? 'text-red-400' : 'text-red-600'}`} />
+                      </div>
+                      <div>
+                        <CardTitle className={`text-base font-semibold ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`} isDarkMode={isDarkMode}>Outstanding Payment Aging</CardTitle>
+                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>0-30 Days, 31-60 Days, 60+ Days</p>
+                      </div>
+          </div>
+        </CardHeader>
+                  <CardContent className="pt-0">
+          <div className="h-64">
+                      <OutstandingPaymentAgingChart data={getOutstandingPaymentAgingData()} isDarkMode={isDarkMode} />
+          </div>
+        </CardContent>
+      </Card>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+
+        </>
+      )}
+
+      {activeTab === 'performance' && (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Card className={`border-2 max-w-2xl w-full ${
+            isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
+          }`} isDarkMode={isDarkMode}>
+            <CardContent className="p-12 text-center">
+              <div className={`w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center ${
+                isDarkMode ? 'bg-blue-900' : 'bg-blue-100'
+              }`}>
+                <Target className={`h-10 w-10 ${
+                  isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                }`} />
+              </div>
+              
+              <h2 className={`text-3xl font-bold mb-4 ${
+                isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>
+                Coming Soon
+              </h2>
+              
+              <p className={`text-lg mb-6 ${
+                isDarkMode ? 'text-gray-300' : 'text-gray-600'
+              }`}>
+                This feature will be available soon
+              </p>
+              
+              <div className={`space-y-4 mb-8 ${
+                isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
+                <div className="flex items-center justify-center gap-3">
+                  <Calendar className={`h-6 w-6 ${
+                    isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                  }`} />
+                  <span className="text-base font-medium">Attendance Tracking</span>
+                </div>
+                
+                <div className="flex items-center justify-center gap-3">
+                  <Award className={`h-6 w-6 ${
+                    isDarkMode ? 'text-yellow-400' : 'text-yellow-600'
+                  }`} />
+                  <span className="text-base font-medium">Performance Incentive Report</span>
+                </div>
+              </div>
+              
+              <p className={`text-sm ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                You will be able to view your attendance records and detailed performance incentive reports here.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </main>
+  )
+}
