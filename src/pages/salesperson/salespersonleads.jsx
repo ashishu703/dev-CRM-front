@@ -20,7 +20,7 @@ import CreatePIForm from './CreatePIForm.jsx'
 import Toast from '../../utils/Toast'
 import { QuotationHelper } from '../../utils/QuotationHelper'
 import { StatusConverter } from '../../utils/StatusConverter'
-import { Search, RefreshCw, Plus, Filter, Eye, Pencil, FileText, Upload, Settings, Tag, X, User, Mail, Building2, Package, Hash, MapPin, Globe, Users, TrendingUp, Calendar, Clock, MoreHorizontal, ShieldCheck } from 'lucide-react'
+import { Search, RefreshCw, Plus, Filter, Eye, Pencil, FileText, Upload, Settings, Tag, X, User, Mail, Building2, Package, Hash, MapPin, Globe, Users, TrendingUp, Calendar, Clock, MoreHorizontal, ShieldCheck, Copy, Check } from 'lucide-react'
 import { apiClient, API_ENDPOINTS, quotationService } from '../../utils/globalImports'
 import rfpService from '../../services/RfpService'
 import productPriceService from '../../services/ProductPriceService'
@@ -28,6 +28,7 @@ import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton'
 import { EditLeadStatusModal } from './LeadStatus'
 import EnquiryTable from '../../components/EnquiryTable'
 import { useAuth } from '../../hooks/useAuth'
+import { getProducts } from '../../constants/products'
 
 const getUserData = () => {
   try {
@@ -85,11 +86,41 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   const [pricingStock, setPricingStock] = React.useState(null)
   const [pricingPrice, setPricingPrice] = React.useState(null)
   const [rfpForm, setRfpForm] = React.useState({
-    productSpec: '3×16',
-    quantity: '',
+    products: [],
     deliveryTimeline: '',
     specialRequirements: ''
   })
+  const [products, setProducts] = React.useState([])
+  const [productSearch, setProductSearch] = React.useState('')
+  const [showProductDropdown, setShowProductDropdown] = React.useState(false)
+  const productDropdownRef = React.useRef(null)
+  const [savedRfpId, setSavedRfpId] = React.useState(null)
+  const [savingDecision, setSavingDecision] = React.useState(false)
+  const [rfpIdInput, setRfpIdInput] = React.useState('')
+  const [validatingRfpId, setValidatingRfpId] = React.useState(false)
+  const [validatedRfpDecision, setValidatedRfpDecision] = React.useState(null)
+  const [showRfpIdValidationModal, setShowRfpIdValidationModal] = React.useState(false)
+  const [validationError, setValidationError] = React.useState('')
+  const [rfpValidationErrors, setRfpValidationErrors] = React.useState({
+    products: {}, // { index: { quantity: 'error', length: 'error', targetPrice: 'error' } }
+    deliveryTimeline: '',
+    general: '' // General form-level errors
+  })
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target)) {
+        setShowProductDropdown(false)
+      }
+    }
+    if (showProductDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showProductDropdown])
   const [selectedBranch, setSelectedBranch] = React.useState('')
   const [companyBranches, setCompanyBranches] = React.useState({})
 
@@ -241,62 +272,689 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
 
   const handleQuotation = (customer) => {
     setViewingCustomerForQuotation(customer)
-    setShowCreateQuotation(true)
+    // First show RFP ID validation modal
+    setRfpIdInput('')
+    setValidatedRfpDecision(null)
+    setValidationError('')
+    setShowRfpIdValidationModal(true)
+  }
+
+  // Filter products based on search
+  const filteredProducts = React.useMemo(() => {
+    if (!productSearch.trim()) {
+      return products.slice(0, 10) // Show first 10 when no search
+    }
+    const searchLower = productSearch.toLowerCase()
+    return products.filter(p => p.name.toLowerCase().includes(searchLower)).slice(0, 10)
+  }, [productSearch, products])
+
+  // Check stock for a product
+  const checkProductStock = async (productName) => {
+    try {
+      const stockRes = await apiClient.get(API_ENDPOINTS.STOCK_GET_BY_PRODUCT(productName)).catch(() => null)
+      return stockRes?.data || null
+    } catch (error) {
+      return null
+    }
+  }
+
+  // Handle adding product from search input or dropdown
+  const handleAddProduct = async (productName = null) => {
+    const productToAdd = productName || productSearch.trim()
+    if (!productToAdd) return
+    
+    // Don't add if already exists (exact match)
+    if (rfpForm.products.some(p => p.productSpec.toLowerCase() === productToAdd.toLowerCase())) {
+      setProductSearch('')
+      setShowProductDropdown(false)
+      return
+    }
+    
+    // Add product with stock checking
+    const newProduct = {
+      productSpec: productToAdd,
+      quantity: '',
+      length: '',
+      lengthUnit: 'Mtr',
+      targetPrice: '',
+      stockStatus: null,
+      stockLoading: true,
+      approvedPrice: null
+    }
+    
+    setRfpForm(prev => ({
+      ...prev,
+      products: [...prev.products, newProduct]
+    }))
+    
+    setProductSearch('')
+    setShowProductDropdown(false)
+    
+    // Check stock and price for the new product
+    try {
+      const [stockRes, priceRes] = await Promise.all([
+        checkProductStock(productToAdd),
+        productPriceService.getApprovedPrice(productToAdd).catch(() => null)
+      ])
+      
+      setRfpForm(prev => ({
+        ...prev,
+        products: prev.products.map(p => 
+          p.productSpec === productToAdd 
+            ? { ...p, stockStatus: stockRes, approvedPrice: priceRes?.data || null, stockLoading: false }
+            : p
+        )
+      }))
+    } catch (error) {
+      setRfpForm(prev => ({
+        ...prev,
+        products: prev.products.map(p => 
+          p.productSpec === productToAdd 
+            ? { ...p, stockStatus: null, approvedPrice: null, stockLoading: false }
+            : p
+        )
+      }))
+    }
+  }
+
+  const handleProductSearchKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleAddProduct()
+    } else if (e.key === 'Escape') {
+      setShowProductDropdown(false)
+    }
+  }
+
+  const handleRemoveProduct = (index) => {
+    setRfpForm(prev => ({
+      ...prev,
+      products: prev.products.filter((_, i) => i !== index)
+    }))
+  }
+
+  const handleProductQuantityChange = (index, quantity) => {
+    setRfpForm(prev => ({
+      ...prev,
+      products: prev.products.map((p, i) => i === index ? { ...p, quantity } : p)
+    }))
+  }
+
+  const handleProductLengthChange = (index, length) => {
+    setRfpForm(prev => ({
+      ...prev,
+      products: prev.products.map((p, i) => i === index ? { ...p, length } : p)
+    }))
+  }
+
+  const handleProductLengthUnitChange = (index, lengthUnit) => {
+    setRfpForm(prev => ({
+      ...prev,
+      products: prev.products.map((p, i) => i === index ? { ...p, lengthUnit } : p)
+    }))
+  }
+
+  const handleProductTargetPriceChange = (index, targetPrice) => {
+    setRfpForm(prev => ({
+      ...prev,
+      products: prev.products.map((p, i) => i === index ? { ...p, targetPrice } : p)
+    }))
   }
 
   const openPricingModal = async (customer) => {
-    const productSpec = customer?.productName || '3×16'
+    const productSpec = customer?.productName || ''
     setPricingLead(customer)
     setPricingError('')
     setPricingPrice(null)
     setPricingStock(null)
+    setRfpValidationErrors({ products: {}, deliveryTimeline: '', general: '' }) // Clear validation errors
     setRfpForm({
+      products: productSpec ? [{
       productSpec,
       quantity: '',
+        length: '',
+        lengthUnit: 'Mtr',
+        targetPrice: '',
+        stockStatus: null,
+        stockLoading: true,
+        approvedPrice: null
+      }] : [],
       deliveryTimeline: '',
       specialRequirements: ''
     })
+    setProducts(getProducts())
+    setProductSearch('')
+    setShowProductDropdown(false)
     setShowPricingModal(true)
     setPricingLoading(true)
+    
+    // If initial product exists, check its stock
+    if (productSpec) {
     try {
       const [stockRes, priceRes] = await Promise.all([
-        apiClient.get(API_ENDPOINTS.STOCK_GET_BY_PRODUCT(productSpec)).catch(() => null),
+          checkProductStock(productSpec),
         productPriceService.getApprovedPrice(productSpec).catch(() => null)
       ])
-      setPricingStock(stockRes?.data || null)
+        setPricingStock(stockRes)
       setPricingPrice(priceRes?.data || null)
+        setRfpForm(prev => ({
+          ...prev,
+          products: prev.products.map(p => 
+            p.productSpec === productSpec 
+              ? { ...p, stockStatus: stockRes, approvedPrice: priceRes?.data || null, stockLoading: false }
+              : p
+          )
+        }))
     } catch (error) {
       setPricingError(error.message || 'Failed to load pricing details')
     } finally {
+        setPricingLoading(false)
+      }
+    } else {
       setPricingLoading(false)
     }
   }
 
   const closePricingModal = () => {
+    setRfpValidationErrors({ products: {}, deliveryTimeline: '', general: '' }) // Clear validation errors
     setShowPricingModal(false)
     setPricingLead(null)
     setPricingError('')
     setPricingStock(null)
     setPricingPrice(null)
+    setProductSearch('')
+    setShowProductDropdown(false)
+    setSavedRfpId(null)
+    setRfpIdInput('')
+    setValidatedRfpDecision(null)
+  }
+
+  // Helper: Check if product is custom (not in products list)
+  const isCustomProduct = (productSpec) => {
+    return !products.some(p => p.name.toLowerCase() === productSpec.toLowerCase())
+  }
+
+  // Helper: Check if all products have price available (for Save Decision button)
+  const canSaveDecision = () => {
+    if (rfpForm.products.length === 0 || savedRfpId) return false
+    
+    // ALL products must have price available (stock doesn't matter)
+    return rfpForm.products.every(product => {
+      const isCustom = isCustomProduct(product.productSpec)
+      if (isCustom) return false // Custom products don't have price
+      return !!product.approvedPrice // Must have approved price
+    })
+  }
+
+  // Helper: Check if any product needs RFP (price NOT available, regardless of stock)
+  const canRaiseRfp = () => {
+    if (rfpForm.products.length === 0) return false
+    
+    // Check if ANY product needs RFP:
+    // 1. Custom products always need RFP
+    // 2. Price NOT available (regardless of stock status)
+    return rfpForm.products.some(product => {
+      const isCustom = isCustomProduct(product.productSpec)
+      if (isCustom) return true // Custom products always need RFP
+      
+      const hasPrice = !!product.approvedPrice
+      
+      // Raise RFP when price NOT available (stock doesn't matter)
+      return !hasPrice
+    })
+  }
+
+  // Validation function for Save Decision (validates ALL products)
+  const validateSaveDecision = () => {
+    const errors = {
+      products: {},
+      deliveryTimeline: '',
+      general: ''
+    }
+    let hasErrors = false
+
+    // Validate: At least one product required
+    if (!pricingLead || rfpForm.products.length === 0) {
+      errors.general = 'Please add at least one product'
+      hasErrors = true
+      setRfpValidationErrors(errors)
+      return { isValid: false, errors }
+    }
+
+    // Save Decision: Only when ALL products have price available (stock doesn't matter)
+    const productsToSave = rfpForm.products.filter(product => {
+      const isCustom = isCustomProduct(product.productSpec)
+      if (isCustom) return false // Custom products don't have price, can't save
+      
+      const hasPrice = !!product.approvedPrice
+      return hasPrice // Only save if price is available
+    })
+    
+    if (productsToSave.length === 0) {
+      errors.general = 'Cannot save decision. No products have approved pricing. Please raise RFP for pricing approval.'
+      hasErrors = true
+      setRfpValidationErrors(errors)
+      return { isValid: false, errors }
+    }
+    
+    if (productsToSave.length < rfpForm.products.length) {
+      errors.general = `Only ${productsToSave.length} out of ${rfpForm.products.length} products have pricing. Please raise RFP for products without pricing.`
+      hasErrors = true
+      setRfpValidationErrors(errors)
+      return { isValid: false, errors }
+    }
+
+    // Validate ALL products that are being saved (all should have required fields)
+    productsToSave.forEach((product, originalIndex) => {
+      // Find the original index in rfpForm.products
+      const productIndex = rfpForm.products.findIndex(p => p.productSpec === product.productSpec)
+      if (productIndex === -1) return
+      
+      const productErrors = {}
+
+      // Validate Quantity (required)
+      const quantity = product.quantity?.toString().trim() || ''
+      if (!quantity) {
+        productErrors.quantity = 'Quantity is required'
+        hasErrors = true
+      } else {
+        const quantityNum = parseFloat(quantity)
+        if (isNaN(quantityNum) || quantityNum <= 0) {
+          productErrors.quantity = 'Quantity must be greater than 0'
+          hasErrors = true
+        }
+      }
+
+      // Validate Length (required)
+      const length = product.length?.toString().trim() || ''
+      if (!length) {
+        productErrors.length = 'Length is required'
+        hasErrors = true
+      } else {
+        const lengthNum = parseFloat(length)
+        if (isNaN(lengthNum) || lengthNum <= 0) {
+          productErrors.length = 'Length must be greater than 0'
+          hasErrors = true
+        }
+      }
+
+      // Validate Target Price (required)
+      const targetPrice = product.targetPrice?.toString().trim() || ''
+      if (!targetPrice) {
+        productErrors.targetPrice = 'Target Price is required'
+        hasErrors = true
+      } else {
+        const priceNum = parseFloat(targetPrice)
+        if (isNaN(priceNum) || priceNum <= 0) {
+          productErrors.targetPrice = 'Target Price must be greater than 0'
+          hasErrors = true
+        }
+      }
+
+      if (Object.keys(productErrors).length > 0) {
+        errors.products[productIndex] = productErrors
+      }
+    })
+
+    // Validate Delivery Timeline (required)
+    const deliveryTimeline = rfpForm.deliveryTimeline?.trim() || ''
+    if (!deliveryTimeline) {
+      errors.deliveryTimeline = 'Delivery Timeline is required'
+      hasErrors = true
+    } else {
+      // Validate date is not in the past
+      const selectedDate = new Date(deliveryTimeline)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      if (selectedDate < today) {
+        errors.deliveryTimeline = 'Delivery date cannot be in the past'
+        hasErrors = true
+      }
+    }
+
+    setRfpValidationErrors(errors)
+    return { isValid: !hasErrors, errors }
+  }
+
+  // Save Pricing & RFP Decision
+  const handleSaveDecision = async () => {
+    // Clear previous errors
+    setPricingError('')
+    setRfpValidationErrors({ products: {}, deliveryTimeline: '', general: '' })
+    
+    // Validate form before proceeding
+    const validation = validateSaveDecision()
+    if (!validation.isValid) {
+      // Show general error if exists
+      if (validation.errors.general) {
+        setPricingError(validation.errors.general)
+      } else {
+        setPricingError('Please fill all required fields')
+      }
+      // Scroll to top of modal to show errors
+      const modalContent = document.querySelector('[class*="rounded-2xl"]')
+      if (modalContent) {
+        modalContent.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+      return
+    }
+    
+    setSavingDecision(true)
+    
+    try {
+      // Save Decision: Only when ALL products have price available (stock doesn't matter)
+      // This function only saves, doesn't raise RFP
+      const productsToSave = rfpForm.products.filter(product => {
+        const isCustom = isCustomProduct(product.productSpec)
+        if (isCustom) return false // Custom products don't have price, can't save
+        
+        const hasPrice = !!product.approvedPrice
+        return hasPrice // Only save if price is available
+      })
+      
+      // ALWAYS create new RFP ID on save (one lead can have multiple RFP IDs)
+      // Create new pricing decision with new RFP ID
+      const response = await apiClient.post(API_ENDPOINTS.PRICING_RFP_DECISION_CREATE(), {
+        leadId: pricingLead.id,
+        products: productsToSave.map(p => ({
+          productSpec: p.productSpec,
+          quantity: p.quantity || '',
+          length: p.length || '',
+          lengthUnit: p.lengthUnit || 'Mtr',
+          targetPrice: p.targetPrice || ''
+        })),
+        deliveryTimeline: rfpForm.deliveryTimeline,
+        specialRequirements: rfpForm.specialRequirements
+      })
+      
+      if (response.success && response.data) {
+        setSavedRfpId(response.data.rfp_id)
+        Toast.success('Pricing & RFP Decision saved successfully! RFP ID generated.')
+        // Trigger refresh of RFP Record tab
+        window.dispatchEvent(new CustomEvent('rfpRecordUpdated', { detail: { type: 'saved', rfpId: response.data.rfp_id } }))
+      }
+    } catch (error) {
+      setPricingError(error.message || 'Failed to save pricing decision or raise RFP')
+    } finally {
+      setSavingDecision(false)
+    }
+  }
+
+  // Copy RFP ID to clipboard
+  const handleCopyRfpId = () => {
+    if (savedRfpId) {
+      navigator.clipboard.writeText(savedRfpId)
+      Toast.success('RFP ID copied to clipboard!')
+    }
+  }
+
+  // Validate RFP ID
+  const handleValidateRfpId = async () => {
+    if (!rfpIdInput.trim()) {
+      setValidationError('Please enter RFP ID')
+      return
+    }
+    
+    setValidationError('')
+    setValidatingRfpId(true)
+    try {
+      const response = await apiClient.get(API_ENDPOINTS.PRICING_RFP_DECISION_GET(rfpIdInput.trim()))
+      if (response.success && response.data) {
+        const decision = response.data
+        setValidatedRfpDecision(decision)
+        Toast.success('RFP ID validated successfully!')
+        
+        // Store validated RFP ID in sessionStorage for quotation form
+        sessionStorage.setItem('pricingRfpDecisionId', rfpIdInput.trim())
+        sessionStorage.setItem('pricingRfpDecisionData', JSON.stringify(decision))
+        
+        // Close validation modal and open create quotation modal
+        setShowRfpIdValidationModal(false)
+        setShowCreateQuotation(true)
+      } else {
+        setValidationError('Invalid RFP ID. Please check and try again.')
+        setValidatedRfpDecision(null)
+      }
+    } catch (error) {
+      setValidationError(error.message || 'Failed to validate RFP ID. Please check and try again.')
+      setValidatedRfpDecision(null)
+    } finally {
+      setValidatingRfpId(false)
+    }
+  }
+
+  // Comprehensive validation function for RFP form
+  const validateRfpForm = () => {
+    const errors = {
+      products: {},
+      deliveryTimeline: '',
+      general: ''
+    }
+    let hasErrors = false
+
+    // Validate: At least one product required
+    if (!pricingLead || rfpForm.products.length === 0) {
+      errors.general = 'Please add at least one product'
+      hasErrors = true
+      setRfpValidationErrors(errors)
+      return { isValid: false, errors }
+    }
+
+    // Validate each product that needs RFP
+    const productsToRaise = rfpForm.products.filter(product => {
+      const isCustom = isCustomProduct(product.productSpec)
+      if (isCustom) return true
+      const hasPrice = !!product.approvedPrice
+      return !hasPrice
+    })
+
+    if (productsToRaise.length === 0) {
+      errors.general = 'No products need RFP. All products have price available.'
+      hasErrors = true
+      setRfpValidationErrors(errors)
+      return { isValid: false, errors }
+    }
+
+    // Validate each product's required fields
+    rfpForm.products.forEach((product, index) => {
+      const productErrors = {}
+      const isCustom = isCustomProduct(product.productSpec)
+      const hasPrice = !!product.approvedPrice
+      const needsRfp = isCustom || !hasPrice
+
+      // Only validate products that need RFP
+      if (needsRfp) {
+        // Validate Quantity (required)
+        const quantity = product.quantity?.toString().trim() || ''
+        if (!quantity) {
+          productErrors.quantity = 'Quantity is required'
+          hasErrors = true
+        } else {
+          const quantityNum = parseFloat(quantity)
+          if (isNaN(quantityNum) || quantityNum <= 0) {
+            productErrors.quantity = 'Quantity must be greater than 0'
+            hasErrors = true
+          }
+        }
+
+        // Validate Length (required)
+        const length = product.length?.toString().trim() || ''
+        if (!length) {
+          productErrors.length = 'Length is required'
+          hasErrors = true
+        } else {
+          const lengthNum = parseFloat(length)
+          if (isNaN(lengthNum) || lengthNum <= 0) {
+            productErrors.length = 'Length must be greater than 0'
+            hasErrors = true
+          }
+        }
+
+        // Validate Target Price (required)
+        const targetPrice = product.targetPrice?.toString().trim() || ''
+        if (!targetPrice) {
+          productErrors.targetPrice = 'Target Price is required'
+          hasErrors = true
+        } else {
+          const priceNum = parseFloat(targetPrice)
+          if (isNaN(priceNum) || priceNum <= 0) {
+            productErrors.targetPrice = 'Target Price must be greater than 0'
+            hasErrors = true
+          }
+        }
+      }
+
+      if (Object.keys(productErrors).length > 0) {
+        errors.products[index] = productErrors
+      }
+    })
+
+    // Validate Delivery Timeline (required)
+    const deliveryTimeline = rfpForm.deliveryTimeline?.trim() || ''
+    if (!deliveryTimeline) {
+      errors.deliveryTimeline = 'Delivery Timeline is required'
+      hasErrors = true
+    } else {
+      // Validate date is not in the past
+      const selectedDate = new Date(deliveryTimeline)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      if (selectedDate < today) {
+        errors.deliveryTimeline = 'Delivery date cannot be in the past'
+        hasErrors = true
+      }
+    }
+
+    setRfpValidationErrors(errors)
+    return { isValid: !hasErrors, errors }
   }
 
   const handleRaiseRfp = async () => {
-    if (!pricingLead) return
-    const inStock = pricingStock && (pricingStock.status === 'available' || pricingStock.status === 'limited' || Number(pricingStock.quantity || 0) > 0)
-    const hasPrice = !!pricingPrice
-    const availabilityStatus = inStock && hasPrice ? 'in_stock' : 'not_in_stock'
+    // Clear previous errors
+    setPricingError('')
+    setRfpValidationErrors({ products: {}, deliveryTimeline: '', general: '' })
+    
+    // Validate form before proceeding
+    const validation = validateRfpForm()
+    if (!validation.isValid) {
+      // Show general error if exists
+      if (validation.errors.general) {
+        setPricingError(validation.errors.general)
+      } else {
+        setPricingError('Please fill all required fields')
+      }
+      // Scroll to top of modal to show errors
+      const modalContent = document.querySelector('[class*="rounded-2xl"]')
+      if (modalContent) {
+        modalContent.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+      return
+    }
+    
+    setPricingLoading(true)
+    
     try {
+      // Only raise RFP for products where price NOT available (regardless of stock)
+      const productsToRaise = rfpForm.products.filter(product => {
+        const isCustom = isCustomProduct(product.productSpec)
+        if (isCustom) return true // Custom products always need RFP
+        
+        const hasPrice = !!product.approvedPrice
+        
+        // Raise RFP when price NOT available (stock doesn't matter)
+        return !hasPrice
+      })
+      
+      if (productsToRaise.length === 0) {
+        setPricingError('No products need RFP. All products have price available.')
+        setPricingLoading(false)
+        return
+      }
+      
+      // Create ONE RFP with ALL products (products as child records)
+      // RFP ID will be generated ONLY when department head approves
+      const productsArray = productsToRaise.map(product => {
+        const isCustom = isCustomProduct(product.productSpec)
+        const inStock = product.stockStatus && (
+          product.stockStatus.status === 'available' || 
+          product.stockStatus.status === 'limited' || 
+          Number(product.stockStatus.quantity || 0) > 0
+        )
+        const hasPrice = !!product.approvedPrice
+        
+        let availabilityStatus = 'not_in_stock_price_unavailable'
+        
+        if (isCustom) {
+          availabilityStatus = 'custom_product_pricing_needed'
+        } else if (inStock && !hasPrice) {
+          availabilityStatus = 'in_stock_price_unavailable' // Stock available but price not available
+        } else if (!inStock && !hasPrice) {
+          availabilityStatus = 'not_in_stock_price_unavailable' // Both not available
+        }
+        
+        return {
+          productSpec: product.productSpec || '',
+          quantity: product.quantity || '',
+          length: product.length || '',
+          lengthUnit: product.lengthUnit || 'Mtr',
+          targetPrice: product.targetPrice || '',
+          availabilityStatus: availabilityStatus
+        }
+      }).filter(p => p.productSpec && p.productSpec.trim() !== '') // Filter out any invalid products
+      
+      // Validate products array before sending
+      if (!productsArray || productsArray.length === 0) {
+        setPricingError('No valid products to raise RFP. Please check product specifications.')
+        setPricingLoading(false)
+        return
+      }
+      
+      // Validate each product has required fields
+      for (let i = 0; i < productsArray.length; i++) {
+        const product = productsArray[i]
+        if (!product.productSpec || product.productSpec.trim() === '') {
+          setPricingError(`Product at index ${i + 1} is missing product specification.`)
+          setPricingLoading(false)
+          return
+        }
+        if (!product.availabilityStatus || product.availabilityStatus.trim() === '') {
+          setPricingError(`Product "${product.productSpec}" is missing availability status.`)
+          setPricingLoading(false)
+          return
+        }
+      }
+      
+      console.log('[RFP Raise] Sending request:', {
+        leadId: pricingLead.id,
+        productsCount: productsArray.length,
+        products: productsArray.map(p => ({ productSpec: p.productSpec, availabilityStatus: p.availabilityStatus }))
+      })
+      
+      // Create ONE RFP request with all products
       await rfpService.create({
         leadId: pricingLead.id,
-        productSpec: rfpForm.productSpec,
-        quantity: rfpForm.quantity,
+        products: productsArray,
         deliveryTimeline: rfpForm.deliveryTimeline,
-        specialRequirements: rfpForm.specialRequirements,
-        availabilityStatus
+        specialRequirements: rfpForm.specialRequirements || ''
       })
+      
+      Toast.success(`Successfully raised RFP with ${productsToRaise.length} product${productsToRaise.length > 1 ? 's' : ''} to Department Head. RFP ID will be generated after approval.`)
+      // Trigger refresh of RFP Record tab and RFP Requests list
+      window.dispatchEvent(new CustomEvent('rfpRecordUpdated', { detail: { type: 'raised' } }))
+      window.dispatchEvent(new CustomEvent('rfpUpdated', { detail: { type: 'raised' } }))
       closePricingModal()
     } catch (error) {
-      setPricingError(error.message || 'Failed to raise RFP')
+      console.error('[RFP Raise] Error:', error)
+      console.error('[RFP Raise] Error details:', {
+        message: error.message,
+        status: error.status,
+        data: error.data
+      })
+      // Show more detailed error message
+      const errorMessage = error.data?.message || error.message || 'Failed to raise RFP'
+      setPricingError(errorMessage)
+    } finally {
+      setPricingLoading(false)
     }
   }
 
@@ -2192,15 +2850,110 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
           </div>
         </div>
       )}
-      {showCreateQuotation && viewingCustomerForQuotation && <CreateQuotationForm customer={viewingCustomerForQuotation} user={user} existingQuotation={editingQuotation} onClose={() => { setShowCreateQuotation(false); setViewingCustomerForQuotation(null); setEditingQuotation(null) }} onSave={handleSaveQuotation} />}
+      {/* RFP ID Validation Modal - Must be validated before opening Create Quotation */}
+      {showRfpIdValidationModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[115] p-4">
+          <div className={`w-full max-w-md rounded-lg shadow-xl ${isDarkMode ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}>
+            <div className={`p-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold">Validate RFP ID</h2>
+                <button
+                  onClick={() => {
+                    setShowRfpIdValidationModal(false)
+                    setRfpIdInput('')
+                    setValidatedRfpDecision(null)
+                    setValidationError('')
+                    setViewingCustomerForQuotation(null)
+                  }}
+                  className="p-1 rounded-lg hover:bg-black/10"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <p className={`text-sm mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                Please enter your RFP ID to proceed with creating quotation.
+              </p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                  RFP ID <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={rfpIdInput}
+                  onChange={(e) => {
+                    setRfpIdInput(e.target.value)
+                    setValidationError('')
+                  }}
+                  placeholder="Enter RFP ID (e.g., RFP-202412-0001)"
+                  className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none focus:ring-2 ${
+                    validationError
+                      ? 'border-red-400 focus:ring-red-500 focus:border-red-500'
+                      : validatedRfpDecision
+                      ? 'border-green-400 focus:ring-green-500 focus:border-green-500'
+                      : isDarkMode
+                      ? 'bg-gray-700 border-gray-600 text-gray-100 focus:ring-blue-500 focus:border-blue-500'
+                      : 'bg-white border-gray-300 text-gray-900 focus:ring-blue-500 focus:border-blue-500'
+                  }`}
+                  disabled={validatingRfpId || !!validatedRfpDecision}
+                  autoFocus
+                />
+                {validationError && (
+                  <p className="mt-2 text-sm text-red-600">{validationError}</p>
+                )}
+                {validatedRfpDecision && (
+                  <p className="mt-2 text-sm text-green-600">
+                    ✓ RFP ID validated successfully! Opening quotation form...
+                  </p>
+                )}
+              </div>
+              
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => {
+                    setShowRfpIdValidationModal(false)
+                    setRfpIdInput('')
+                    setValidatedRfpDecision(null)
+                    setValidationError('')
+                    setViewingCustomerForQuotation(null)
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    isDarkMode
+                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleValidateRfpId}
+                  disabled={validatingRfpId || !rfpIdInput.trim() || !!validatedRfpDecision}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    validatedRfpDecision
+                      ? 'bg-green-600 text-white hover:bg-green-700'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  {validatingRfpId ? 'Validating...' : validatedRfpDecision ? '✓ Validated' : 'Validate'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showCreateQuotation && viewingCustomerForQuotation && <CreateQuotationForm customer={viewingCustomerForQuotation} user={user} existingQuotation={editingQuotation} onClose={() => { setShowCreateQuotation(false); setViewingCustomerForQuotation(null); setEditingQuotation(null); setRfpIdInput(''); setValidatedRfpDecision(null); sessionStorage.removeItem('pricingRfpDecisionId'); sessionStorage.removeItem('pricingRfpDecisionData'); }} onSave={handleSaveQuotation} />}
       {showPricingModal && pricingLead && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
-          <div className={`w-full max-w-2xl rounded-2xl p-6 shadow-xl ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'}`}>
-            <div className="flex items-start justify-between gap-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120] p-4">
+          <div className={`w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-xl flex flex-col ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'}`}>
+            {/* Fixed Header */}
+            <div className={`flex items-start justify-between gap-4 p-6 pb-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} flex-shrink-0`}>
               <div>
                 <h2 className="text-lg font-semibold">Pricing & RFP Decision</h2>
                 <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Lead: {pricingLead.name} • Product: {rfpForm.productSpec || '3×16'}
+                  Lead: {pricingLead.name}
                 </p>
               </div>
               <button onClick={closePricingModal} className="p-2 rounded-lg hover:bg-black/10">
@@ -2208,61 +2961,293 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
               </button>
             </div>
 
-            {pricingError && (
-              <div className="mt-4 px-4 py-3 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">
-                {pricingError}
-              </div>
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {(pricingError || rfpValidationErrors.general) && (
+                <div className={`px-4 py-3 rounded-lg border ${
+                  isDarkMode 
+                    ? 'bg-rose-900/30 text-rose-300 border-rose-700' 
+                    : 'bg-rose-50 text-rose-700 border-rose-200'
+                }`}>
+                  <p className="font-semibold text-sm mb-1">Validation Errors:</p>
+                  <p className="text-sm">{pricingError || rfpValidationErrors.general}</p>
+                  {Object.keys(rfpValidationErrors.products).length > 0 && (
+                    <p className="text-xs mt-2 opacity-90">
+                      Please check the highlighted fields below for specific errors.
+                    </p>
+                  )}
+                </div>
             )}
-
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className={`rounded-xl border p-4 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                <h3 className="text-sm font-semibold mb-2">Stock Status</h3>
-                {pricingLoading ? (
-                  <p className="text-sm text-gray-500">Checking stock...</p>
-                ) : pricingStock ? (
-                  <div className="space-y-1 text-sm">
-                    <p>Status: <span className="font-semibold capitalize">{pricingStock.status || 'unknown'}</span></p>
-                    <p>Quantity: <span className="font-semibold">{pricingStock.quantity || 0} {pricingStock.unit || ''}</span></p>
+              {/* Product Combobox */}
+              <div>
+                <label className={`block text-sm font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Add Products
+                </label>
+                <div className="relative" ref={productDropdownRef}>
+                  <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        value={productSearch}
+                        onChange={(e) => setProductSearch(e.target.value)}
+                        onFocus={() => setShowProductDropdown(true)}
+                        onKeyDown={handleProductSearchKeyPress}
+                        className={`w-full rounded-lg border px-3 py-2 text-sm ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200'}`}
+                        placeholder="Type to search or add custom product..."
+                      />
+                      
+                      {/* Dropdown List */}
+                      {showProductDropdown && (
+                        <div className={`absolute z-50 w-full mt-1 rounded-lg shadow-xl max-h-60 overflow-y-auto ${isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
+                          {filteredProducts.length > 0 ? (
+                            <div className="py-1">
+                              {filteredProducts.map((product, index) => (
+                                <button
+                                  key={index}
+                                  type="button"
+                                  onClick={() => handleAddProduct(product.name)}
+                                  className={`w-full text-left px-4 py-2.5 hover:bg-emerald-50 hover:text-emerald-700 transition-colors text-sm ${isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-900'}`}
+                                >
+                                  {product.name}
+                                </button>
+                              ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500">No stock record found.</p>
-                )}
+                            <div className={`px-4 py-2.5 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                              No products found. Press Enter to add as custom product.
+                            </div>
+                          )}
+                          {productSearch.trim() && !filteredProducts.some(p => p.name.toLowerCase() === productSearch.toLowerCase()) && (
+                            <div className={`border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} pt-1`}>
+                              <button
+                                type="button"
+                                onClick={() => handleAddProduct()}
+                                className={`w-full text-left px-4 py-2.5 hover:bg-emerald-50 hover:text-emerald-700 transition-colors text-sm font-medium ${isDarkMode ? 'text-emerald-400 hover:bg-gray-700' : 'text-emerald-600'}`}
+                              >
+                                + Add "{productSearch}" as custom product
+                              </button>
               </div>
-              <div className={`rounded-xl border p-4 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                <h3 className="text-sm font-semibold mb-2">Approved Price</h3>
-                {pricingLoading ? (
-                  <p className="text-sm text-gray-500">Checking price list...</p>
-                ) : pricingPrice ? (
-                  <div className="space-y-1 text-sm">
-                    <p>Unit Price: <span className="font-semibold">₹{Number(pricingPrice.unit_price || 0).toLocaleString('en-IN')}</span></p>
-                    <p>Valid Until: <span className="font-semibold">{pricingPrice.valid_until ? new Date(pricingPrice.valid_until).toLocaleDateString('en-IN') : 'N/A'}</span></p>
+                          )}
                   </div>
-                ) : (
-                  <p className="text-sm text-gray-500">No approved price found.</p>
-                )}
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleAddProduct()}
+                      disabled={!productSearch.trim()}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium whitespace-nowrap text-sm"
+                    >
+                      Add
+                    </button>
+                  </div>
               </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Products List */}
+              {rfpForm.products.length > 0 && (
               <div className="space-y-3">
-                <input
-                  className={`w-full rounded-lg border px-3 py-2 text-sm ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200'}`}
-                  placeholder="Product Spec"
-                  value={rfpForm.productSpec}
-                  onChange={(e) => setRfpForm((prev) => ({ ...prev, productSpec: e.target.value }))}
-                />
-                <input
-                  className={`w-full rounded-lg border px-3 py-2 text-sm ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200'}`}
-                  placeholder="Quantity"
-                  value={rfpForm.quantity}
-                  onChange={(e) => setRfpForm((prev) => ({ ...prev, quantity: e.target.value }))}
-                />
-                <input
-                  className={`w-full rounded-lg border px-3 py-2 text-sm ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200'}`}
-                  placeholder="Delivery Timeline"
-                  value={rfpForm.deliveryTimeline}
-                  onChange={(e) => setRfpForm((prev) => ({ ...prev, deliveryTimeline: e.target.value }))}
-                />
+                  {rfpForm.products.map((product, index) => {
+                    const inStock = product.stockStatus && (product.stockStatus.status === 'available' || product.stockStatus.status === 'limited' || Number(product.stockStatus.quantity || 0) > 0)
+                    const hasPrice = !!product.approvedPrice
+                    return (
+                      <div key={index} className={`rounded-xl border p-4 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h4 className={`text-sm font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                              {product.productSpec}
+                            </h4>
+                            {/* Stock Status */}
+                            <div className="mt-2 flex items-center gap-4 text-xs">
+                              {product.stockLoading ? (
+                                <span className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Checking stock...</span>
+                              ) : product.stockStatus ? (
+                                <span className={`font-medium ${inStock ? 'text-emerald-600' : 'text-red-600'}`}>
+                                  Stock: {inStock ? 'Available' : 'Not Available'} 
+                                  {product.stockStatus.quantity && ` (${product.stockStatus.quantity} ${product.stockStatus.unit || ''})`}
+                                </span>
+                              ) : (
+                                <span className={`font-medium text-orange-600`}>Stock: Not Found</span>
+                              )}
+                              {product.approvedPrice ? (
+                                <span className={`font-medium text-emerald-600`}>
+                                  Price: ₹{Number(product.approvedPrice.unit_price || 0).toLocaleString('en-IN')}
+                                </span>
+                              ) : (
+                                <span className={`font-medium text-red-600`}>Price: Not Available</span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveProduct(index)}
+                            className="ml-2 px-2 py-1 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {/* Quantity Field */}
+                          <div>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className={`w-full rounded-lg border px-3 py-2 text-sm ${
+                                rfpValidationErrors.products[index]?.quantity
+                                  ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                                  : isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-200'
+                              }`}
+                              placeholder="Quantity *"
+                              value={product.quantity}
+                              onChange={(e) => {
+                                handleProductQuantityChange(index, e.target.value)
+                                // Clear error when user starts typing
+                                if (rfpValidationErrors.products[index]?.quantity) {
+                                  setRfpValidationErrors(prev => ({
+                                    ...prev,
+                                    products: {
+                                      ...prev.products,
+                                      [index]: {
+                                        ...prev.products[index],
+                                        quantity: ''
+                                      }
+                                    }
+                                  }))
+                                }
+                              }}
+                            />
+                            {rfpValidationErrors.products[index]?.quantity && (
+                              <p className="mt-1 text-xs text-red-600">{rfpValidationErrors.products[index].quantity}</p>
+                            )}
+                          </div>
+                          
+                          {/* Length Field */}
+                          <div>
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                step="0.01"
+                                className={`flex-1 rounded-lg border px-3 py-2 text-sm ${
+                                  rfpValidationErrors.products[index]?.length
+                                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                                    : isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-200'
+                                }`}
+                                placeholder="Length *"
+                                value={product.length}
+                                onChange={(e) => {
+                                  handleProductLengthChange(index, e.target.value)
+                                  // Clear error when user starts typing
+                                  if (rfpValidationErrors.products[index]?.length) {
+                                    setRfpValidationErrors(prev => ({
+                                      ...prev,
+                                      products: {
+                                        ...prev.products,
+                                        [index]: {
+                                          ...prev.products[index],
+                                          length: ''
+                                        }
+                                      }
+                                    }))
+                                  }
+                                }}
+                              />
+                              <select
+                                className={`w-32 rounded-lg border px-3 py-2 text-sm ${isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-200'}`}
+                                value={product.lengthUnit}
+                                onChange={(e) => handleProductLengthUnitChange(index, e.target.value)}
+                              >
+                                <option value="Mtr">Meters</option>
+                                <option value="Ft">Feet</option>
+                                <option value="In">Inches</option>
+                                <option value="Yd">Yards</option>
+                                <option value="Km">Kilometers</option>
+                                <option value="Cm">Centimeters</option>
+                                <option value="Mm">Millimeters</option>
+                                <option value="Miles">Miles</option>
+                              </select>
+                            </div>
+                            {rfpValidationErrors.products[index]?.length && (
+                              <p className="mt-1 text-xs text-red-600">{rfpValidationErrors.products[index].length}</p>
+                            )}
+                          </div>
+                          
+                          {/* Target Price Field */}
+                          <div>
+                            <input
+                              type="number"
+                              step="1"
+                              min="0"
+                              className={`w-full rounded-lg border px-3 py-2 text-sm ${
+                                rfpValidationErrors.products[index]?.targetPrice
+                                  ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                                  : isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-200'
+                              }`}
+                              placeholder="Target Price (₹) *"
+                              value={product.targetPrice}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                // Only allow integers (no decimals)
+                                if (value === '' || /^\d+$/.test(value)) {
+                                  handleProductTargetPriceChange(index, value)
+                                  // Clear error when user starts typing
+                                  if (rfpValidationErrors.products[index]?.targetPrice) {
+                                    setRfpValidationErrors(prev => ({
+                                      ...prev,
+                                      products: {
+                                        ...prev.products,
+                                        [index]: {
+                                          ...prev.products[index],
+                                          targetPrice: ''
+                                        }
+                                      }
+                                    }))
+                                  }
+                                }
+                              }}
+                            />
+                            {rfpValidationErrors.products[index]?.targetPrice && (
+                              <p className="mt-1 text-xs text-red-600">{rfpValidationErrors.products[index].targetPrice}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Common Fields */}
+              <div className="space-y-3">
+                <div>
+                  <label className={`block text-sm font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Delivery Timeline (Required By Date) *
+                  </label>
+                  <input
+                    type="date"
+                    className={`w-full rounded-lg border px-3 py-2 text-sm ${
+                      rfpValidationErrors.deliveryTimeline
+                        ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                        : isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200'
+                    }`}
+                    placeholder="Select delivery date"
+                    value={rfpForm.deliveryTimeline}
+                    onChange={(e) => {
+                      setRfpForm((prev) => ({ ...prev, deliveryTimeline: e.target.value }))
+                      // Clear error when user selects a date
+                      if (rfpValidationErrors.deliveryTimeline) {
+                        setRfpValidationErrors(prev => ({ ...prev, deliveryTimeline: '' }))
+                      }
+                    }}
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                  {rfpValidationErrors.deliveryTimeline && (
+                    <p className="mt-1 text-xs text-red-600">{rfpValidationErrors.deliveryTimeline}</p>
+                  )}
+                  {rfpForm.deliveryTimeline && !rfpValidationErrors.deliveryTimeline && (
+                    <p className={`mt-1 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Delivery required by: {new Date(rfpForm.deliveryTimeline).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                  )}
+                </div>
                 <textarea
                   className={`w-full rounded-lg border px-3 py-2 text-sm ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200'}`}
                   rows={3}
@@ -2271,32 +3256,53 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   onChange={(e) => setRfpForm((prev) => ({ ...prev, specialRequirements: e.target.value }))}
                 />
               </div>
-              <div className={`rounded-xl border p-4 space-y-3 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                <h3 className="text-sm font-semibold">Decision</h3>
-                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  If stock is available and approved price exists, proceed to quotation. Otherwise raise an RFP.
-                </p>
+
+            </div>
+
+            {/* Fixed Footer */}
+            <div className={`p-6 pt-4 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} flex-shrink-0 space-y-3`}>
+              {/* RFP ID Display */}
+              {savedRfpId && (
+                <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-emerald-900/30 border border-emerald-700' : 'bg-emerald-50 border border-emerald-200'}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className={`text-xs font-semibold ${isDarkMode ? 'text-emerald-300' : 'text-emerald-700'}`}>RFP ID:</p>
+                      <p className={`text-sm font-mono font-bold ${isDarkMode ? 'text-emerald-200' : 'text-emerald-900'}`}>{savedRfpId}</p>
+                    </div>
                 <button
-                  onClick={() => { handleQuotation(pricingLead); closePricingModal() }}
-                  disabled={pricingLoading || !pricingPrice || !(pricingStock && (pricingStock.status === 'available' || pricingStock.status === 'limited' || Number(pricingStock.quantity || 0) > 0))}
-                  className={`w-full px-4 py-2 rounded-lg text-sm font-semibold text-white ${
-                    pricingLoading || !pricingPrice || !(pricingStock && (pricingStock.status === 'available' || pricingStock.status === 'limited' || Number(pricingStock.quantity || 0) > 0))
+                      onClick={handleCopyRfpId}
+                      className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-emerald-800' : 'hover:bg-emerald-100'}`}
+                      title="Copy RFP ID"
+                    >
+                      <Copy className={`h-4 w-4 ${isDarkMode ? 'text-emerald-300' : 'text-emerald-600'}`} />
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {/* Action Buttons */}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveDecision}
+                  disabled={savingDecision || !canSaveDecision()}
+                  className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold text-white ${
+                    savingDecision || !canSaveDecision()
                       ? 'bg-slate-400 cursor-not-allowed'
                       : 'bg-indigo-600 hover:bg-indigo-500'
                   }`}
                 >
-                  Proceed to Quotation
+                  {savingDecision ? 'Saving...' : savedRfpId ? 'Saved' : 'Save Decision'}
                 </button>
                 <button
                   onClick={handleRaiseRfp}
-                  disabled={pricingLoading || (pricingPrice && pricingStock && (pricingStock.status === 'available' || pricingStock.status === 'limited' || Number(pricingStock.quantity || 0) > 0))}
-                  className={`w-full px-4 py-2 rounded-lg text-sm font-semibold text-white ${
-                    pricingLoading || (pricingPrice && pricingStock && (pricingStock.status === 'available' || pricingStock.status === 'limited' || Number(pricingStock.quantity || 0) > 0))
+                  disabled={pricingLoading || !canRaiseRfp()}
+                  className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold text-white ${
+                    pricingLoading || !canRaiseRfp()
                       ? 'bg-slate-400 cursor-not-allowed'
                       : 'bg-emerald-600 hover:bg-emerald-500'
                   }`}
                 >
-                  Raise RFP
+                  {pricingLoading ? 'Raising RFP...' : `Raise RFP${rfpForm.products.length > 1 ? ` (${rfpForm.products.length} products)` : ''}`}
                 </button>
               </div>
             </div>

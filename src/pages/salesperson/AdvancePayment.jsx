@@ -12,7 +12,6 @@ import { toDateOnly } from '../../utils/dateOnly';
 import { API_ENDPOINTS } from '../../api/admin_api/api';
 import SalespersonCustomerTimeline from '../../components/SalespersonCustomerTimeline';
 import { useAuth } from '../../hooks/useAuth';
-import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton';
 import { useViewQuotationPI } from '../../hooks/useViewQuotationPI';
 import QuotationPreview from '../../components/QuotationPreview';
 import PIPreview from '../../components/PIPreview';

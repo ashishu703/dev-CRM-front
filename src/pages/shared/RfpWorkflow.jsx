@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle, Clock, FilePlus2, RefreshCw, XCircle } from 'lucide-react';
+import { CheckCircle, Clock, FilePlus2, RefreshCw, XCircle, X } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import apiClient from '../../utils/apiClient';
 import rfpService from '../../services/RfpService';
 import productPriceService from '../../services/ProductPriceService';
+import { getProducts } from '../../constants/products';
 
 const formatCurrency = (value) => {
   const amount = Number(value || 0);
@@ -22,6 +23,8 @@ const RfpWorkflow = () => {
   const [showSeniorApproval, setShowSeniorApproval] = useState(false);
   const [showOperations, setShowOperations] = useState(false);
   const [showPriceListModal, setShowPriceListModal] = useState(false);
+  const [showRfpApprovalModal, setShowRfpApprovalModal] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
   const [selectedRfp, setSelectedRfp] = useState(null);
   const [createForm, setCreateForm] = useState({
     leadId: '',
@@ -59,6 +62,7 @@ const RfpWorkflow = () => {
     unitPrice: '',
     validUntil: ''
   });
+  const [products, setProducts] = useState([]);
 
   const permissions = useMemo(() => {
     const dept = (user?.departmentType || '').toLowerCase();
@@ -94,6 +98,7 @@ const RfpWorkflow = () => {
   const openModal = (setter, rfp, resetFn) => {
     setSelectedRfp(rfp || null);
     if (resetFn) resetFn();
+    setProducts(getProducts());
     setter(true);
   };
 
@@ -105,7 +110,9 @@ const RfpWorkflow = () => {
     setShowSeniorApproval(false);
     setShowOperations(false);
     setShowPriceListModal(false);
+    setShowRfpApprovalModal(false);
     setSelectedRfp(null);
+    setRejectionReason('');
   };
 
   const handleCreate = async () => {
@@ -126,15 +133,49 @@ const RfpWorkflow = () => {
   };
 
   const handleApprove = async (rfpId) => {
-    await rfpService.approve(rfpId);
-    fetchRfps();
+    try {
+      const response = await rfpService.approve(rfpId);
+      fetchRfps();
+      setShowRfpApprovalModal(false);
+      setSelectedRfp(null);
+      // Trigger refresh of RFP Record tab
+      window.dispatchEvent(new CustomEvent('rfpRecordUpdated', { detail: { type: 'approved', rfpId: response?.data?.rfp_id } }))
+    } catch (error) {
+      setError(error.message || 'Failed to approve RFP');
+    }
   };
 
   const handleReject = async (rfpId) => {
-    const reason = window.prompt('Rejection reason?');
-    if (!reason) return;
-    await rfpService.reject(rfpId, reason);
-    fetchRfps();
+    if (!rejectionReason.trim()) {
+      setError('Please provide a rejection reason');
+      return;
+    }
+    try {
+      await rfpService.reject(rfpId, rejectionReason);
+      fetchRfps();
+      setShowRfpApprovalModal(false);
+      setSelectedRfp(null);
+      setRejectionReason('');
+    } catch (error) {
+      setError(error.message || 'Failed to reject RFP');
+    }
+  };
+
+  const openRfpApprovalModal = async (rfp) => {
+    // Fetch full RFP details with products
+    try {
+      const response = await rfpService.getById(rfp.id);
+      if (response.success && response.data) {
+        // Response structure: { rfp, prices, auditLogs }
+        const rfpData = response.data.rfp || response.data;
+        setSelectedRfp(rfpData);
+        setShowRfpApprovalModal(true);
+        setRejectionReason('');
+        setError('');
+      }
+    } catch (error) {
+      setError(error.message || 'Failed to load RFP details');
+    }
   };
 
   const handlePriceUpdate = async () => {
@@ -266,6 +307,7 @@ const RfpWorkflow = () => {
             <button
               onClick={() => {
                 setPriceListForm({ productSpec: '3×16', unitPrice: '', validUntil: '' });
+                setProducts(getProducts());
                 setShowPriceListModal(true);
               }}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-500"
@@ -313,8 +355,28 @@ const RfpWorkflow = () => {
                 <tr key={rfp.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-900">{rfp.rfp_id || 'Pending'}</td>
                   <td className="px-4 py-3 text-slate-700">LD-{rfp.lead_id}</td>
-                  <td className="px-4 py-3 text-slate-700">{rfp.product_spec}</td>
-                  <td className="px-4 py-3 text-slate-700">{rfp.quantity || '-'}</td>
+                  <td className="px-4 py-3 text-slate-700">
+                    {rfp.products && rfp.products.length > 0 ? (
+                      <div className="space-y-1">
+                        {rfp.products.slice(0, 2).map((p, idx) => (
+                          <div key={idx} className="text-xs">
+                            {p.product_spec} {p.quantity ? `(Qty: ${p.quantity})` : ''}
+                          </div>
+                        ))}
+                        {rfp.products.length > 2 && (
+                          <div className="text-xs text-slate-500">+{rfp.products.length - 2} more</div>
+                        )}
+                      </div>
+                    ) : (
+                      rfp.product_spec || 'N/A'
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">
+                    {rfp.products && rfp.products.length > 0 
+                      ? rfp.products.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0).toFixed(2)
+                      : (rfp.quantity || '-')
+                    }
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusBadge(rfp.status)}`}>
                       {statusLabel(rfp.status)}
@@ -330,22 +392,13 @@ const RfpWorkflow = () => {
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
                       {permissions.isDh && rfp.status === 'pending_dh' && (
-                        <>
-                          <button
-                            onClick={() => handleApprove(rfp.id)}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-emerald-600 text-white"
-                          >
-                            <CheckCircle className="w-3 h-3" />
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => handleReject(rfp.id)}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-rose-600 text-white"
-                          >
-                            <XCircle className="w-3 h-3" />
-                            Reject
-                          </button>
-                        </>
+                        <button
+                          onClick={() => openRfpApprovalModal(rfp)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          <FilePlus2 className="w-3 h-3" />
+                          Review & Approve
+                        </button>
                       )}
                       {permissions.isAccounts && ['approved', 'pricing_ready'].includes(rfp.status) && (
                         <button
@@ -433,24 +486,42 @@ const RfpWorkflow = () => {
                 value={createForm.leadId}
                 onChange={(e) => setCreateForm((prev) => ({ ...prev, leadId: e.target.value }))}
               />
-              <input
+              <select
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                placeholder="Product Spec"
                 value={createForm.productSpec}
                 onChange={(e) => setCreateForm((prev) => ({ ...prev, productSpec: e.target.value }))}
-              />
+              >
+                <option value="">Select Product</option>
+                {products.map((product, index) => (
+                  <option key={index} value={product.name}>
+                    {product.name}
+                  </option>
+                ))}
+              </select>
               <input
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                 placeholder="Quantity"
                 value={createForm.quantity}
                 onChange={(e) => setCreateForm((prev) => ({ ...prev, quantity: e.target.value }))}
               />
-              <input
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                placeholder="Delivery Timeline"
-                value={createForm.deliveryTimeline}
-                onChange={(e) => setCreateForm((prev) => ({ ...prev, deliveryTimeline: e.target.value }))}
-              />
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Delivery Timeline (Required By Date)
+                </label>
+                <input
+                  type="date"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                  placeholder="Select delivery date"
+                  value={createForm.deliveryTimeline}
+                  onChange={(e) => setCreateForm((prev) => ({ ...prev, deliveryTimeline: e.target.value }))}
+                  min={new Date().toISOString().split('T')[0]}
+                />
+                {createForm.deliveryTimeline && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Delivery required by: {new Date(createForm.deliveryTimeline).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  </p>
+                )}
+              </div>
               <textarea
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                 placeholder="Special Requirements"
@@ -633,17 +704,217 @@ const RfpWorkflow = () => {
         </div>
       )}
 
+      {/* Department Head RFP Approval Modal - Comprehensive View */}
+      {showRfpApprovalModal && selectedRfp && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[120] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold mb-1">RFP Approval</h2>
+                  <p className="text-blue-100 text-sm">Review all products and approve or reject this RFP</p>
+                </div>
+                <button
+                  onClick={closeModals}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* RFP Summary Section */}
+              <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-xl p-6 border border-slate-200">
+                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  <FilePlus2 className="w-5 h-5" />
+                  RFP Summary
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">RFP ID</label>
+                    <p className="text-sm font-mono font-bold text-slate-900 mt-1">
+                      {selectedRfp.rfp_id || 'Pending'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Raised By</label>
+                    <p className="text-sm text-slate-900 mt-1">{selectedRfp.created_by || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Department</label>
+                    <p className="text-sm text-slate-900 mt-1">{selectedRfp.department_type || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Date</label>
+                    <p className="text-sm text-slate-900 mt-1">
+                      {selectedRfp.created_at 
+                        ? new Date(selectedRfp.created_at).toLocaleDateString('en-IN', { 
+                            day: '2-digit', 
+                            month: 'short', 
+                            year: 'numeric' 
+                          })
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Lead</label>
+                    <p className="text-sm text-slate-900 mt-1">
+                      {selectedRfp.customer_name || `LD-${selectedRfp.lead_id}`}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Total Products</label>
+                    <p className="text-sm font-bold text-blue-600 mt-1">
+                      {selectedRfp.products?.length || 0}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Total Quantity</label>
+                    <p className="text-sm font-bold text-slate-900 mt-1">
+                      {selectedRfp.products?.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0).toFixed(2) || '0.00'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Delivery Timeline</label>
+                    <p className="text-sm text-slate-900 mt-1">
+                      {selectedRfp.delivery_timeline 
+                        ? new Date(selectedRfp.delivery_timeline).toLocaleDateString('en-IN')
+                        : 'Not specified'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Products Table Section */}
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 mb-4">Products in this RFP</h3>
+                {selectedRfp.products && selectedRfp.products.length > 0 ? (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-slate-100">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">#</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Product Specification</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Quantity</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Length</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Target Price</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {selectedRfp.products.map((product, index) => (
+                          <tr key={product.id || index} className="hover:bg-slate-50">
+                            <td className="px-4 py-3 text-sm text-slate-700 font-medium">{index + 1}</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-slate-900">{product.product_spec || 'N/A'}</td>
+                            <td className="px-4 py-3 text-sm text-slate-700">{product.quantity || '0.00'}</td>
+                            <td className="px-4 py-3 text-sm text-slate-700">
+                              {product.length ? `${product.length} ${product.length_unit || 'Mtr'}` : 'N/A'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-slate-700">
+                              {product.target_price ? formatCurrency(product.target_price) : 'N/A'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                product.availability_status === 'custom_product_pricing_needed' 
+                                  ? 'bg-purple-100 text-purple-800'
+                                  : product.availability_status === 'in_stock_price_unavailable'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-orange-100 text-orange-800'
+                              }`}>
+                                {product.availability_status?.replace(/_/g, ' ') || 'N/A'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="border border-slate-200 rounded-xl p-8 text-center text-slate-500">
+                    No products found in this RFP
+                  </div>
+                )}
+              </div>
+
+              {/* Special Requirements */}
+              {selectedRfp.special_requirements && (
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 mb-2">Special Requirements</h3>
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedRfp.special_requirements}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Rejection Reason Input (shown when rejecting) */}
+              <div className="border-t border-slate-200 pt-4">
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Rejection Reason (Required if rejecting)
+                </label>
+                <textarea
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  rows={3}
+                  placeholder="Please provide a reason for rejection..."
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                />
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-rose-700 text-sm">
+                  {error}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <button
+                  onClick={closeModals}
+                  className="px-6 py-2.5 text-sm font-semibold border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleReject(selectedRfp.id)}
+                  disabled={!rejectionReason.trim()}
+                  className="px-6 py-2.5 text-sm font-semibold bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Reject RFP
+                </button>
+                <button
+                  onClick={() => handleApprove(selectedRfp.id)}
+                  className="px-6 py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Approve RFP
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showPriceListModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
             <h2 className="text-lg font-semibold">Set Approved Price</h2>
             <div className="space-y-3">
-              <input
+              <select
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                placeholder="Product Spec"
                 value={priceListForm.productSpec}
                 onChange={(e) => setPriceListForm((prev) => ({ ...prev, productSpec: e.target.value }))}
-              />
+              >
+                <option value="">Select Product</option>
+                {products.map((product, index) => (
+                  <option key={index} value={product.name}>
+                    {product.name}
+                  </option>
+                ))}
+              </select>
               <input
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                 placeholder="Unit Price"

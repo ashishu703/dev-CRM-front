@@ -9,6 +9,10 @@ import templateService from '../../services/TemplateService';
 import companyBranchService from '../../services/CompanyBranchService';
 import { QuotationDataMapper } from '../../utils/QuotationDataMapper';
 import { getProducts, addProduct, UNITS } from '../../constants/products';
+import apiClient from '../../utils/apiClient';
+import { API_ENDPOINTS } from '../../api/admin_api/api';
+import productPriceService from '../../services/ProductPriceService';
+import Toast from '../../utils/Toast';
 
 function Card({ className, children }) {
   return <div className={`rounded-lg border bg-white shadow-sm ${className || ''}`}>{children}</div>;
@@ -139,6 +143,10 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
   const [availableTemplates, setAvailableTemplates] = useState([]);
   const [products, setProducts] = useState([]);
   const [productSearchTerm, setProductSearchTerm] = useState({});
+  const [rfpIdInput, setRfpIdInput] = useState('');
+  const [validatingRfpId, setValidatingRfpId] = useState(false);
+  const [validatedRfpDecision, setValidatedRfpDecision] = useState(null);
+  const [rfpIdValidated, setRfpIdValidated] = useState(false);
 
   // Auto-fill bill-to from customer data
   useEffect(() => {
@@ -296,6 +304,114 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
     // We intentionally omit quotationData from deps to avoid resetting selection
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Check for RFP ID in sessionStorage on mount
+  useEffect(() => {
+    const storedRfpId = sessionStorage.getItem('pricingRfpDecisionId');
+    if (storedRfpId && !existingQuotation) {
+      setRfpIdInput(storedRfpId);
+      handleValidateRfpId(storedRfpId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Validate RFP ID and auto-populate quotation
+  const handleValidateRfpId = async (rfpId = null) => {
+    const idToValidate = rfpId || rfpIdInput.trim();
+    if (!idToValidate) {
+      Toast.error('Please enter RFP ID');
+      return;
+    }
+    
+    setValidatingRfpId(true);
+    try {
+      const response = await apiClient.get(API_ENDPOINTS.PRICING_RFP_DECISION_GET(idToValidate));
+      if (response.success && response.data) {
+        const decision = response.data;
+        setValidatedRfpDecision(decision);
+        setRfpIdValidated(true);
+        
+        // Auto-populate quotation with RFP decision data
+        await populateQuotationFromRfpDecision(decision);
+        
+        Toast.success(`RFP ID validated successfully! Quotation populated with ${decision.products?.length || 0} product(s).`);
+      } else {
+        Toast.error('Invalid RFP ID. Please check and try again.');
+        setValidatedRfpDecision(null);
+        setRfpIdValidated(false);
+      }
+    } catch (error) {
+      Toast.error(error.message || 'Failed to validate RFP ID. Please check and try again.');
+      setValidatedRfpDecision(null);
+      setRfpIdValidated(false);
+    } finally {
+      setValidatingRfpId(false);
+    }
+  };
+
+  // Populate quotation from RFP decision
+  const populateQuotationFromRfpDecision = async (decision) => {
+    try {
+      const rfpProducts = Array.isArray(decision.products) ? decision.products : [];
+      
+      // Fetch pricing for all products
+      const itemsWithPricing = await Promise.all(
+        rfpProducts.map(async (product, index) => {
+          let unitPrice = 0;
+          try {
+            const priceRes = await productPriceService.getApprovedPrice(product.productSpec);
+            if (priceRes?.data) {
+              unitPrice = parseFloat(priceRes.data.unit_price || 0);
+            }
+          } catch (error) {
+            console.error(`Failed to fetch price for ${product.productSpec}:`, error);
+          }
+          
+          const quantity = parseFloat(product.quantity || 0);
+          const amount = quantity * unitPrice;
+          
+          // Find product in products list for HSN
+          const productInfo = products.find(p => p.name.toLowerCase() === product.productSpec.toLowerCase());
+          
+          return {
+            id: index + 1,
+            productName: product.productSpec,
+            quantity: product.quantity || '',
+            unit: product.lengthUnit || 'Mtr',
+            companyRate: unitPrice,
+            buyerRate: product.targetPrice || unitPrice.toString(),
+            amount: amount,
+            hsn: productInfo?.hsn || '',
+            remark: product.length ? `Length: ${product.length} ${product.lengthUnit || 'Mtr'}` : ''
+          };
+        })
+      );
+      
+      // Calculate totals
+      const totals = calculateTotals(
+        itemsWithPricing,
+        quotationData.discountRate,
+        quotationData.taxRate
+      );
+      
+      // Update quotation data
+      setQuotationData(prev => ({
+        ...prev,
+        items: itemsWithPricing.length > 0 ? itemsWithPricing : prev.items,
+        subtotal: totals.subtotal,
+        discountAmount: totals.discountAmount,
+        taxAmount: totals.taxAmount,
+        total: totals.total,
+        deliveryTerms: decision.delivery_timeline 
+          ? `Delivery required by: ${new Date(decision.delivery_timeline).toLocaleDateString('en-IN')}`
+          : prev.deliveryTerms,
+        remark: decision.special_requirements || prev.remark
+      }));
+    } catch (error) {
+      console.error('Error populating quotation from RFP decision:', error);
+      alert('Failed to populate quotation. Please try again.');
+    }
+  };
 
   const handleInputChange = (field, value) => {
     const newData = {
@@ -468,6 +584,12 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // RFP ID validation is mandatory
+    if (!existingQuotation && (!rfpIdValidated || !validatedRfpDecision)) {
+      Toast.error('Please enter and validate RFP ID before creating quotation.');
+      return;
+    }
 
     if (!selectedTemplate) {
       alert('Please select a quotation template.');
@@ -861,13 +983,27 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
             </Button>
             <Button 
               type="button" 
-              onClick={() => onSave({
-                ...previewData,
-                template: selectedTemplate // Include the selected template
-              })}
-              className="bg-green-600 hover:bg-green-700"
+              onClick={() => {
+                // RFP ID validation is mandatory for new quotations
+                if (!existingQuotation && (!rfpIdValidated || !validatedRfpDecision)) {
+                  Toast.error('Please validate RFP ID before saving quotation.');
+                  return;
+                }
+                onSave({
+                  ...previewData,
+                  template: selectedTemplate // Include the selected template
+                });
+              }}
+              disabled={!existingQuotation && (!rfpIdValidated || !validatedRfpDecision)}
+              className={`bg-green-600 hover:bg-green-700 ${
+                !existingQuotation && (!rfpIdValidated || !validatedRfpDecision)
+                  ? 'opacity-50 cursor-not-allowed'
+                  : ''
+              }`}
             >
-              Save Quotation
+              {!existingQuotation && (!rfpIdValidated || !validatedRfpDecision) 
+                ? 'Validate RFP ID First' 
+                : 'Save Quotation'}
             </Button>
           </div>
         </div>
@@ -898,6 +1034,52 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
         <div className="flex-1 overflow-y-auto pr-4" style={{ maxHeight: 'calc(100vh - 200px)', minWidth: '60%' }}>
           <CardContent className="p-0">
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* RFP ID Validation Box - Already validated before opening this modal */}
+            {!existingQuotation && (
+              <div className={`p-4 border-2 rounded-lg ${rfpIdValidated ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  RFP ID <span className="text-red-600">*</span> (Required)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={rfpIdInput}
+                    onChange={(e) => setRfpIdInput(e.target.value)}
+                    placeholder="Enter RFP ID (e.g., RFP-202412-0001)"
+                    className={`flex-1 px-3 py-2 border-2 rounded-lg text-sm focus:outline-none focus:ring-2 ${
+                      rfpIdValidated 
+                        ? 'border-green-400 focus:ring-green-500 focus:border-green-500 bg-green-50' 
+                        : 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                    }`}
+                    disabled={validatingRfpId || rfpIdValidated}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleValidateRfpId()}
+                    disabled={validatingRfpId || rfpIdValidated || !rfpIdInput.trim()}
+                    className={`px-4 py-2 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium ${
+                      rfpIdValidated 
+                        ? 'bg-green-600 hover:bg-green-500' 
+                        : 'bg-blue-600 hover:bg-blue-500'
+                    }`}
+                  >
+                    {validatingRfpId ? 'Validating...' : rfpIdValidated ? '✓ Validated' : 'Validate'}
+                  </button>
+                </div>
+                {!rfpIdValidated && (
+                  <p className="mt-2 text-xs text-red-600 font-medium">
+                    ⚠ RFP ID validation is required to create quotation. Please enter and validate your RFP ID.
+                  </p>
+                )}
+                {rfpIdValidated && validatedRfpDecision && (
+                  <p className="mt-2 text-xs text-green-600 font-medium">
+                    ✓ RFP ID validated successfully! Quotation populated with {validatedRfpDecision.products?.length || 0} product(s).
+                  </p>
+                )}
+              </div>
+            )}
+            
             {/* Quotation Header */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
@@ -1480,9 +1662,17 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
                 </Button>
                 <Button 
                   type="submit"
-                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+                  disabled={!existingQuotation && (!rfpIdValidated || !validatedRfpDecision)}
+                  className={`bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white ${
+                    !existingQuotation && (!rfpIdValidated || !validatedRfpDecision)
+                      ? 'opacity-50 cursor-not-allowed'
+                      : ''
+                  }`}
+                  title={!existingQuotation && (!rfpIdValidated || !validatedRfpDecision) ? 'Please validate RFP ID first' : ''}
                 >
-                  Save Quotation
+                  {!existingQuotation && (!rfpIdValidated || !validatedRfpDecision) 
+                    ? 'Validate RFP ID First' 
+                    : 'Save Quotation'}
                 </Button>
               </div>
             </div>

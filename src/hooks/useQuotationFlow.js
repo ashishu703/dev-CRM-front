@@ -113,7 +113,10 @@ export function useQuotationFlow(customerId, isRefreshing = false) {
           gstAmount: (item.amount * (item.gstRate || 18.00) / 100),
           totalAmount: item.amount * (1 + (item.gstRate || 18.00) / 100),
           remark: item.remark || ''
-        }))
+        })),
+        
+        // Master RFP ID for tracking (from sessionStorage)
+        masterRfpId: sessionStorage.getItem('pricingRfpDecisionId') || null
       }
       
       console.log('📤 Quotation payload being sent:', quotationPayload);

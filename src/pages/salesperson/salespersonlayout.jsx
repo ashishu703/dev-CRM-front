@@ -4,6 +4,7 @@ import DashboardContent from './salespersondashboard.jsx'
 import CustomerListContent from './salespersonleads.jsx'
 import StockManagement from './salespersonstock.jsx'
 import ProductsPage from './salespersonproducts.jsx'
+import SalespersonRfpRequests from './SalespersonRfpRequests.jsx'
 import LeadStatusPage from './LeadStatus.jsx'
 import ScheduledCallPage from './ScheduledCall.jsx'
 import LastCallPage from './LastCall.jsx'
@@ -48,6 +49,9 @@ export default function SalespersonLayout({ onLogout }) {
       // Handle save quotation
       const handleSaveQuotation = async (quotationData) => {
         try {
+          // Get master RFP ID from sessionStorage (validated RFP ID)
+          const masterRfpId = sessionStorage.getItem('pricingRfpDecisionId') || null;
+          
           const quotationPayload = {
             customerId: customer.id,
             customerName: customer.name,
@@ -66,6 +70,7 @@ export default function SalespersonLayout({ onLogout }) {
             discountRate: quotationData.discountRate || 0,
             discountAmount: quotationData.discountAmount || 0,
             totalAmount: quotationData.total,
+            masterRfpId: masterRfpId, // Master RFP ID for tracking
             billTo: quotationData.billTo || {
               business: customer.business,
               address: customer.address,
@@ -330,6 +335,7 @@ export default function SalespersonLayout({ onLogout }) {
                 {currentPage === 'dashboard' && <DashboardContent isDarkMode={isDarkMode} />}
                 {currentPage === 'customers' && <CustomerListContent isDarkMode={isDarkMode} selectedCustomerId={selectedCustomerId} />}
                 {currentPage === 'stock' && <StockManagement isDarkMode={isDarkMode} />}
+                {currentPage === 'rfp-requests' && <SalespersonRfpRequests isDarkMode={isDarkMode} />}
                 {currentPage === 'products' && <ProductsPage isDarkMode={isDarkMode} />}
                 {currentPage === 'lead-status' && <LeadStatusPage isDarkMode={isDarkMode} />}
                 {currentPage === 'scheduled-call' && <ScheduledCallPage isDarkMode={isDarkMode} />}
