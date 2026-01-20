@@ -6,6 +6,7 @@ import rfpService from '../../services/RfpService'
 import Toast from '../../utils/Toast'
 import apiClient from '../../utils/apiClient'
 import { API_ENDPOINTS } from '../../api/admin_api/api'
+import { filterRfpsBySearch, sortRfpsByDate, formatRfpStatus } from '../../utils/rfpHelpers'
 
 export default function SalespersonRfpRequests({ isDarkMode = false }) {
   const [activeTab, setActiveTab] = useState('rfp-requests') // 'rfp-requests' or 'rfp-record'
@@ -85,21 +86,33 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
   const fetchRfps = async () => {
     setLoading(true)
     try {
-      console.log('[SalespersonRfpRequests] Fetching RFPs with filters:', {
+      // Algorithm-based filtering: Build query parameters
+      const queryParams = {
         status: filterStatus !== 'all' ? filterStatus : undefined,
         search: searchQuery || undefined
-      })
-      const response = await rfpService.list({ 
-        status: filterStatus !== 'all' ? filterStatus : undefined,
-        search: searchQuery || undefined
-      })
+      }
+      
+      console.log('[SalespersonRfpRequests] Fetching RFPs with filters:', queryParams)
+      
+      const response = await rfpService.list(queryParams)
+      
       console.log('[SalespersonRfpRequests] RFP list response:', {
         success: response.success,
-        dataLength: Array.isArray(response.data) ? response.data.length : 0,
-        data: response.data
+        dataLength: Array.isArray(response.data) ? response.data.length : 0
       })
+      
       if (response.success) {
-        setRfps(Array.isArray(response.data) ? response.data : [])
+        let rfps = Array.isArray(response.data) ? response.data : []
+        
+        // Algorithm-based processing: Apply search filter if needed (client-side fallback)
+        if (searchQuery && searchQuery.trim()) {
+          rfps = filterRfpsBySearch(rfps, searchQuery)
+        }
+        
+        // Algorithm-based sorting: Sort by date (newest first)
+        rfps = sortRfpsByDate(rfps, false)
+        
+        setRfps(rfps)
       } else {
         console.error('[SalespersonRfpRequests] RFP list failed:', response)
         Toast.error(response.message || 'Failed to load RFP requests')
@@ -142,18 +155,21 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
+  // Algorithm-based status formatting using utility function
   const getStatusBadge = (status) => {
-    const statusConfig = {
-      pending_dh: { color: 'bg-yellow-100 text-yellow-800 border-yellow-300', label: 'Pending DH Approval', icon: Clock },
-      approved: { color: 'bg-green-100 text-green-800 border-green-300', label: 'Approved', icon: CheckCircle },
-      rejected: { color: 'bg-red-100 text-red-800 border-red-300', label: 'Rejected', icon: XCircle }
+    const statusConfig = formatRfpStatus(status)
+    const IconMap = {
+      Clock,
+      CheckCircle,
+      XCircle,
+      FileText
     }
-    const config = statusConfig[status] || { color: 'bg-gray-100 text-gray-800 border-gray-300', label: status, icon: FileText }
-    const Icon = config.icon
+    const Icon = IconMap[statusConfig.icon] || FileText
+    
     return (
-      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${config.color}`}>
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${statusConfig.color}`}>
         <Icon className="w-3.5 h-3.5" />
-        {config.label}
+        {statusConfig.label}
       </span>
     )
   }

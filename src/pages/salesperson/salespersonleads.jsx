@@ -24,6 +24,8 @@ import { Search, RefreshCw, Plus, Filter, Eye, Pencil, FileText, Upload, Setting
 import { apiClient, API_ENDPOINTS, quotationService } from '../../utils/globalImports'
 import rfpService from '../../services/RfpService'
 import productPriceService from '../../services/ProductPriceService'
+import { validateRfpForm as validateRfpFormUtil } from '../../utils/rfpValidation'
+import { filterProductsNeedingRfp, transformProductsArrayForRfp } from '../../utils/rfpHelpers'
 import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton'
 import { EditLeadStatusModal } from './LeadStatus'
 import EnquiryTable from '../../components/EnquiryTable'
@@ -723,110 +725,18 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     }
   }
 
-  // Comprehensive validation function for RFP form
+  // Algorithm-based validation function for RFP form
   const validateRfpForm = () => {
-    const errors = {
-      products: {},
-      deliveryTimeline: '',
-      general: ''
-    }
-    let hasErrors = false
-
-    // Validate: At least one product required
-    if (!pricingLead || rfpForm.products.length === 0) {
-      errors.general = 'Please add at least one product'
-      hasErrors = true
-      setRfpValidationErrors(errors)
-      return { isValid: false, errors }
-    }
-
-    // Validate each product that needs RFP
-    const productsToRaise = rfpForm.products.filter(product => {
-      const isCustom = isCustomProduct(product.productSpec)
-      if (isCustom) return true
-      const hasPrice = !!product.approvedPrice
-      return !hasPrice
-    })
-
-    if (productsToRaise.length === 0) {
-      errors.general = 'No products need RFP. All products have price available.'
-      hasErrors = true
-      setRfpValidationErrors(errors)
-      return { isValid: false, errors }
-    }
-
-    // Validate each product's required fields
-    rfpForm.products.forEach((product, index) => {
-      const productErrors = {}
-      const isCustom = isCustomProduct(product.productSpec)
-      const hasPrice = !!product.approvedPrice
-      const needsRfp = isCustom || !hasPrice
-
-      // Only validate products that need RFP
-      if (needsRfp) {
-        // Validate Quantity (required)
-        const quantity = product.quantity?.toString().trim() || ''
-        if (!quantity) {
-          productErrors.quantity = 'Quantity is required'
-          hasErrors = true
-        } else {
-          const quantityNum = parseFloat(quantity)
-          if (isNaN(quantityNum) || quantityNum <= 0) {
-            productErrors.quantity = 'Quantity must be greater than 0'
-            hasErrors = true
-          }
-        }
-
-        // Validate Length (required)
-        const length = product.length?.toString().trim() || ''
-        if (!length) {
-          productErrors.length = 'Length is required'
-          hasErrors = true
-        } else {
-          const lengthNum = parseFloat(length)
-          if (isNaN(lengthNum) || lengthNum <= 0) {
-            productErrors.length = 'Length must be greater than 0'
-            hasErrors = true
-          }
-        }
-
-        // Validate Target Price (required)
-        const targetPrice = product.targetPrice?.toString().trim() || ''
-        if (!targetPrice) {
-          productErrors.targetPrice = 'Target Price is required'
-          hasErrors = true
-        } else {
-          const priceNum = parseFloat(targetPrice)
-          if (isNaN(priceNum) || priceNum <= 0) {
-            productErrors.targetPrice = 'Target Price must be greater than 0'
-            hasErrors = true
-          }
-        }
-      }
-
-      if (Object.keys(productErrors).length > 0) {
-        errors.products[index] = productErrors
-      }
-    })
-
-    // Validate Delivery Timeline (required)
-    const deliveryTimeline = rfpForm.deliveryTimeline?.trim() || ''
-    if (!deliveryTimeline) {
-      errors.deliveryTimeline = 'Delivery Timeline is required'
-      hasErrors = true
-    } else {
-      // Validate date is not in the past
-      const selectedDate = new Date(deliveryTimeline)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      if (selectedDate < today) {
-        errors.deliveryTimeline = 'Delivery date cannot be in the past'
-        hasErrors = true
-      }
-    }
-
-    setRfpValidationErrors(errors)
-    return { isValid: !hasErrors, errors }
+    // Use centralized validation utility with algorithm-based rules
+    const validation = validateRfpFormUtil(
+      rfpForm,
+      rfpForm.products,
+      isCustomProduct,
+      (product) => !!product.approvedPrice
+    )
+    
+    setRfpValidationErrors(validation.errors)
+    return validation
   }
 
   const handleRaiseRfp = async () => {
@@ -854,16 +764,12 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     setPricingLoading(true)
     
     try {
-      // Only raise RFP for products where price NOT available (regardless of stock)
-      const productsToRaise = rfpForm.products.filter(product => {
-        const isCustom = isCustomProduct(product.productSpec)
-        if (isCustom) return true // Custom products always need RFP
-        
-        const hasPrice = !!product.approvedPrice
-        
-        // Raise RFP when price NOT available (stock doesn't matter)
-        return !hasPrice
-      })
+      // Algorithm-based filtering: Get products that need RFP
+      const productsToRaise = filterProductsNeedingRfp(
+        rfpForm.products,
+        isCustomProduct,
+        (product) => !!product.approvedPrice
+      )
       
       if (productsToRaise.length === 0) {
         setPricingError('No products need RFP. All products have price available.')
@@ -871,57 +777,18 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
         return
       }
       
-      // Create ONE RFP with ALL products (products as child records)
-      // RFP ID will be generated ONLY when department head approves
-      const productsArray = productsToRaise.map(product => {
-        const isCustom = isCustomProduct(product.productSpec)
-        const inStock = product.stockStatus && (
-          product.stockStatus.status === 'available' || 
-          product.stockStatus.status === 'limited' || 
-          Number(product.stockStatus.quantity || 0) > 0
-        )
-        const hasPrice = !!product.approvedPrice
-        
-        let availabilityStatus = 'not_in_stock_price_unavailable'
-        
-        if (isCustom) {
-          availabilityStatus = 'custom_product_pricing_needed'
-        } else if (inStock && !hasPrice) {
-          availabilityStatus = 'in_stock_price_unavailable' // Stock available but price not available
-        } else if (!inStock && !hasPrice) {
-          availabilityStatus = 'not_in_stock_price_unavailable' // Both not available
-        }
-        
-        return {
-          productSpec: product.productSpec || '',
-          quantity: product.quantity || '',
-          length: product.length || '',
-          lengthUnit: product.lengthUnit || 'Mtr',
-          targetPrice: product.targetPrice || '',
-          availabilityStatus: availabilityStatus
-        }
-      }).filter(p => p.productSpec && p.productSpec.trim() !== '') // Filter out any invalid products
+      // Algorithm-based product transformation for RFP creation
+      // Use centralized helper function for consistent processing
+      const productsArray = transformProductsArrayForRfp(productsToRaise, isCustomProduct)
       
-      // Validate products array before sending
-      if (!productsArray || productsArray.length === 0) {
-        setPricingError('No valid products to raise RFP. Please check product specifications.')
+      // Algorithm-based validation: Validate products array before sending
+      const { validateProductsArray } = await import('../../utils/rfpValidation')
+      const productsValidation = validateProductsArray(productsArray)
+      
+      if (!productsValidation.isValid) {
+        setPricingError(productsValidation.error)
         setPricingLoading(false)
         return
-      }
-      
-      // Validate each product has required fields
-      for (let i = 0; i < productsArray.length; i++) {
-        const product = productsArray[i]
-        if (!product.productSpec || product.productSpec.trim() === '') {
-          setPricingError(`Product at index ${i + 1} is missing product specification.`)
-          setPricingLoading(false)
-          return
-        }
-        if (!product.availabilityStatus || product.availabilityStatus.trim() === '') {
-          setPricingError(`Product "${product.productSpec}" is missing availability status.`)
-          setPricingLoading(false)
-          return
-        }
       }
       
       console.log('[RFP Raise] Sending request:', {
