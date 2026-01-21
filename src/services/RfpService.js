@@ -3,7 +3,12 @@ import { API_ENDPOINTS } from '../api/admin_api/api';
 
 class RfpService {
   async list(params = {}) {
-    const query = new URLSearchParams(params).toString();
+    // IMPORTANT: URLSearchParams serializes `undefined` as the string "undefined"
+    // which breaks backend filtering (e.g. status=undefined). Clean params first.
+    const cleaned = Object.fromEntries(
+      Object.entries(params || {}).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    );
+    const query = new URLSearchParams(cleaned).toString();
     return apiClient.get(API_ENDPOINTS.RFPS_LIST(query));
   }
 

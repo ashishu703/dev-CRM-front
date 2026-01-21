@@ -367,8 +367,12 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
             console.error(`Failed to fetch price for ${product.productSpec}:`, error);
           }
           
-          const quantity = parseFloat(product.quantity || 0);
-          const amount = quantity * unitPrice;
+          // Quantity should be an integer in quotation (strip any decimals like "11.00")
+          const rawQty = product.quantity ?? '';
+          const qtyNum = rawQty === '' ? 0 : Number.parseFloat(rawQty);
+          const qtyInt = Number.isFinite(qtyNum) ? Math.trunc(qtyNum) : 0;
+          const quantityForForm = rawQty === '' ? '' : String(qtyInt);
+          const amount = (qtyInt || 0) * unitPrice;
           
           // Find product in products list for HSN
           const productInfo = products.find(p => p.name.toLowerCase() === product.productSpec.toLowerCase());
@@ -376,7 +380,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
           return {
             id: index + 1,
             productName: product.productSpec,
-            quantity: product.quantity || '',
+            quantity: quantityForForm,
             unit: product.lengthUnit || 'Mtr',
             companyRate: unitPrice,
             buyerRate: product.targetPrice || unitPrice.toString(),

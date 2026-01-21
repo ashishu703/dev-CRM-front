@@ -6,6 +6,7 @@ import { API_ENDPOINTS } from '../../api/admin_api/api'
 import proformaInvoiceService from '../../api/admin_api/proformaInvoiceService'
 import DynamicTemplateRenderer from '../../components/DynamicTemplateRenderer'
 import templateService from '../../services/TemplateService'
+import { withRfpTemplateFields } from '../../utils/withRfpTemplateFields'
 
 export default function PIPreviewModal({
   open,
@@ -54,13 +55,13 @@ export default function PIPreviewModal({
 
     const baseData = piPreviewData.data || piPreviewData
 
-    return {
+    return withRfpTemplateFields({
       ...baseData,
       branch: branchObj,
       billTo: baseData.billTo,
       templateKey: effectiveTemplateKey,
       templateType: 'pi',
-    }
+    })
   }, [piPreviewData, companyBranches, effectiveTemplateKey])
 
   if (!open) return null

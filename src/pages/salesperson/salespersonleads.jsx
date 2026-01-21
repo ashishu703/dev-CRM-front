@@ -802,7 +802,26 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
         leadId: pricingLead.id,
         products: productsArray,
         deliveryTimeline: rfpForm.deliveryTimeline,
-        specialRequirements: rfpForm.specialRequirements || ''
+        specialRequirements: rfpForm.specialRequirements || '',
+        // Store same-to-same snapshot of what salesperson raised from Pricing & RFP Decision
+        source: 'pricing_rfp_decision',
+        sourcePayload: {
+          lead: {
+            id: pricingLead?.id,
+            name: pricingLead?.name,
+            business: pricingLead?.business,
+            phone: pricingLead?.phone,
+            email: pricingLead?.email
+          },
+          form: {
+            deliveryTimeline: rfpForm.deliveryTimeline,
+            specialRequirements: rfpForm.specialRequirements || '',
+            // Full products as seen in Pricing & RFP Decision UI (same-to-same copy)
+            allProducts: rfpForm.products || []
+          },
+          // Workflow payload actually sent for approval (subset that needs RFP)
+          workflowProducts: productsArray || []
+        }
       })
       
       Toast.success(`Successfully raised RFP with ${productsToRaise.length} product${productsToRaise.length > 1 ? 's' : ''} to Department Head. RFP ID will be generated after approval.`)
