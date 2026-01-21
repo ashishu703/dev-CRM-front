@@ -178,6 +178,9 @@ export function useQuotationFlow(customerId, isRefreshing = false) {
             validUpto: dbQuotation.valid_until,
             selectedBranch: dbQuotation.branch || '',
             template: dbQuotation.template || '',
+            // RFP tracking (used by HTML templates)
+            masterRfpId: dbQuotation.master_rfp_id || null,
+            rfpId: dbQuotation.rfp_id || null,
 
             // Customer + bill-to info
             customerId: dbQuotation.customer_id,

@@ -72,6 +72,9 @@ export function useViewQuotationPI(companyBranches, user) {
         validUntil: dbQuotation.valid_until,
         selectedBranch: dbQuotation.branch,
         template: dbQuotation.template,
+        // RFP tracking (for templates)
+        masterRfpId: dbQuotation.master_rfp_id || null,
+        rfpId: dbQuotation.rfp_id || null,
         
         // Customer and billing info - EXACT from DB
         customer: {
