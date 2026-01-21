@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
-import { FileText, Clock, CheckCircle, XCircle, Eye, Copy, Search, RefreshCw, X, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { FileText, Clock, CheckCircle, XCircle, Eye, Copy, Search, RefreshCw, X, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User, Building2, Phone, Mail } from 'lucide-react'
 import rfpService from '../../services/RfpService'
 import Toast from '../../utils/Toast'
 import { filterRfpsBySearch, sortRfpsByDate, formatRfpStatus } from '../../utils/rfpHelpers'
@@ -293,6 +293,42 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
       month: 'long',
       day: 'numeric'
     }).format(d)
+  }
+
+  function formatQty(value) {
+    const num = Number.parseFloat(value)
+    if (!Number.isFinite(num)) return '—'
+    return Number.isInteger(num) ? String(num) : num.toFixed(2)
+  }
+
+  function formatMoneyINR(value) {
+    const num = Number.parseFloat(value)
+    if (!Number.isFinite(num)) return '—'
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(num)
+  }
+
+  function getProductsForDetails(rfp) {
+    const snapshot = rfp?.source_payload?.form?.allProducts
+    if (Array.isArray(snapshot) && snapshot.length > 0) {
+      return snapshot.map((p) => ({
+        productSpec: p?.productSpec || '',
+        quantity: p?.quantity,
+        length: p?.length,
+        lengthUnit: p?.lengthUnit || '',
+        targetPrice: p?.targetPrice
+      }))
+    }
+    const products = rfp?.products
+    if (Array.isArray(products) && products.length > 0) {
+      return products.map((p) => ({
+        productSpec: p?.product_spec || '',
+        quantity: p?.quantity,
+        length: p?.length,
+        lengthUnit: p?.length_unit || '',
+        targetPrice: p?.target_price
+      }))
+    }
+    return []
   }
 
   return (
@@ -593,133 +629,177 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
         {/* Details Modal */}
         {showDetails && selectedRfp && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className={`w-full max-w-3xl rounded-xl shadow-xl ${isDarkMode ? 'bg-gray-800' : 'bg-white'} max-h-[90vh] overflow-y-auto`}>
-              <div className={`p-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                <div className="flex items-center justify-between">
-                  <h2 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>RFP Request Details</h2>
+            <div className={`w-full max-w-4xl rounded-2xl shadow-2xl ${isDarkMode ? 'bg-gray-800' : 'bg-white'} max-h-[90vh] overflow-hidden`}>
+              {/* Header (sticky) */}
+              <div className={`sticky top-0 z-10 px-6 py-5 border-b ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3">
+                      <h2 className={`text-xl sm:text-2xl font-bold truncate ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>RFP Request Details</h2>
+                      {getStatusBadge(selectedRfp.status)}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-semibold uppercase tracking-wide ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>RFP ID</span>
+                        <span className={`font-mono text-sm ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                          {selectedRfp.rfp_id || `REQ-${selectedRfp.id}`}
+                        </span>
+                        {selectedRfp.rfp_id && (
+                          <button
+                            onClick={() => handleCopyRfpId(selectedRfp.rfp_id)}
+                            className={`p-1.5 rounded-md transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                            title="Copy RFP ID"
+                          >
+                            <Copy className="w-4 h-4 text-gray-500" />
+                          </button>
+                        )}
+                      </div>
+                      {!selectedRfp.rfp_id && (
+                        <span className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                          RFP ID will be generated after DH approval
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
                   <button
                     onClick={() => {
                       setShowDetails(false)
                       setSelectedRfp(null)
                     }}
                     className={`p-2 rounded-lg transition-colors ${
-                      isDarkMode 
-                        ? 'hover:bg-gray-700 text-gray-300' 
-                        : 'hover:bg-gray-100 text-gray-600'
+                      isDarkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600'
                     }`}
+                    title="Close"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
               </div>
-              <div className="p-6 space-y-4">
-                {/* RFP ID */}
-                <div>
-                  <label className={`text-sm font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>RFP ID</label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`font-mono ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                      {selectedRfp.rfp_id || `REQ-${selectedRfp.id}`}
-                    </span>
-                    {selectedRfp.rfp_id && (
-                      <button
-                        onClick={() => handleCopyRfpId(selectedRfp.rfp_id)}
-                        className={`p-1 rounded transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                        title="Copy RFP ID"
-                      >
-                        <Copy className="w-4 h-4 text-gray-500" />
-                      </button>
-                    )}
-                    {!selectedRfp.rfp_id && (
-                      <span className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-                        (RFP ID will be generated after approval)
-                      </span>
-                    )}
-                  </div>
-                </div>
 
-                {/* Lead Information */}
-                <div>
-                  <label className={`text-sm font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Lead Information</label>
-                  <div className={`mt-1 space-y-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>
-                    <div>Name: {selectedRfp.customer_name || 'N/A'}</div>
-                    <div>Business: {selectedRfp.customer_business || 'N/A'}</div>
-                    <div>Phone: {selectedRfp.customer_phone || 'N/A'}</div>
-                    <div>Email: {selectedRfp.customer_email || 'N/A'}</div>
+              {/* Body */}
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-92px)]">
+                {/* Summary grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Lead card */}
+                  <div className={`rounded-xl border p-4 ${isDarkMode ? 'border-gray-700 bg-gray-800/60' : 'border-gray-200 bg-gray-50'}`}>
+                    <div className="flex items-center justify-between">
+                      <div className={`text-sm font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>Lead</div>
+                      <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{selectedRfp.company_name || ''}</div>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-start gap-2">
+                        <User className={`w-4 h-4 mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                        <div className="min-w-0">
+                          <div className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>{selectedRfp.customer_name || 'N/A'}</div>
+                          <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Name</div>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Building2 className={`w-4 h-4 mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                        <div className="min-w-0">
+                          <div className={`text-sm break-words ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>{selectedRfp.customer_business || 'N/A'}</div>
+                          <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Business</div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="flex items-start gap-2">
+                          <Phone className={`w-4 h-4 mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                          <div className="min-w-0">
+                            <div className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>{selectedRfp.customer_phone || 'N/A'}</div>
+                            <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Phone</div>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <Mail className={`w-4 h-4 mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                          <div className="min-w-0">
+                            <div className={`text-sm break-all ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>{selectedRfp.customer_email || 'N/A'}</div>
+                            <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Email</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Timeline card */}
+                  <div className={`rounded-xl border p-4 ${isDarkMode ? 'border-gray-700 bg-gray-800/60' : 'border-gray-200 bg-gray-50'}`}>
+                    <div className={`text-sm font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>Timeline</div>
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <div className={`text-xs font-semibold uppercase tracking-wide ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Created</div>
+                        <div className={`mt-1 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>{formatDateTimeIST(selectedRfp.created_at)}</div>
+                      </div>
+                      <div>
+                        <div className={`text-xs font-semibold uppercase tracking-wide ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>DH Approved</div>
+                        <div className={`mt-1 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>{selectedRfp.approved_at ? formatDateTimeIST(selectedRfp.approved_at) : '—'}</div>
+                        {selectedRfp.approved_by && (
+                          <div className={`mt-1 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>By: {selectedRfp.approved_by}</div>
+                        )}
+                      </div>
+                      <div className="sm:col-span-2">
+                        <div className={`text-xs font-semibold uppercase tracking-wide ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Delivery Timeline</div>
+                        <div className={`mt-1 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                          {selectedRfp.delivery_timeline
+                            ? new Date(selectedRfp.delivery_timeline).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })
+                            : 'N/A'}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 {/* Products */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className={`text-sm font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Products</label>
-                    <span className={`text-xs px-2 py-1 rounded ${isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                      {Array.isArray(selectedRfp.source_payload?.form?.allProducts)
-                        ? selectedRfp.source_payload.form.allProducts.length
-                        : (Array.isArray(selectedRfp.products) ? selectedRfp.products.length : 0)} product
+                <div className="mt-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className={`text-sm font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>Products</div>
+                    <span className={`text-xs px-2 py-1 rounded ${isDarkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
+                      {getProductsForDetails(selectedRfp).length} item{getProductsForDetails(selectedRfp).length !== 1 ? 's' : ''}
                     </span>
                   </div>
 
-                  {Array.isArray(selectedRfp.source_payload?.form?.allProducts) && selectedRfp.source_payload.form.allProducts.length > 0 ? (
-                    <div className="space-y-2">
-                      {selectedRfp.source_payload.form.allProducts.map((p, idx) => (
-                        <div key={idx} className={`p-3 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                          <div className="font-medium">{p?.productSpec || 'N/A'}</div>
-                          <div className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                            Quantity: {p?.quantity || 'N/A'} | Length: {p?.length || 'N/A'} {p?.lengthUnit || ''} | Target Price: ₹{p?.targetPrice || 'N/A'}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : Array.isArray(selectedRfp.products) && selectedRfp.products.length > 0 ? (
-                    <div className="space-y-2">
-                      {selectedRfp.products.map((p, idx) => (
-                        <div key={idx} className={`p-3 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                          <div className="font-medium">{p?.product_spec || 'N/A'}</div>
-                          <div className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                            Quantity: {p?.quantity || 'N/A'} | Length: {p?.length || 'N/A'} {p?.length_unit || ''} | Target Price: ₹{p?.target_price || 'N/A'}
-                          </div>
-                        </div>
-                      ))}
+                  {getProductsForDetails(selectedRfp).length > 0 ? (
+                    <div className={`rounded-xl border overflow-hidden ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                      <div className={`overflow-x-auto ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <table className="min-w-[720px] w-full">
+                          <thead className={isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}>
+                            <tr>
+                              <th className={`px-4 py-3 text-left text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Product</th>
+                              <th className={`px-4 py-3 text-left text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Qty</th>
+                              <th className={`px-4 py-3 text-left text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Length</th>
+                              <th className={`px-4 py-3 text-left text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Target Price</th>
+                            </tr>
+                          </thead>
+                          <tbody className={isDarkMode ? 'divide-y divide-gray-700' : 'divide-y divide-gray-200'}>
+                            {getProductsForDetails(selectedRfp).map((p, idx) => (
+                              <tr key={idx} className={isDarkMode ? 'hover:bg-gray-700/40' : 'hover:bg-gray-50'}>
+                                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                                  <div className="font-medium">{p.productSpec || 'N/A'}</div>
+                                </td>
+                                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                  {formatQty(p.quantity)}
+                                </td>
+                                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                  {p.length ? `${formatQty(p.length)} ${p.lengthUnit || ''}`.trim() : '—'}
+                                </td>
+                                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                                  {p.targetPrice ? formatMoneyINR(p.targetPrice) : '—'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   ) : (
                     <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No products</div>
                   )}
                 </div>
 
-                {/* Delivery Timeline */}
-                <div>
-                  <label className={`text-sm font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Delivery Timeline</label>
-                  <div className={`mt-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>
-                    {selectedRfp.delivery_timeline
-                      ? new Date(selectedRfp.delivery_timeline).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })
-                      : 'N/A'}
-                  </div>
-                </div>
-
-                {/* Status */}
-                <div>
-                  <label className={`text-sm font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Status</label>
-                  <div className="mt-1">{getStatusBadge(selectedRfp.status)}</div>
-                </div>
-
-                {/* Approved At */}
-                <div>
-                  <label className={`text-sm font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>DH Approved At</label>
-                  <div className={`mt-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>
-                    {selectedRfp.approved_at ? formatDateTimeIST(selectedRfp.approved_at) : '—'}
-                  </div>
-                  {selectedRfp.approved_by && (
-                    <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                      By: {selectedRfp.approved_by}
-                    </div>
-                  )}
-                </div>
-
-                {/* Created At */}
-                <div>
-                  <label className={`text-sm font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Created At</label>
-                  <div className={`mt-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>
-                    {formatDateTimeIST(selectedRfp.created_at)}
+                {/* Notes / Requirements */}
+                <div className="mt-6">
+                  <div className={`text-sm font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>Special Requirements</div>
+                  <div className={`mt-2 rounded-xl border p-4 ${isDarkMode ? 'border-gray-700 bg-gray-800/60 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-900'}`}>
+                    {selectedRfp.special_requirements || selectedRfp.source_payload?.form?.specialRequirements || '—'}
                   </div>
                 </div>
               </div>
