@@ -98,6 +98,13 @@ export const API_ENDPOINTS = {
   // Stock
   STOCK_BASE: `${API_BASE_URL}/api/stock`,
   STOCK_GET_ALL: () => `${API_BASE_URL}/api/stock`,
+
+  // AAAC Calculator
+  AAAC_CALCULATOR_BASE: `${API_BASE_URL}/api/aaac-calculator`,
+  AAAC_CALCULATOR_PRODUCTS: () => `${API_BASE_URL}/api/aaac-calculator/products`,
+  AAAC_CALCULATOR_PRICES: () => `${API_BASE_URL}/api/aaac-calculator/prices`,
+  AAAC_CALCULATOR_UPDATE_PRICES: () => `${API_BASE_URL}/api/aaac-calculator/prices`,
+  AAAC_CALCULATOR_CALCULATE: () => `${API_BASE_URL}/api/aaac-calculator/calculate`,
   STOCK_GET_BY_PRODUCT: (productName) => `${API_BASE_URL}/api/stock/${encodeURIComponent(productName)}`,
   STOCK_UPDATE: (productName) => `${API_BASE_URL}/api/stock/${encodeURIComponent(productName)}`,
   STOCK_BATCH_UPDATE: () => `${API_BASE_URL}/api/stock/batch`,

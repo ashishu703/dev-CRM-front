@@ -14,7 +14,8 @@ import {
   TrendingUp,
   Package,
   HelpCircle,
-  FileText
+  FileText,
+  Calculator
 } from 'lucide-react';
 
 const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, setSidebarOpen }) => {
@@ -126,6 +127,12 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
       id: 'stock-update',
       label: 'Stock Update',
       icon: <Package className="w-5 h-5" />,
+      hasDropdown: false
+    },
+    {
+      id: 'calculator',
+      label: 'Calculator',
+      icon: <Calculator className="w-5 h-5" />,
       hasDropdown: false
     },
     {

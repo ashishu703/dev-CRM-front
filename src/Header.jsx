@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, Users, X, TrendingUp, Calendar, CheckCircle, MapPin, Award, Package, DollarSign, Moon, Sun, BarChart3, Clock, User, Factory, Wrench, HelpCircle, Activity, Server, Settings, Shield, Link, CheckCheck, Circle, FileText, Menu, ToggleLeft, ToggleRight, CheckSquare } from 'lucide-react';
+import { Bell, Users, X, TrendingUp, Calendar, CheckCircle, MapPin, Award, Package, DollarSign, Moon, Sun, BarChart3, Clock, User, Factory, Wrench, HelpCircle, Activity, Server, Settings, Shield, Link, CheckCheck, Circle, FileText, Menu, ToggleLeft, ToggleRight, CheckSquare, Calculator } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
 import { useNotifications } from './hooks/useNotifications';
 import ProfileUpdateModal from './components/ProfileUpdateModal';
@@ -311,6 +311,14 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
           title: "Stock Update",
           subtitle: "Update and manage inventory stock levels"
         };
+      case 'calculator':
+        return {
+          icon: <Calculator className="w-6 h-6 text-white" />,
+          title: "Product Calculator",
+          subtitle: "Calculate pricing and specifications for products"
+        };
+      
+      // Accounts Department pages
       
       // Production Department Head pages
       case 'production-dashboard':
