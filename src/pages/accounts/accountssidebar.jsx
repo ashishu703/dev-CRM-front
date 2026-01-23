@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart3, CreditCard, LogOut, Shield, HelpCircle, Menu, X } from 'lucide-react';
+import { BarChart3, CreditCard, FileText, LogOut, Shield, HelpCircle, Menu, X } from 'lucide-react';
 
 const menuItems = [
   {
@@ -13,6 +13,12 @@ const menuItems = [
     label: 'Payment Info',
     icon: CreditCard,
     description: 'Approvals & history'
+  },
+  {
+    id: 'rfp-workflow',
+    label: 'RFP Workflow',
+    icon: FileText,
+    description: 'Pricing & approvals'
   }
 ];
 

@@ -93,6 +93,9 @@ export const API_ENDPOINTS = {
   STOCK_GET_BY_PRODUCT: (productName) => `${API_BASE_URL}/api/stock/${encodeURIComponent(productName)}`,
   STOCK_UPDATE: (productName) => `${API_BASE_URL}/api/stock/${encodeURIComponent(productName)}`,
   STOCK_BATCH_UPDATE: () => `${API_BASE_URL}/api/stock/batch`,
+  STOCK_TALLY_STATUS: () => `${API_BASE_URL}/api/stock/tally/status`,
+  STOCK_TALLY_SYNC: () => `${API_BASE_URL}/api/stock/tally/sync`,
+  STOCK_TALLY_ITEMS: () => `${API_BASE_URL}/api/stock/tally/items`,
 
   // Product images (toolbox interface)
   // GET returns images for a given product; UPLOAD posts a new image.
