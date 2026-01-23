@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart3, CreditCard, LogOut, Shield, HelpCircle, Menu, X, DollarSign } from 'lucide-react';
+import { BarChart3, CreditCard, LogOut, Shield, HelpCircle, Menu, X } from 'lucide-react';
 
 const menuItems = [
   {
@@ -13,12 +13,6 @@ const menuItems = [
     label: 'Payment Info',
     icon: CreditCard,
     description: 'Approvals & history'
-  },
-  {
-    id: 'price-updation',
-    label: 'Update Product Prices',
-    icon: DollarSign,
-    description: 'Manage pricing'
   }
 ];
 
