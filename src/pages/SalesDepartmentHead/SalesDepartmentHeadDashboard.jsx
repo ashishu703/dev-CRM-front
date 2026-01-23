@@ -5,6 +5,7 @@ import UserPerformance from './UserPerformance';
 import PaymentInfo from './PaymentInfo';
 import SalesDepartmentUser from './SalesDepartmentUser';
 import StockUpdate from './StockUpdate';
+import CalculatorProductList from './CalculatorProductList';
 import ReportsPage from '../Reports/ReportsPage';
 import DetailedReportPage from '../Reports/DetailedReportPage';
 import RfpWorkflow from '../shared/RfpWorkflow';
@@ -44,6 +45,8 @@ const SalesDepartmentHeadDashboard = ({ activeView, setActiveView }) => {
         return <SalesDepartmentUser setActiveView={setActiveView} />;
       case 'stock-update':
         return <StockUpdate />;
+      case 'calculator':
+        return <CalculatorProductList />;
       case 'reports':
         console.log('✅ Rendering ReportsPage component');
         return <ReportsPage setActiveView={setActiveView} />;

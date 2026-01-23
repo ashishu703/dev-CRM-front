@@ -87,9 +87,24 @@ export const API_ENDPOINTS = {
   PRODUCT_PRICE_GET: (productSpec) => `${API_BASE_URL}/api/prices/${encodeURIComponent(productSpec)}`,
   PRODUCT_PRICE_CREATE: () => `${API_BASE_URL}/api/prices`,
 
+  // Pricing & RFP Decisions
+  PRICING_RFP_DECISION_CREATE: () => `${API_BASE_URL}/api/pricing-rfp-decisions`,
+  PRICING_RFP_DECISION_GET: (rfpId) => `${API_BASE_URL}/api/pricing-rfp-decisions/${encodeURIComponent(rfpId)}`,
+  PRICING_RFP_DECISION_UPDATE: (rfpId) => `${API_BASE_URL}/api/pricing-rfp-decisions/${encodeURIComponent(rfpId)}`,
+  PRICING_RFP_DECISION_MARK_RFP_CREATED: (rfpId) => `${API_BASE_URL}/api/pricing-rfp-decisions/${encodeURIComponent(rfpId)}/mark-rfp-created`,
+  PRICING_RFP_DECISION_RECORDS_BY_DATE: (query = '') => `${API_BASE_URL}/api/pricing-rfp-decisions/records/by-date${query ? `?${query}` : ''}`,
+  PRICING_RFP_DECISION_RECORDS_ALL: (query = '') => `${API_BASE_URL}/api/pricing-rfp-decisions/records/all${query ? `?${query}` : ''}`,
+
   // Stock
   STOCK_BASE: `${API_BASE_URL}/api/stock`,
   STOCK_GET_ALL: () => `${API_BASE_URL}/api/stock`,
+
+  // AAAC Calculator
+  AAAC_CALCULATOR_BASE: `${API_BASE_URL}/api/aaac-calculator`,
+  AAAC_CALCULATOR_PRODUCTS: () => `${API_BASE_URL}/api/aaac-calculator/products`,
+  AAAC_CALCULATOR_PRICES: () => `${API_BASE_URL}/api/aaac-calculator/prices`,
+  AAAC_CALCULATOR_UPDATE_PRICES: () => `${API_BASE_URL}/api/aaac-calculator/prices`,
+  AAAC_CALCULATOR_CALCULATE: () => `${API_BASE_URL}/api/aaac-calculator/calculate`,
   STOCK_GET_BY_PRODUCT: (productName) => `${API_BASE_URL}/api/stock/${encodeURIComponent(productName)}`,
   STOCK_UPDATE: (productName) => `${API_BASE_URL}/api/stock/${encodeURIComponent(productName)}`,
   STOCK_BATCH_UPDATE: () => `${API_BASE_URL}/api/stock/batch`,

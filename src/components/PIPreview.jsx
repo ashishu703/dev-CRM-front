@@ -4,6 +4,7 @@ import templateService from '../services/TemplateService'
 import { PDFDownloader } from '../utils/PDFDownloader'
 import Toast from '../utils/Toast'
 import { Download, X } from 'lucide-react'
+import { withRfpTemplateFields } from '../utils/withRfpTemplateFields'
 
 export default function PIPreview({ piData, companyBranches, user, onClose }) {
   const [templateHtml, setTemplateHtml] = React.useState('')
@@ -90,7 +91,14 @@ export default function PIPreview({ piData, companyBranches, user, onClose }) {
           <div id="pi-preview-content">
             <DynamicTemplateRenderer
               html={templateHtml}
-              data={{ ...piData, branch, billTo: piData.billTo, user, templateKey: piData.template, templateType: 'pi' }}
+              data={withRfpTemplateFields({
+                ...piData,
+                branch,
+                billTo: piData.billTo,
+                user,
+                templateKey: piData.template,
+                templateType: 'pi'
+              })}
               containerId="pi-content"
             />
           </div>

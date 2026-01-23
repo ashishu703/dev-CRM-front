@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { LayoutDashboard, Users, LogOut, Menu, X, Package, Box, Wrench, BarChart3, CreditCard, Bell, HelpCircle } from "lucide-react"
+import { LayoutDashboard, Users, LogOut, Menu, X, Package, Box, Wrench, BarChart3, CreditCard, Bell, HelpCircle, FileText } from "lucide-react"
 import LeadStatusDropdown from './LeadStatusDropdown'
 import PaymentTrackingDropdown from './PaymentTrackingDropdown'
 
@@ -231,6 +231,29 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen
                   </div>
                   {sidebarOpen && (
                     <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Available Stock</span>
+                  )}
+                </div>
+              </div>
+            </li>
+            <li>
+              <div
+                className={cx(
+                  "flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200",
+                  currentPage === "rfp-requests"
+                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/30'
+                    : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'
+                )}
+                onClick={() => onNavigate("rfp-requests")}
+                style={{
+                  transform: currentPage === "rfp-requests" ? 'translateX(4px)' : 'none',
+                }}
+              >
+                <div className="flex items-center space-x-3">
+                  <div className={currentPage === "rfp-requests" ? 'text-white' : 'text-slate-400'}>
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  {sidebarOpen && (
+                    <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>RFP Raise & Approved</span>
                   )}
                 </div>
               </div>

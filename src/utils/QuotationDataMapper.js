@@ -18,6 +18,41 @@ export class QuotationDataMapper {
     const items = this.normalizeItems(quotationData.items);
     const terms = this.normalizeTerms(quotationData.termsSections);
 
+    // RFP ID (Pricing & RFP Decision) - pull from form data OR sessionStorage fallback.
+    // This is used in HTML templates (e.g. {{rfpId}}) and also supports legacy placeholders
+    // like {{rfp_requests.id}} by exposing a small compatibility object.
+    let sessionRfpId = '';
+    let sessionDecisionRfpId = '';
+    try {
+      if (typeof window !== 'undefined' && window?.sessionStorage) {
+        sessionRfpId = window.sessionStorage.getItem('pricingRfpDecisionId') || '';
+        const rawDecision = window.sessionStorage.getItem('pricingRfpDecisionData');
+        if (rawDecision) {
+          const parsed = JSON.parse(rawDecision);
+          sessionDecisionRfpId = parsed?.rfp_id || '';
+        }
+      }
+    } catch (e) {
+      // ignore sessionStorage/JSON errors
+    }
+
+    const resolvedRfpId =
+      quotationData?.rfpId ||
+      quotationData?.rfp_id ||
+      quotationData?.masterRfpId ||
+      quotationData?.master_rfp_id ||
+      sessionRfpId ||
+      sessionDecisionRfpId ||
+      '';
+
+    const resolvedMasterRfpId =
+      quotationData?.masterRfpId ||
+      quotationData?.master_rfp_id ||
+      resolvedRfpId ||
+      sessionRfpId ||
+      sessionDecisionRfpId ||
+      '';
+
     // Extract customer ID properly
     const customerId = quotationData.customerId || 
                       quotationData.customer?.id || 
@@ -42,6 +77,14 @@ export class QuotationDataMapper {
     
     return {
       ...quotationData,
+      // RFP fields for templates
+      rfpId: resolvedRfpId,
+      masterRfpId: resolvedMasterRfpId,
+      // Legacy compatibility for templates that use {{rfp_requests.*}}
+      rfp_requests: {
+        id: resolvedRfpId || resolvedMasterRfpId,
+        rfp_id: resolvedRfpId || resolvedMasterRfpId,
+      },
       // Formatted dates
       quotationDate: formatDate(quotationData.quotationDate),
       validUpto: formatDate(quotationData.validUpto || quotationData.validUntil),

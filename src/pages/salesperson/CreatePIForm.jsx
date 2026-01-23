@@ -11,6 +11,7 @@ import companyBranchService from '../../services/CompanyBranchService'
 import templateService from '../../services/TemplateService'
 import apiClient from '../../utils/apiClient'
 import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton'
+import { withRfpTemplateFields } from '../../utils/withRfpTemplateFields'
 
 function Card({ className, children }) {
   return <div className={`rounded-lg border bg-white shadow-sm ${className || ''}`}>{children}</div>
@@ -1210,7 +1211,14 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
                     return (
                       <DynamicTemplateRenderer
                         html={activeTemplate.html_content}
-                        data={context}
+                        data={withRfpTemplateFields(context, {
+                          candidates: [
+                            quotationData?.master_rfp_id,
+                            quotationData?.masterRfpId,
+                            quotationData?.rfp_id,
+                            quotationData?.rfpId,
+                          ],
+                        })}
                         containerId="pi-content"
                       />
                     )
