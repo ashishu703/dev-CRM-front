@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, ArrowUpRight, CheckCircle, Clock, FileText, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import paymentService from '../../api/admin_api/paymentService';
 import AccountsPayInfo from './accountspayinfo';
+import PriceUpdation from './PriceUpdation';
 import RfpWorkflow from '../shared/RfpWorkflow';
 
 const STATUS_CONFIG = {
@@ -246,6 +247,9 @@ const AccountsDashboard = ({ activeView, setActiveView }) => {
 
   if (activeView === 'accounts-payments') {
     return <AccountsPayInfo setActiveView={setActiveView} />;
+  }
+  if (activeView === 'price-updation') {
+    return <PriceUpdation />;
   }
   if (activeView === 'rfp-workflow') {
     return <RfpWorkflow />;
