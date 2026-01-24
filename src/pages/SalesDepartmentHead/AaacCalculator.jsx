@@ -1,25 +1,95 @@
 import React, { useState, useEffect } from "react"
 import { Calculator, ArrowLeft, RefreshCw, Zap } from "lucide-react"
 import { io } from "socket.io-client"
-import aaacCalculatorService from "../../api/admin_api/aaacCalculatorService"
+import { AAAC_PRODUCTS, calculateAllProducts, DEFAULT_PRICES } from "../../constants/aaacProducts"
 
-export default function AaacCalculator({ setActiveView }) {
+export default function AaacCalculator({ setActiveView, prices: externalPrices }) {
   const [products, setProducts] = useState([])
-  const [prices, setPrices] = useState({ alu_price_per_kg: 0, alloy_price_per_kg: 0 })
-  const [loading, setLoading] = useState(true)
+  const [prices, setPrices] = useState(DEFAULT_PRICES)
   const [customDiameter, setCustomDiameter] = useState("")
   const [customNoOfStrands, setCustomNoOfStrands] = useState("")
   const [customCalculations, setCustomCalculations] = useState(null)
-  const [refreshing, setRefreshing] = useState(false)
   const [socketConnected, setSocketConnected] = useState(false)
   const [priceUpdateNotification, setPriceUpdateNotification] = useState(null)
 
   const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:4500'
 
+  // Initialize calculator - fetch prices from backend API
   useEffect(() => {
-    loadCalculatorData()
+    const fetchPricesFromBackend = async () => {
+      try {
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4500/api';
+        const normalizedAPIBase = API_BASE_URL.endsWith('/api') ? API_BASE_URL : (
+          API_BASE_URL.includes('/api') ? API_BASE_URL : `${API_BASE_URL}/api`
+        );
+        
+        const token = localStorage.getItem('authToken');
+        const response = await fetch(`${normalizedAPIBase}/aaac-calculator/prices`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          // Backend returns prices in response
+          if (data.data && data.data.alu_price_per_kg && data.data.alloy_price_per_kg) {
+            const fetchedPrices = {
+              alu_price_per_kg: parseFloat(data.data.alu_price_per_kg),
+              alloy_price_per_kg: parseFloat(data.data.alloy_price_per_kg)
+            };
+            setPrices(fetchedPrices);
+            calculateAndSetProducts(fetchedPrices);
+            // Store in localStorage for offline access
+            localStorage.setItem('aaacCurrentPrices', JSON.stringify(fetchedPrices));
+            console.log('✅ Fetched prices from backend:', fetchedPrices);
+            return;
+          }
+        }
+      } catch (error) {
+        console.warn('Error fetching prices from backend:', error);
+      }
+      
+      // Fallback: Try to get prices from localStorage
+      const storedPrices = localStorage.getItem('aaacCurrentPrices');
+      let initialPrices = DEFAULT_PRICES;
+      
+      if (storedPrices) {
+        try {
+          const parsed = JSON.parse(storedPrices);
+          if (parsed.alu_price_per_kg && parsed.alloy_price_per_kg) {
+            initialPrices = {
+              alu_price_per_kg: parseFloat(parsed.alu_price_per_kg),
+              alloy_price_per_kg: parseFloat(parsed.alloy_price_per_kg)
+            };
+            console.log('📦 Loaded prices from localStorage:', initialPrices);
+          }
+        } catch (error) {
+          console.warn('Error parsing stored prices:', error);
+        }
+      }
+      
+      setPrices(initialPrices);
+      calculateAndSetProducts(initialPrices);
+    };
+    
+    fetchPricesFromBackend();
   }, [])
 
+  // Update prices from external source (Account section)
+  useEffect(() => {
+    if (externalPrices && (externalPrices.alu_price_per_kg || externalPrices.alloy_price_per_kg)) {
+      const newPrices = {
+        alu_price_per_kg: parseFloat(externalPrices.alu_price_per_kg) || prices.alu_price_per_kg,
+        alloy_price_per_kg: parseFloat(externalPrices.alloy_price_per_kg) || prices.alloy_price_per_kg
+      }
+      setPrices(newPrices)
+      calculateAndSetProducts(newPrices)
+    }
+  }, [externalPrices])
+
+  // Initialize Socket.io listener for real-time price updates from Account section
   useEffect(() => {
     const token = localStorage.getItem('authToken')
     if (!token) return
@@ -43,65 +113,46 @@ export default function AaacCalculator({ setActiveView }) {
       setSocketConnected(false)
     })
 
+    // Listen for real-time price updates from Accounts Department
     socket.on('aaac:prices:updated', (data) => {
       console.log('📡 Real-time price update received:', data)
+      const updatedPrices = {
+        alu_price_per_kg: parseFloat(data.alu_price_per_kg) || prices.alu_price_per_kg,
+        alloy_price_per_kg: parseFloat(data.alloy_price_per_kg) || prices.alloy_price_per_kg
+      }
+      setPrices(updatedPrices)
+      calculateAndSetProducts(updatedPrices)
       setPriceUpdateNotification(`Prices updated by ${data.updated_by}`)
-      loadCalculatorData()
       setTimeout(() => setPriceUpdateNotification(null), 3000)
     })
 
     return () => {
       socket.disconnect()
     }
-  }, [])
+  }, [prices])
 
-  const loadCalculatorData = async () => {
-    try {
-      setLoading(true)
-      const response = await aaacCalculatorService.getAllProducts()
-      console.log('AAAC Calculator Response:', response) 
-      
-     
-      let data = response
-      if (response.success && response.data) {
-        data = response.data
-      }
-      
-      if (data && (data.products || data.prices)) {
-        setProducts(data.products || [])
-        if (data.prices) {
-          setPrices({
-            alu_price_per_kg: parseFloat(data.prices.alu_price_per_kg) || 0,
-            alloy_price_per_kg: parseFloat(data.prices.alloy_price_per_kg) || 0
-          })
-        } else {
-          console.warn('No prices found in response')
-          setPrices({ alu_price_per_kg: 0, alloy_price_per_kg: 0 })
-        }
-      } else {
-        console.error('Invalid response structure:', response)
-        setPrices({ alu_price_per_kg: 0, alloy_price_per_kg: 0 })
-      }
-    } catch (error) {
-      console.error('Error loading calculator data:', error)
-      alert('Error loading calculator data: ' + (error.message || 'Unknown error'))
-      setPrices({ alu_price_per_kg: 0, alloy_price_per_kg: 0 })
-    } finally {
-      setLoading(false)
-    }
+  // Calculate all products with current prices
+  const calculateAndSetProducts = (currentPrices) => {
+    // Ensure prices are numbers
+    const aluPrice = parseFloat(currentPrices.alu_price_per_kg) || 0;
+    const alloyPrice = parseFloat(currentPrices.alloy_price_per_kg) || 0;
+    
+    const calculatedProducts = calculateAllProducts(aluPrice, alloyPrice)
+    setProducts(calculatedProducts)
+    console.log('✅ Calculator recalculated with prices:', { aluPrice, alloyPrice })
   }
 
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    await loadCalculatorData()
-    setRefreshing(false)
+  const handleRefresh = () => {
+    calculateAndSetProducts(prices)
+    console.log('🔄 Calculator refreshed manually')
   }
 
-  const calculateNominalArea = (diameter, noOfStrands) => {
+  // Calculate nominal area: diameter² × 0.785 × no_of_strands × 1.02
+  const calculateNominalAreaLocal = (diameter, noOfStrands) => {
     return diameter * diameter * 0.785 * noOfStrands * 1.02
   }
 
-  const handleCustomCalculate = async () => {
+  const handleCustomCalculate = () => {
     if (!customDiameter || !customNoOfStrands) {
       alert('Please enter both diameter and number of strands for custom calculation')
       return
@@ -116,55 +167,44 @@ export default function AaacCalculator({ setActiveView }) {
     }
 
     try {
-      const response = await aaacCalculatorService.calculateProduct(
-        'Custom',
+      // Calculate with correct formulas
+      const nominalArea = calculateNominalAreaLocal(diameter, noOfStrands)
+      
+      // Aluminium Weight: nominal_area × 2.7
+      const aluminiumWeight = nominalArea * 2.7
+      
+      // Ensure prices are numbers
+      const aluPrice = parseFloat(prices.alu_price_per_kg) || 0
+      const alloyPrice = parseFloat(prices.alloy_price_per_kg) || 0
+      
+      // Cost per Meter formulas: (price × weight × 1.1) / 1000
+      const costAluPerMtr = (aluPrice * aluminiumWeight * 1.1) / 1000
+      const costAlloyPerMtr = (alloyPrice * aluminiumWeight * 1.1) / 1000
+      
+      // Cost per KG formulas: price × 1.1
+      const costAluPerKg = aluPrice * 1.1
+      const costAlloyPerKg = alloyPrice * 1.1
+
+      setCustomCalculations({
+        nominal_area: nominalArea,
+        aluminium_weight: aluminiumWeight,
+        cost_alu_per_mtr: costAluPerMtr,
+        cost_alloy_per_mtr: costAlloyPerMtr,
+        cost_alu_per_kg: costAluPerKg,
+        cost_alloy_per_kg: costAlloyPerKg
+      })
+      console.log('✅ Custom calculations completed:', {
         diameter,
-        noOfStrands
-      )
-      console.log('Custom Product Full Response:', JSON.stringify(response, null, 2)) // Debug log
-      
-      
-      let calculations = null
-      
-      if (response && response.calculations) {
-        calculations = response.calculations
-      } else if (response && response.success && response.data && response.data.calculations) {
-        calculations = response.data.calculations
-      } else if (response && response.data && response.data.calculations) {
-        calculations = response.data.calculations
-      }
-      
-      if (calculations && !calculations.nominal_area) {
-        calculations.nominal_area = calculateNominalArea(diameter, noOfStrands)
-      }
-      
-      console.log('Extracted calculations:', calculations)
-      
-      if (calculations) {
-        setCustomCalculations(calculations)
-        console.log('✅ Custom calculations set successfully')
-        console.log('Nominal Area:', calculations.nominal_area)
-        console.log('Aluminium Weight:', calculations.aluminium_weight)
-      } else {
-        console.error('❌ No calculations found in response')
-        console.error('Full response:', response)
-        alert('Error: No calculations returned. Check browser console for details.')
-      }
+        noOfStrands,
+        nominalArea,
+        aluminiumWeight,
+        costAluPerMtr,
+        costAlloyPerMtr
+      })
     } catch (error) {
       console.error('Error calculating custom product:', error)
       alert('Error calculating custom product: ' + (error.message || 'Please check your inputs.'))
     }
-  }
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-64"></div>
-          <div className="h-96 bg-gray-200 rounded"></div>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -203,11 +243,10 @@ export default function AaacCalculator({ setActiveView }) {
         </div>
         <button
           onClick={handleRefresh}
-          disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          {refreshing ? 'Refreshing...' : 'Refresh Prices'}
+          <RefreshCw className="w-4 h-4" />
+          Refresh Calculations
         </button>
       </div>
 
@@ -216,7 +255,7 @@ export default function AaacCalculator({ setActiveView }) {
       <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6 border border-gray-100">
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
           <h2 className="text-lg font-bold text-white">AAAC Products Pricing</h2>
-          <p className="text-blue-100 text-sm">Current market prices: Alu ₹{prices.alu_price_per_kg.toFixed(2)}/kg | Alloy ₹{prices.alloy_price_per_kg.toFixed(2)}/kg</p>
+          <p className="text-blue-100 text-sm">Current market prices: Alu ₹{(parseFloat(prices.alu_price_per_kg) || 0).toFixed(2)}/kg | Alloy ₹{(parseFloat(prices.alloy_price_per_kg) || 0).toFixed(2)}/kg</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-full">

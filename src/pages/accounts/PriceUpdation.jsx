@@ -1,30 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Save, AlertCircle, CheckCircle, Loader, Zap } from 'lucide-react';
+import { DollarSign, Save, AlertCircle, CheckCircle, Loader, Zap, Download } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 const PriceUpdation = () => {
-  const [formData, setFormData] = useState({
-    alu_price_per_kg: '',
-    alloy_price_per_kg: ''
-  });
+  const [formData, setFormData] = useState({ alu_price_per_kg: '', alloy_price_per_kg: '' });
   const [pricesData, setPricesData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+  const [error, setError] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [socketConnected, setSocketConnected] = useState(false);
   const [lastSyncedTime, setLastSyncedTime] = useState(null);
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4500/api';
   const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:4500';
 
-  // Ensure API_BASE_URL has /api if it doesn't
   const normalizedAPIBase = API_BASE_URL.endsWith('/api') ? API_BASE_URL : (
     API_BASE_URL.includes('/api') ? API_BASE_URL : `${API_BASE_URL}/api`
   );
 
-  // Fetch prices function
   const fetchPrices = async () => {
     try {
       setIsLoading(true);
@@ -36,14 +31,22 @@ const PriceUpdation = () => {
           'Content-Type': 'application/json'
         }
       });
+
       if (!response.ok) throw new Error('Failed to fetch prices');
+
       const data = await response.json();
       setPricesData(data.data);
+
       if (data.data) {
         setFormData({
           alu_price_per_kg: data.data.alu_price_per_kg || '',
           alloy_price_per_kg: data.data.alloy_price_per_kg || ''
         });
+
+        localStorage.setItem('aaacCurrentPrices', JSON.stringify({
+          alu_price_per_kg: data.data.alu_price_per_kg,
+          alloy_price_per_kg: data.data.alloy_price_per_kg
+        }));
       }
     } catch (err) {
       setError(err.message);
@@ -52,12 +55,10 @@ const PriceUpdation = () => {
     }
   };
 
-  // Fetch prices on mount
   useEffect(() => {
     fetchPrices();
   }, []);
 
-  // Initialize Socket.io connection
   useEffect(() => {
     const token = localStorage.getItem('authToken');
     if (!token) return;
@@ -71,41 +72,33 @@ const PriceUpdation = () => {
       reconnectionAttempts: 5
     });
 
-    socket.on('connect', () => {
-      console.log('✅ Socket.IO connected');
-      setSocketConnected(true);
-    });
-
-    socket.on('disconnect', () => {
-      console.log('❌ Socket.IO disconnected');
-      setSocketConnected(false);
-    });
-
-    // Listen for real-time price updates from other accounts users
-    socket.on('aaac:prices:updated', (data) => {
-      console.log('📡 Real-time price update received:', data);
-      // Refetch prices when they change
+    const handleConnect = () => setSocketConnected(true);
+    const handleDisconnect = () => setSocketConnected(false);
+    const handlePriceUpdate = () => {
       fetchPrices();
       setLastSyncedTime(new Date().toLocaleTimeString());
-    });
+    };
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('aaac:prices:updated', handlePriceUpdate);
 
     return () => {
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('aaac:prices:updated', handlePriceUpdate);
       socket.disconnect();
     };
   }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validation
+
     if (!formData.alu_price_per_kg || !formData.alloy_price_per_kg) {
       setErrorMessage('Both prices are required');
       setTimeout(() => setErrorMessage(''), 3000);
@@ -133,19 +126,25 @@ const PriceUpdation = () => {
         },
         body: JSON.stringify(formData)
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update prices');
+        throw new Error(errorData.message || `Failed to update prices (${response.status})`);
       }
 
       setSuccessMessage('Prices updated successfully! ✓ Syncing to Sales Department...');
       setLastSyncedTime(new Date().toLocaleTimeString());
+
+      localStorage.setItem('aaacCurrentPrices', JSON.stringify({
+        alu_price_per_kg: alu,
+        alloy_price_per_kg: alloy
+      }));
+
       await fetchPrices();
       setTimeout(() => setSuccessMessage(''), 4000);
     } catch (error) {
       setErrorMessage(error.message || 'Failed to update prices');
-      setTimeout(() => setErrorMessage(''), 3000);
+      setTimeout(() => setErrorMessage(''), 5000);
     } finally {
       setIsSaving(false);
     }
@@ -157,6 +156,36 @@ const PriceUpdation = () => {
         alu_price_per_kg: pricesData.alu_price_per_kg || '',
         alloy_price_per_kg: pricesData.alloy_price_per_kg || ''
       });
+    }
+  };
+
+  const handleDownloadHistory = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${normalizedAPIBase}/aaac-calculator/prices/download/csv`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) throw new Error('Failed to download price history');
+
+      const csv = await response.text();
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+
+      link.setAttribute('href', url);
+      link.setAttribute('download', `AAAC-Price-History-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setSuccessMessage('✓ Price history downloaded successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error) {
+      setErrorMessage('Failed to download price history: ' + error.message);
+      setTimeout(() => setErrorMessage(''), 3000);
     }
   };
 
@@ -190,9 +219,19 @@ const PriceUpdation = () => {
               <p className="text-slate-600 text-sm">Manage pricing for all products in the sales calculator</p>
             </div>
           </div>
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${socketConnected ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-600'}`}>
-            <div className={`w-2 h-2 rounded-full ${socketConnected ? 'bg-green-600 animate-pulse' : 'bg-gray-400'}`}></div>
-            <span className="text-xs font-semibold">{socketConnected ? 'Live Sync' : 'Offline'}</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleDownloadHistory}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium text-sm"
+              title="Download all daily price records as CSV"
+            >
+              <Download className="w-4 h-4" />
+              Download History
+            </button>
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${socketConnected ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-600'}`}>
+              <div className={`w-2 h-2 rounded-full ${socketConnected ? 'bg-green-600 animate-pulse' : 'bg-gray-400'}`}></div>
+              <span className="text-xs font-semibold">{socketConnected ? 'Live Sync' : 'Offline'}</span>
+            </div>
           </div>
         </div>
         {lastSyncedTime && <p className="text-xs text-slate-500 mt-3">Last synced: {lastSyncedTime}</p>}
