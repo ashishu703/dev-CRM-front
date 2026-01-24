@@ -20,7 +20,6 @@ export default function AaacCalculator({ setActiveView }) {
     loadCalculatorData()
   }, [])
 
-  // Initialize Socket.io listener for real-time price updates
   useEffect(() => {
     const token = localStorage.getItem('authToken')
     if (!token) return
@@ -44,11 +43,9 @@ export default function AaacCalculator({ setActiveView }) {
       setSocketConnected(false)
     })
 
-    // Listen for real-time price updates from Accounts Department
     socket.on('aaac:prices:updated', (data) => {
       console.log('📡 Real-time price update received:', data)
       setPriceUpdateNotification(`Prices updated by ${data.updated_by}`)
-      // Auto-reload calculator with new prices
       loadCalculatorData()
       setTimeout(() => setPriceUpdateNotification(null), 3000)
     })
@@ -62,10 +59,9 @@ export default function AaacCalculator({ setActiveView }) {
     try {
       setLoading(true)
       const response = await aaacCalculatorService.getAllProducts()
-      console.log('AAAC Calculator Response:', response) // Debug log
+      console.log('AAAC Calculator Response:', response) 
       
-      // Response structure: {success: true, data: {prices: {...}, products: [...]}}
-      // OR direct: {prices: {...}, products: [...]}
+     
       let data = response
       if (response.success && response.data) {
         data = response.data
@@ -101,7 +97,6 @@ export default function AaacCalculator({ setActiveView }) {
     setRefreshing(false)
   }
 
-  // Calculate nominal area: diameter² × 0.785 × no_of_strands × 1.02
   const calculateNominalArea = (diameter, noOfStrands) => {
     return diameter * diameter * 0.785 * noOfStrands * 1.02
   }
@@ -128,25 +123,17 @@ export default function AaacCalculator({ setActiveView }) {
       )
       console.log('Custom Product Full Response:', JSON.stringify(response, null, 2)) // Debug log
       
-      // Service returns response.data from apiClient
-      // API returns: {success: true, data: {product: {...}, prices: {...}, calculations: {...}}}
-      // Service returns: {product: {...}, prices: {...}, calculations: {...}}
       
       let calculations = null
       
-      // Check for calculations in different possible locations
       if (response && response.calculations) {
-        // Direct: {calculations: {...}}
         calculations = response.calculations
       } else if (response && response.success && response.data && response.data.calculations) {
-        // Wrapped: {success: true, data: {calculations: {...}}}
         calculations = response.data.calculations
       } else if (response && response.data && response.data.calculations) {
-        // Nested: {data: {calculations: {...}}}
         calculations = response.data.calculations
       }
       
-      // If calculations don't have nominal_area, calculate it on frontend
       if (calculations && !calculations.nominal_area) {
         calculations.nominal_area = calculateNominalArea(diameter, noOfStrands)
       }
