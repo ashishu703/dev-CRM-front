@@ -106,7 +106,8 @@ export const calculateAllProducts = (aluPricePerKg, alloyPricePerKg) => {
 };
 
 // Default prices (will be overridden by actual prices from Account section)
+// Based on Price Management: Aluminium CG Grade and Aluminium Alloy Grade T4
 export const DEFAULT_PRICES = {
-  alu_price_per_kg: 296.00,
-  alloy_price_per_kg: 340.00,
+  alu_price_per_kg: 450.00,
+  alloy_price_per_kg: 0.00,
 };

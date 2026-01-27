@@ -52,11 +52,11 @@ export default function CalculatorProductList({ setActiveView }) {
 
   // If calculator is selected, show calculator component
   if (selectedProduct === 'aaac') {
-    return <AaacCalculator setActiveView={setActiveView} />
+    return <AaacCalculator setActiveView={setActiveView} onBack={() => setSelectedProduct(null)} />
   }
 
   if (selectedProduct === 'acsr') {
-    return <AcsrCalculator setActiveView={setActiveView} />
+    return <AcsrCalculator setActiveView={setActiveView} onBack={() => setSelectedProduct(null)} />
   }
 
   if (loading) {
@@ -82,12 +82,11 @@ export default function CalculatorProductList({ setActiveView }) {
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Product Calculator</h1>
         </div>
-        <p className="text-gray-600 text-sm ml-9">Select a product to open its calculator</p>
       </div>
 
       {/* Product Cards */}
       {products.length > 0 && (
-        <div className="flex flex-wrap gap-6 justify-center">
+        <div className="flex flex-wrap gap-6 justify-start">
           {products.map((product) => (
             <div
               key={product.id}

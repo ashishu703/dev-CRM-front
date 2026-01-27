@@ -4,6 +4,7 @@ import acsrCalculatorService from "../../api/admin_api/acsrCalculatorService"
 
 export default function AcsrAccountsCalculator() {
   const [rates, setRates] = useState({ aluminium_cg_grade: 0, aluminium_ec_grade: 0, steel_rate: 0 })
+  const [originalRates, setOriginalRates] = useState({ aluminium_cg_grade: 0, aluminium_ec_grade: 0, steel_rate: 0 })
   const [tempRates, setTempRates] = useState({ cg: "", ec: "", steel: "" })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -31,21 +32,36 @@ export default function AcsrAccountsCalculator() {
     try {
       setLoading(true)
       const response = await acsrCalculatorService.getCurrentRates()
+      console.log('ACSR API Response:', response) // Debug log
+      
       if (response.success && response.data) {
+        console.log('ACSR Rate Data:', response.data) // Debug log
+        
+        const cgRate = parseFloat(response.data.aluminium_cg_grade) || 0
+        const ecRate = parseFloat(response.data.aluminium_ec_grade) || 0
+        const steelRateValue = parseFloat(response.data.steel_rate) || 0
+        
         setRates({
-          aluminium_cg_grade: response.data.aluminium_cg_grade,
-          aluminium_ec_grade: response.data.aluminium_ec_grade,
-          steel_rate: response.data.steel_rate
+          aluminium_cg_grade: cgRate,
+          aluminium_ec_grade: ecRate,
+          steel_rate: steelRateValue
         })
+        setOriginalRates({
+          aluminium_cg_grade: cgRate,
+          aluminium_ec_grade: ecRate,
+          steel_rate: steelRateValue
+        })
+        // Set temp rates to show current values in input fields
         setTempRates({
-          cg: response.data.aluminium_cg_grade.toString(),
-          ec: response.data.aluminium_ec_grade.toString(),
-          steel: response.data.steel_rate.toString()
+          cg: response.data.aluminium_cg_grade || '',
+          ec: response.data.aluminium_ec_grade || '',
+          steel: response.data.steel_rate || ''
         })
         setLastUpdated(response.data.updated_at || response.data.created_at)
         setMessage({ type: '', text: '' })
       } else {
         setRates({ aluminium_cg_grade: 296.00, aluminium_ec_grade: 320.00, steel_rate: 65.00 })
+        setOriginalRates({ aluminium_cg_grade: 296.00, aluminium_ec_grade: 320.00, steel_rate: 65.00 })
         setTempRates({ cg: "296.00", ec: "320.00", steel: "65.00" })
         setMessage({ type: 'info', text: 'No rates found. Please set initial rates.' })
       }
@@ -53,6 +69,7 @@ export default function AcsrAccountsCalculator() {
       console.error('Error loading rates:', error)
       if (error.message?.includes('No active rates found') || error.response?.status === 404) {
         setRates({ aluminium_cg_grade: 296.00, aluminium_ec_grade: 320.00, steel_rate: 65.00 })
+        setOriginalRates({ aluminium_cg_grade: 296.00, aluminium_ec_grade: 320.00, steel_rate: 65.00 })
         setTempRates({ cg: "296.00", ec: "320.00", steel: "65.00" })
         setMessage({ type: 'info', text: 'No rates found. Please set initial rates below.' })
       } else {
@@ -75,14 +92,10 @@ export default function AcsrAccountsCalculator() {
   }
 
   const handleSaveRates = async () => {
-    if (!tempRates.cg || !tempRates.ec || !tempRates.steel) {
-      setMessage({ type: 'error', text: 'Please enter all three rates' })
-      return
-    }
-
-    const cgRate = parseFloat(tempRates.cg)
-    const ecRate = parseFloat(tempRates.ec)
-    const steelRate = parseFloat(tempRates.steel)
+    // Only update rates that have been changed
+    const cgRate = tempRates.cg ? parseFloat(tempRates.cg) : originalRates.aluminium_cg_grade;
+    const ecRate = tempRates.ec ? parseFloat(tempRates.ec) : originalRates.aluminium_ec_grade;
+    const steelRate = tempRates.steel ? parseFloat(tempRates.steel) : originalRates.steel_rate;
 
     if (isNaN(cgRate) || isNaN(ecRate) || isNaN(steelRate) || cgRate <= 0 || ecRate <= 0 || steelRate <= 0) {
       setMessage({ type: 'error', text: 'Please enter valid positive numbers' })
@@ -98,6 +111,17 @@ export default function AcsrAccountsCalculator() {
           aluminium_cg_grade: cgRate,
           aluminium_ec_grade: ecRate,
           steel_rate: steelRate
+        })
+        setOriginalRates({
+          aluminium_cg_grade: cgRate,
+          aluminium_ec_grade: ecRate,
+          steel_rate: steelRate
+        })
+        // Clear temp rates after successful save
+        setTempRates({
+          cg: cgRate > 0 ? cgRate.toString() : '',
+          ec: ecRate > 0 ? ecRate.toString() : '',
+          steel: steelRate > 0 ? steelRate.toString() : ''
         })
         setMessage({ type: 'success', text: 'Rates updated successfully! All calculations will be updated automatically.' })
         setLastUpdated(new Date().toISOString())
@@ -265,15 +289,35 @@ export default function AcsrAccountsCalculator() {
               type="number"
               step="0.01"
               min="0"
-              value={tempRates.cg}
+              value={tempRates.cg || ''}
               onChange={(e) => {
                 setTempRates({ ...tempRates, cg: e.target.value })
                 setMessage({ type: '', text: '' })
               }}
               className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg"
-              placeholder="Enter CG Rate"
+              placeholder={`Current: ${originalRates.aluminium_cg_grade.toFixed(2)}`}
             />
-            <p className="mt-1 text-xs text-gray-500">Current: ₹{rates.aluminium_cg_grade.toFixed(2)}</p>
+            {/* Updated Price Display */}
+            <div className="mt-2 text-xs">
+              {tempRates.cg && parseFloat(tempRates.cg) !== originalRates.aluminium_cg_grade ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Previous: ₹{originalRates.aluminium_cg_grade.toFixed(2)}</span>
+                  <span className={`font-medium ${
+                    parseFloat(tempRates.cg) > originalRates.aluminium_cg_grade 
+                      ? 'text-green-600' 
+                      : parseFloat(tempRates.cg) < originalRates.aluminium_cg_grade 
+                      ? 'text-red-600' 
+                      : 'text-gray-600'
+                  }`}>
+                    Current: ₹{parseFloat(tempRates.cg).toFixed(2)}
+                    {parseFloat(tempRates.cg) > originalRates.aluminium_cg_grade && ' ↗'}
+                    {parseFloat(tempRates.cg) < originalRates.aluminium_cg_grade && ' ↘'}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-gray-500">Current: ₹{originalRates.aluminium_cg_grade.toFixed(2)}</span>
+              )}
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -283,15 +327,35 @@ export default function AcsrAccountsCalculator() {
               type="number"
               step="0.01"
               min="0"
-              value={tempRates.ec}
+              value={tempRates.ec || ''}
               onChange={(e) => {
                 setTempRates({ ...tempRates, ec: e.target.value })
                 setMessage({ type: '', text: '' })
               }}
               className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg"
-              placeholder="Enter EC Rate"
+              placeholder={`Current: ${originalRates.aluminium_ec_grade.toFixed(2)}`}
             />
-            <p className="mt-1 text-xs text-gray-500">Current: ₹{rates.aluminium_ec_grade.toFixed(2)}</p>
+            {/* Updated Price Display */}
+            <div className="mt-2 text-xs">
+              {tempRates.ec && parseFloat(tempRates.ec) !== originalRates.aluminium_ec_grade ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Previous: ₹{originalRates.aluminium_ec_grade.toFixed(2)}</span>
+                  <span className={`font-medium ${
+                    parseFloat(tempRates.ec) > originalRates.aluminium_ec_grade 
+                      ? 'text-green-600' 
+                      : parseFloat(tempRates.ec) < originalRates.aluminium_ec_grade 
+                      ? 'text-red-600' 
+                      : 'text-gray-600'
+                  }`}>
+                    Current: ₹{parseFloat(tempRates.ec).toFixed(2)}
+                    {parseFloat(tempRates.ec) > originalRates.aluminium_ec_grade && ' ↗'}
+                    {parseFloat(tempRates.ec) < originalRates.aluminium_ec_grade && ' ↘'}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-gray-500">Current: ₹{originalRates.aluminium_ec_grade.toFixed(2)}</span>
+              )}
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -301,15 +365,35 @@ export default function AcsrAccountsCalculator() {
               type="number"
               step="0.01"
               min="0"
-              value={tempRates.steel}
+              value={tempRates.steel || ''}
               onChange={(e) => {
                 setTempRates({ ...tempRates, steel: e.target.value })
                 setMessage({ type: '', text: '' })
               }}
               className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg"
-              placeholder="Enter Steel Rate"
+              placeholder={`Current: ${originalRates.steel_rate.toFixed(2)}`}
             />
-            <p className="mt-1 text-xs text-gray-500">Current: ₹{rates.steel_rate.toFixed(2)}</p>
+            {/* Updated Price Display */}
+            <div className="mt-2 text-xs">
+              {tempRates.steel && parseFloat(tempRates.steel) !== originalRates.steel_rate ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Previous: ₹{originalRates.steel_rate.toFixed(2)}</span>
+                  <span className={`font-medium ${
+                    parseFloat(tempRates.steel) > originalRates.steel_rate 
+                      ? 'text-green-600' 
+                      : parseFloat(tempRates.steel) < originalRates.steel_rate 
+                      ? 'text-red-600' 
+                      : 'text-gray-600'
+                  }`}>
+                    Current: ₹{parseFloat(tempRates.steel).toFixed(2)}
+                    {parseFloat(tempRates.steel) > originalRates.steel_rate && ' ↗'}
+                    {parseFloat(tempRates.steel) < originalRates.steel_rate && ' ↘'}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-gray-500">Current: ₹{originalRates.steel_rate.toFixed(2)}</span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -334,9 +418,9 @@ export default function AcsrAccountsCalculator() {
           <button
             onClick={() => {
               setTempRates({
-                cg: rates.aluminium_cg_grade.toString(),
-                ec: rates.aluminium_ec_grade.toString(),
-                steel: rates.steel_rate.toString()
+                cg: originalRates.aluminium_cg_grade.toString(),
+                ec: originalRates.aluminium_ec_grade.toString(),
+                steel: originalRates.steel_rate.toString()
               })
               setMessage({ type: '', text: '' })
             }}

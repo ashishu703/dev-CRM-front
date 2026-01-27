@@ -3,7 +3,7 @@ import { Calculator, ArrowLeft, RefreshCw, Zap } from "lucide-react"
 import { io } from "socket.io-client"
 import { ACSR_PRODUCTS, calculateAllProducts, DEFAULT_RATES } from "../../constants/acsrProducts"
 
-export default function AcsrCalculator({ setActiveView, rates: externalRates }) {
+export default function AcsrCalculator({ setActiveView, rates: externalRates, onBack }) {
   const [products, setProducts] = useState([])
   const [rates, setRates] = useState(DEFAULT_RATES)
   const [customNoOfWiresAluminium, setCustomNoOfWiresAluminium] = useState("")
@@ -214,7 +214,7 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates }) 
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setActiveView ? setActiveView('calculator') : window.history.back()}
+            onClick={() => onBack ? onBack() : (setActiveView ? setActiveView('calculator') : window.history.back())}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600" />
