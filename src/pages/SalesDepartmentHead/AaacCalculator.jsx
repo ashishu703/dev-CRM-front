@@ -24,7 +24,7 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices }
         );
         
         const token = localStorage.getItem('authToken');
-        const response = await fetch(`${normalizedAPIBase}/aaac-calculator/prices`, {
+        const response = await fetch(`${normalizedAPIBase}/raw-materials/rates`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -33,11 +33,11 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices }
         
         if (response.ok) {
           const data = await response.json();
-          // Backend returns prices in response
-          if (data.data && data.data.alu_price_per_kg && data.data.alloy_price_per_kg) {
+          // Backend returns rates in response
+          if (data.success && data.data) {
             const fetchedPrices = {
-              alu_price_per_kg: parseFloat(data.data.alu_price_per_kg),
-              alloy_price_per_kg: parseFloat(data.data.alloy_price_per_kg)
+              alu_price_per_kg: parseFloat(data.data.aluminium_ec_grade),
+              alloy_price_per_kg: parseFloat(data.data.aluminium_alloy)
             };
             setPrices(fetchedPrices);
             calculateAndSetProducts(fetchedPrices);

@@ -16,9 +16,9 @@ const menuItems = [
   },
   {
     id: 'price-updation',
-    label: 'Update Product Prices',
+    label: 'Price Management',
     icon: DollarSign,
-    description: 'Manage pricing'
+    description: 'Manage all product pricing'
   }
 ];
 
