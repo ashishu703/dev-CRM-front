@@ -20,8 +20,8 @@ class RfpService {
     return apiClient.post(API_ENDPOINTS.RFPS_CREATE(), data);
   }
 
-  async approve(id) {
-    return apiClient.post(API_ENDPOINTS.RFP_APPROVE(id));
+  async approve(id, payload = {}) {
+    return apiClient.post(API_ENDPOINTS.RFP_APPROVE(id), payload);
   }
 
   async reject(id, reason) {

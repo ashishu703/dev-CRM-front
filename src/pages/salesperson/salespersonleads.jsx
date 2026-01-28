@@ -2931,10 +2931,15 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
 
               {/* Products List */}
               {rfpForm.products.length > 0 && (
-              <div className="space-y-3">
+                      <div className="space-y-3">
                   {rfpForm.products.map((product, index) => {
                     const inStock = product.stockStatus && (product.stockStatus.status === 'available' || product.stockStatus.status === 'limited' || Number(product.stockStatus.quantity || 0) > 0)
                     const hasPrice = !!product.approvedPrice
+                    const needsRfpForProduct = (() => {
+                      const isCustom = isCustomProduct(product.productSpec)
+                      if (isCustom) return true
+                      return !hasPrice
+                    })()
                     return (
                       <div key={index} className={`rounded-xl border p-4 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
                         <div className="flex items-start justify-between mb-3">
@@ -2972,39 +2977,41 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                           </button>
                         </div>
                         <div className="mt-3 space-y-2">
-                          {/* Quantity Field */}
-                          <div>
-                            <input
-                              type="number"
-                              step="0.01"
-                              className={`w-full rounded-lg border px-3 py-2 text-sm ${
-                                rfpValidationErrors.products[index]?.quantity
-                                  ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
-                                  : isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-200'
-                              }`}
-                              placeholder="Quantity *"
-                              value={product.quantity}
-                              onChange={(e) => {
-                                handleProductQuantityChange(index, e.target.value)
-                                // Clear error when user starts typing
-                                if (rfpValidationErrors.products[index]?.quantity) {
-                                  setRfpValidationErrors(prev => ({
-                                    ...prev,
-                                    products: {
-                                      ...prev.products,
-                                      [index]: {
-                                        ...prev.products[index],
-                                        quantity: ''
+                          {/* Quantity Field (only for products that do NOT need RFP) */}
+                          {!needsRfpForProduct && (
+                            <div>
+                              <input
+                                type="number"
+                                step="0.01"
+                                className={`w-full rounded-lg border px-3 py-2 text-sm ${
+                                  rfpValidationErrors.products[index]?.quantity
+                                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                                    : isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-200'
+                                }`}
+                                placeholder="Quantity *"
+                                value={product.quantity}
+                                onChange={(e) => {
+                                  handleProductQuantityChange(index, e.target.value)
+                                  // Clear error when user starts typing
+                                  if (rfpValidationErrors.products[index]?.quantity) {
+                                    setRfpValidationErrors(prev => ({
+                                      ...prev,
+                                      products: {
+                                        ...prev.products,
+                                        [index]: {
+                                          ...prev.products[index],
+                                          quantity: ''
+                                        }
                                       }
-                                    }
-                                  }))
-                                }
-                              }}
-                            />
-                            {rfpValidationErrors.products[index]?.quantity && (
-                              <p className="mt-1 text-xs text-red-600">{rfpValidationErrors.products[index].quantity}</p>
-                            )}
-                          </div>
+                                    }))
+                                  }
+                                }}
+                              />
+                              {rfpValidationErrors.products[index]?.quantity && (
+                                <p className="mt-1 text-xs text-red-600">{rfpValidationErrors.products[index].quantity}</p>
+                              )}
+                            </div>
+                          )}
                           
                           {/* Length Field */}
                           <div>

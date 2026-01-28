@@ -46,12 +46,12 @@ const SalesDepartmentHeadDashboard = ({ activeView, setActiveView }) => {
       case 'stock-update':
         return <StockUpdate />;
       case 'calculator':
-        return <CalculatorProductList />;
+        return <CalculatorProductList setActiveView={setActiveView} />;
       case 'reports':
         console.log('✅ Rendering ReportsPage component');
         return <ReportsPage setActiveView={setActiveView} />;
       case 'rfp-workflow':
-        return <RfpWorkflow />;
+        return <RfpWorkflow setActiveView={setActiveView} />;
       default:
         // Handle default case - if it's 'dashboard' or empty, show sales dashboard
         // Otherwise show sales dashboard as fallback

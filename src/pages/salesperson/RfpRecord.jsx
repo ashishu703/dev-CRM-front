@@ -394,9 +394,8 @@ const RfpRecord = ({ isDarkMode = false }) => {
                         >
                           <div className="font-medium">{product.productSpec}</div>
                           <div className="text-sm text-gray-600">
-                            Quantity: {product.quantity || 'N/A'} | 
-                            Length: {product.length || 'N/A'} {product.lengthUnit || ''} | 
-                            Target Price: ₹{product.targetPrice || 'N/A'}
+                            Length / Qty: {product.length || product.quantity || 'N/A'} {product.lengthUnit || ''} | 
+                            Target Price: {product.targetPrice ? `₹${product.targetPrice}` : 'N/A'}
                           </div>
                         </div>
                       ))
@@ -405,6 +404,80 @@ const RfpRecord = ({ isDarkMode = false }) => {
                     )}
                   </div>
                 </div>
+                {selectedRecord.calculator_pricing_log && (
+                  <div>
+                    <label className={`text-sm font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Pricing Log (Calculator)
+                    </label>
+                    {(() => {
+                      const log = selectedRecord.calculator_pricing_log || {}
+                      const rateTypeLabelMap = {
+                        alu_per_mtr: 'Aluminium / Mtr',
+                        alloy_per_mtr: 'Alloy / Mtr',
+                        alu_per_kg: 'Aluminium / Kg',
+                        alloy_per_kg: 'Alloy / Kg'
+                      }
+                      const lengthUsed =
+                        log.length !== undefined && log.length !== null
+                          ? log.length
+                          : (log.quantity !== undefined && log.quantity !== null ? log.quantity : '—')
+                      return (
+                        <div className={`mt-2 p-3 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <div className={`text-xs font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Selected Product</div>
+                              <div className={isDarkMode ? 'text-gray-100' : 'text-gray-900'}>{log.productSpec || '—'}</div>
+                            </div>
+                            <div>
+                              <div className={`text-xs font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Family</div>
+                              <div className={isDarkMode ? 'text-gray-100' : 'text-gray-900'}>{log.family || 'AAAC'}</div>
+                            </div>
+                            <div>
+                              <div className={`text-xs font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Length / Qty Used</div>
+                              <div className={isDarkMode ? 'text-gray-100' : 'text-gray-900'}>{lengthUsed}</div>
+                            </div>
+                            <div>
+                              <div className={`text-xs font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Rate Type</div>
+                              <div className={isDarkMode ? 'text-gray-100' : 'text-gray-900'}>
+                                {log.rateType ? rateTypeLabelMap[log.rateType] || log.rateType : '—'}
+                              </div>
+                            </div>
+                            <div>
+                              <div className={`text-xs font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Base Rate</div>
+                              <div className={isDarkMode ? 'text-gray-100' : 'text-gray-900'}>
+                                {typeof log.basePerUnit === 'number' ? `₹${log.basePerUnit.toFixed(2)}` : (log.basePerUnit || '—')}
+                              </div>
+                            </div>
+                            <div>
+                              <div className={`text-xs font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Base Amount</div>
+                              <div className={isDarkMode ? 'text-gray-100' : 'text-gray-900'}>
+                                {typeof log.baseTotal === 'number' ? `₹${log.baseTotal.toFixed(2)}` : (log.baseTotal || '—')}
+                              </div>
+                            </div>
+                            <div>
+                              <div className={`text-xs font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total After Charges</div>
+                              <div className="font-semibold text-emerald-500">
+                                {typeof log.totalPrice === 'number' ? `₹${log.totalPrice.toFixed(2)}` : (log.totalPrice || '—')}
+                              </div>
+                            </div>
+                          </div>
+                          {Array.isArray(log.extraCharges) && log.extraCharges.length > 0 && (
+                            <div className="mt-3">
+                              <div className={`text-xs font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Additional Charges</div>
+                              <ul className={isDarkMode ? 'text-gray-100 text-sm list-disc list-inside' : 'text-gray-900 text-sm list-disc list-inside'}>
+                                {log.extraCharges.map((row, idx) => (
+                                  <li key={idx}>
+                                    {(row.label || 'Charge')} – {row.amount ? `₹${row.amount}` : '₹0'}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
                 <div>
                   <label className={`text-sm font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                     Delivery Timeline

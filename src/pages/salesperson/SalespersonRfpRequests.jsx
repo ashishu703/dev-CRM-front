@@ -796,11 +796,89 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
                 </div>
 
                 {/* Notes / Requirements */}
-                <div className="mt-6">
-                  <div className={`text-sm font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>Special Requirements</div>
-                  <div className={`mt-2 rounded-xl border p-4 ${isDarkMode ? 'border-gray-700 bg-gray-800/60 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-900'}`}>
-                    {selectedRfp.special_requirements || selectedRfp.source_payload?.form?.specialRequirements || '—'}
+                <div className="mt-6 space-y-4">
+                  <div>
+                    <div className={`text-sm font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>Special Requirements</div>
+                    <div className={`mt-2 rounded-xl border p-4 ${isDarkMode ? 'border-gray-700 bg-gray-800/60 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-900'}`}>
+                      {selectedRfp.special_requirements || selectedRfp.source_payload?.form?.specialRequirements || '—'}
+                    </div>
                   </div>
+                  {selectedRfp.calculator_pricing_log && (
+                    <div>
+                      <div className={`text-sm font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>Pricing Log (Calculator)</div>
+                      {(() => {
+                        const log = selectedRfp.calculator_pricing_log || {};
+                        const rateTypeLabelMap = {
+                          alu_per_mtr: 'Aluminium / Mtr',
+                          alloy_per_mtr: 'Alloy / Mtr',
+                          alu_per_kg: 'Aluminium / Kg',
+                          alloy_per_kg: 'Alloy / Kg'
+                        };
+                        const lengthUsed =
+                          log.length !== undefined && log.length !== null
+                            ? log.length
+                            : (log.quantity !== undefined && log.quantity !== null ? log.quantity : '—');
+                        return (
+                          <div className={`mt-2 rounded-xl border p-4 ${isDarkMode ? 'border-gray-700 bg-gray-800/60 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-900'}`}>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Selected Product</div>
+                                <div>{log.productSpec || '—'}</div>
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Family</div>
+                                <div>{log.family || 'AAAC'}</div>
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Length / Qty Used</div>
+                                <div>{lengthUsed}</div>
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Rate Type</div>
+                                <div>{log.rateType ? rateTypeLabelMap[log.rateType] || log.rateType : '—'}</div>
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Base Rate</div>
+                                <div>
+                                  {typeof log.basePerUnit === 'number'
+                                    ? `₹${log.basePerUnit.toFixed(2)}`
+                                    : (log.basePerUnit || '—')}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Base Amount</div>
+                                <div>
+                                  {typeof log.baseTotal === 'number'
+                                    ? `₹${log.baseTotal.toFixed(2)}`
+                                    : (log.baseTotal || '—')}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Total After Charges</div>
+                                <div className="font-semibold text-emerald-400">
+                                  {typeof log.totalPrice === 'number'
+                                    ? `₹${log.totalPrice.toFixed(2)}`
+                                    : (log.totalPrice || '—')}
+                                </div>
+                              </div>
+                            </div>
+                            {Array.isArray(log.extraCharges) && log.extraCharges.length > 0 && (
+                              <div className="mt-3">
+                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Additional Charges</div>
+                                <ul className="text-sm list-disc list-inside space-y-1">
+                                  {log.extraCharges.map((row, idx) => (
+                                    <li key={idx}>
+                                      {(row.label || 'Charge')} – {row.amount ? `₹${row.amount}` : '₹0'}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

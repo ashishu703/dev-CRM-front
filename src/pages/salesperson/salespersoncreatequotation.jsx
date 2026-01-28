@@ -56,14 +56,17 @@ function Button({ children, onClick, type = "button", variant = "default", size 
   );
 }
 
+const round2 = (value) => Math.round((Number(value) || 0) * 100) / 100;
+
 const calculateTotals = (items, discountRate, taxRate) => {
-  const subtotal = items.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const subtotalRaw = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const subtotal = round2(subtotalRaw);
   const discountRateNum = parseFloat(discountRate) || 0;
   const taxRateNum = parseFloat(taxRate) || 0;
-  const discountAmount = (subtotal * discountRateNum) / 100;
+  const discountAmount = round2((subtotal * discountRateNum) / 100);
   const taxable = Math.max(0, subtotal - discountAmount);
-  const taxAmount = (taxable * taxRateNum) / 100;
-  const total = taxable + taxAmount;
+  const taxAmount = round2((taxable * taxRateNum) / 100);
+  const total = round2(taxable + taxAmount);
 
   return {
     subtotal,
@@ -353,26 +356,71 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
   const populateQuotationFromRfpDecision = async (decision) => {
     try {
       const rfpProducts = Array.isArray(decision.products) ? decision.products : [];
+
+      // Extract calculator log (if any) from decision
+      let calculatorLog = decision.calculator_pricing_log || decision.rfp_request?.calculator_pricing_log || null;
+      if (calculatorLog && typeof calculatorLog === 'string') {
+        try {
+          calculatorLog = JSON.parse(calculatorLog);
+        } catch (e) {
+          // ignore parse error and keep raw
+        }
+      }
+
+      const hasCalculator = calculatorLog && typeof calculatorLog === 'object';
       
       // Fetch pricing for all products
       const itemsWithPricing = await Promise.all(
         rfpProducts.map(async (product, index) => {
+          // Default values
           let unitPrice = 0;
-          try {
-            const priceRes = await productPriceService.getApprovedPrice(product.productSpec);
-            if (priceRes?.data) {
-              unitPrice = parseFloat(priceRes.data.unit_price || 0);
+          let quantityForForm = '';
+          let buyerRateForForm = '';
+          let amount = 0;
+          let remark = product.length ? `Length: ${product.length} ${product.lengthUnit || 'Mtr'}` : '';
+
+          // When calculator data is present, use it for the first product
+          if (index === 0 && hasCalculator) {
+            const lengthUsedRaw =
+              calculatorLog.length ??
+              calculatorLog.quantity ??
+              product.length ??
+              product.quantity ??
+              '';
+            const lengthNum = lengthUsedRaw === '' ? 0 : Number.parseFloat(lengthUsedRaw);
+            const safeLength = Number.isFinite(lengthNum) ? lengthNum : 0;
+
+            const totalFromCalculator =
+              Number.parseFloat(calculatorLog.totalPrice ?? calculatorLog.calculatorTotalPrice ?? decision.calculator_total_price ?? 0) || 0;
+
+            unitPrice = safeLength > 0 ? round2(totalFromCalculator / safeLength) : 0;
+            buyerRateForForm = unitPrice > 0 ? unitPrice.toFixed(2) : '0';
+            quantityForForm = safeLength ? String(safeLength) : '';
+            amount = round2(totalFromCalculator || (safeLength * unitPrice));
+
+            // Prefer length from calculator in remark if available
+            if (calculatorLog.length) {
+              remark = `Length: ${calculatorLog.length} ${calculatorLog.lengthUnit || product.lengthUnit || 'Mtr'}`;
             }
-          } catch (error) {
-            console.error(`Failed to fetch price for ${product.productSpec}:`, error);
+          } else {
+            // Fallback: use approved price list for non-calculator products
+            try {
+              const priceRes = await productPriceService.getApprovedPrice(product.productSpec);
+              if (priceRes?.data) {
+                unitPrice = parseFloat(priceRes.data.unit_price || 0);
+              }
+            } catch (error) {
+              console.error(`Failed to fetch price for ${product.productSpec}:`, error);
+            }
+
+            // Quantity should be an integer in quotation (strip any decimals like "11.00")
+            const rawQty = product.quantity ?? '';
+            const qtyNum = rawQty === '' ? 0 : Number.parseFloat(rawQty);
+            const qtyInt = Number.isFinite(qtyNum) ? Math.trunc(qtyNum) : 0;
+            quantityForForm = rawQty === '' ? '' : String(qtyInt);
+            amount = round2((qtyInt || 0) * unitPrice);
+            buyerRateForForm = product.targetPrice || unitPrice.toString();
           }
-          
-          // Quantity should be an integer in quotation (strip any decimals like "11.00")
-          const rawQty = product.quantity ?? '';
-          const qtyNum = rawQty === '' ? 0 : Number.parseFloat(rawQty);
-          const qtyInt = Number.isFinite(qtyNum) ? Math.trunc(qtyNum) : 0;
-          const quantityForForm = rawQty === '' ? '' : String(qtyInt);
-          const amount = (qtyInt || 0) * unitPrice;
           
           // Find product in products list for HSN
           const productInfo = products.find(p => p.name.toLowerCase() === product.productSpec.toLowerCase());
@@ -381,12 +429,12 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
             id: index + 1,
             productName: product.productSpec,
             quantity: quantityForForm,
-            unit: product.lengthUnit || 'Mtr',
+            unit: product.lengthUnit || calculatorLog?.lengthUnit || 'Mtr',
             companyRate: unitPrice,
-            buyerRate: product.targetPrice || unitPrice.toString(),
+            buyerRate: buyerRateForForm,
             amount: amount,
             hsn: productInfo?.hsn || '',
-            remark: product.length ? `Length: ${product.length} ${product.lengthUnit || 'Mtr'}` : ''
+            remark
           };
         })
       );
@@ -477,7 +525,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
       // Use buyerRate for amount calculation
       const qty = parseFloat(updatedItems[index].quantity) || 0;
       const rate = parseFloat(updatedItems[index].buyerRate) || 0;
-      updatedItems[index].amount = qty * rate;
+      updatedItems[index].amount = round2(qty * rate);
     }
     
     const totals = calculateTotals(
@@ -1264,10 +1312,12 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
                   </div>
                   Product Details
                 </h3>
-                <Button type="button" onClick={addItem} size="sm" className="bg-green-600 hover:bg-green-700 text-white">
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Item
-                </Button>
+                {!rfpIdValidated && (
+                  <Button type="button" onClick={addItem} size="sm" className="bg-green-600 hover:bg-green-700 text-white">
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Item
+                  </Button>
+                )}
               </div>
 
               <div className="border border-gray-300 rounded-lg overflow-x-auto bg-white">
@@ -1293,20 +1343,26 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
                                 placeholder="Product name"
                                 value={item.productName}
                                 onChange={(e) => {
+                                  if (rfpIdValidated) return;
                                   setProductSearchTerm(prev => ({ ...prev, [index]: e.target.value }));
                                   handleItemChange(index, 'productName', e.target.value);
                                 }}
-                                onFocus={() => setProductSearchTerm(prev => ({ ...prev, [index]: item.productName || '' }))}
+                                onFocus={() => {
+                                  if (rfpIdValidated) return;
+                                  setProductSearchTerm(prev => ({ ...prev, [index]: item.productName || '' }));
+                                }}
                                 onBlur={() => {
+                                  if (rfpIdValidated) return;
                                   setTimeout(() => setProductSearchTerm(prev => {
                                     const newState = { ...prev };
                                     delete newState[index];
                                     return newState;
                                   }), 200);
                                 }}
-                                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                className={`w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none ${rfpIdValidated ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : 'focus:ring-1 focus:ring-blue-500'}`}
                                 required
-                                list={`product-list-${index}`}
+                                list={rfpIdValidated ? undefined : `product-list-${index}`}
+                                disabled={rfpIdValidated}
                               />
                               <datalist id={`product-list-${index}`}>
                                 {products
@@ -1325,7 +1381,8 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
                               placeholder="HSN/SAC"
                               value={item.hsn || ''}
                               onChange={(e) => handleItemChange(index, 'hsn', e.target.value)}
-                              className="w-full px-2 py-1 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 font-mono text-xs"
+                              className={`w-full px-2 py-1 border border-gray-200 rounded text-sm font-mono text-xs focus:outline-none ${rfpIdValidated ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : 'focus:ring-1 focus:ring-purple-500'}`}
+                              disabled={rfpIdValidated}
                             />
                           </td>
                           <td className="px-2 py-3">
@@ -1334,15 +1391,23 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
                               min="0"
                               placeholder="Qty"
                               value={item.quantity || ''}
-                              onChange={(e) => handleItemChange(index, 'quantity', e.target.value === '' ? '' : parseFloat(e.target.value) || '')}
-                              className="w-full px-2 py-1 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              onChange={(e) => {
+                                if (rfpIdValidated) return;
+                                handleItemChange(index, 'quantity', e.target.value === '' ? '' : parseFloat(e.target.value) || '');
+                              }}
+                              className={`w-full px-2 py-1 border border-gray-200 rounded text-sm focus:outline-none ${rfpIdValidated ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : 'focus:ring-1 focus:ring-purple-500'}`}
+                              disabled={rfpIdValidated}
                             />
                           </td>
                           <td className="px-2 py-3">
                             <select
                               value={item.unit || ''}
-                              onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
-                              className="w-full px-2 py-1 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              onChange={(e) => {
+                                if (rfpIdValidated) return;
+                                handleItemChange(index, 'unit', e.target.value);
+                              }}
+                              className={`w-full px-2 py-1 border border-gray-200 rounded text-sm focus:outline-none ${rfpIdValidated ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : 'focus:ring-1 focus:ring-purple-500'}`}
+                              disabled={rfpIdValidated}
                             >
                               <option value="">Select</option>
                               {UNITS.map(unit => (
@@ -1355,11 +1420,15 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
                                 type="number"
                                 min="0"
                                 step="0.01"
-                              placeholder="Rate"
-                              value={item.buyerRate || ''}
-                              onChange={(e) => handleItemChange(index, 'buyerRate', e.target.value === '' ? '' : parseFloat(e.target.value) || '')}
-                              className="w-full px-2 py-1 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
-                            />
+                                placeholder="Rate"
+                                value={item.buyerRate || ''}
+                                onChange={(e) => {
+                                  if (rfpIdValidated) return;
+                                  handleItemChange(index, 'buyerRate', e.target.value === '' ? '' : parseFloat(e.target.value) || '');
+                                }}
+                                className={`w-full px-2 py-1 border border-gray-200 rounded text-sm focus:outline-none ${rfpIdValidated ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : 'focus:ring-1 focus:ring-purple-500'}`}
+                                disabled={rfpIdValidated}
+                              />
                           </td>
                           <td className="px-2 py-3 text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis">
                             ₹{parseFloat(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1372,7 +1441,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
                               placeholder="Enter remark for this product (optional)"
                               value={item.remark || ''}
                               onChange={(e) => handleItemChange(index, 'remark', e.target.value)}
-                              className="w-full px-2 py-1 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 italic text-gray-600"
+                              className={`w-full px-2 py-1 border border-gray-200 rounded text-sm italic text-gray-600 focus:outline-none ${rfpIdValidated ? 'bg-gray-50' : 'focus:ring-1 focus:ring-purple-500'}`}
                             />
                           </td>
                         </tr>

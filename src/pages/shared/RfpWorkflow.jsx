@@ -11,7 +11,9 @@ const formatCurrency = (value) => {
   return `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 };
 
-const RfpWorkflow = () => {
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+
+const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
   const { user } = useAuth();
   const [rfps, setRfps] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +65,8 @@ const RfpWorkflow = () => {
     validUntil: ''
   });
   const [products, setProducts] = useState([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[1]);
 
   const permissions = useMemo(() => {
     const dept = (user?.departmentType || '').toLowerCase();
@@ -77,6 +81,74 @@ const RfpWorkflow = () => {
   }, [user]);
 
   const columnCount = permissions.isProduction ? 8 : 9;
+
+  const totalPages = useMemo(() => {
+    if (!rfps.length) return 1;
+    return Math.max(1, Math.ceil(rfps.length / pageSize));
+  }, [rfps.length, pageSize]);
+
+  const paginatedRfps = useMemo(() => {
+    if (!rfps.length) return [];
+    const currentPage = Math.min(Math.max(1, page), totalPages);
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    return rfps.slice(start, end);
+  }, [rfps, page, pageSize, totalPages]);
+
+  const handlePageChange = (nextPage) => {
+    setPage((prev) => {
+      const target = typeof nextPage === 'number' ? nextPage : prev + (nextPage === 'next' ? 1 : -1);
+      const safe = Math.min(Math.max(1, target), totalPages);
+      return safe;
+    });
+  };
+
+  const handlePageSizeChange = (value) => {
+    setPageSize(value);
+    setPage(1);
+  };
+
+  const openCalculatorForProduct = (rfp, productSpec, productMeta = {}) => {
+    const spec = (productSpec || '').trim();
+    if (!spec) return;
+
+    const baseContext = {
+      productSpec: spec,
+      rfpId: rfp.rfp_id || null,
+      rfpRequestId: rfp.id,
+      quantity: productMeta.quantity ?? rfp.quantity ?? null,
+      length: productMeta.length ?? null
+    };
+
+    const openCalculatorCb = onOpenCalculator || ((context) => {
+      // Always store context for calculator
+      try {
+        window.localStorage.setItem(
+          'rfpCalculatorRequest',
+          JSON.stringify(context)
+        );
+      } catch {
+        // ignore storage errors
+      }
+
+      if (typeof setActiveView === 'function') {
+        setActiveView('calculator');
+      }
+    });
+
+    // Case-sensitive checks for known product families
+    if (spec.includes('AAAC')) {
+      openCalculatorCb({ family: 'AAAC', ...baseContext });
+      return;
+    }
+    if (spec.includes('ACSR')) {
+      openCalculatorCb({ family: 'ACSR', ...baseContext });
+      return;
+    }
+
+    // Unknown family – treat as coming soon
+    window.alert('Calculator for this product is coming soon.');
+  };
 
   const fetchRfps = async () => {
     setLoading(true);
@@ -134,7 +206,25 @@ const RfpWorkflow = () => {
 
   const handleApprove = async (rfpId) => {
     try {
-      const response = await rfpService.approve(rfpId);
+      let calculatorTotalPrice = null;
+      let calculatorDetail = null;
+      try {
+        const raw = window.localStorage.getItem('rfpCalculatorResult');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && (parsed.rfpId === selectedRfp?.rfp_id || parsed.rfpRequestId === selectedRfp?.id)) {
+            calculatorTotalPrice = parsed.totalPrice ?? null;
+            calculatorDetail = parsed;
+          }
+        }
+      } catch {
+        // ignore malformed storage
+      }
+
+      const response = await rfpService.approve(rfpId, {
+        calculatorTotalPrice,
+        calculatorDetail,
+      });
       fetchRfps();
       setShowRfpApprovalModal(false);
       setSelectedRfp(null);
@@ -325,6 +415,82 @@ const RfpWorkflow = () => {
       )}
 
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 pt-4 pb-3">
+          <div className="text-xs text-slate-600">
+            {!loading && rfps.length > 0 && (
+              <>
+                Showing{' '}
+                <span className="font-semibold">
+                  {(page - 1) * pageSize + 1}
+                </span>{' '}
+                to{' '}
+                <span className="font-semibold">
+                  {Math.min(page * pageSize, rfps.length)}
+                </span>{' '}
+                of{' '}
+                <span className="font-semibold">
+                  {rfps.length}
+                </span>{' '}
+                RFPs
+              </>
+            )}
+            {!loading && rfps.length === 0 && 'No RFPs to display'}
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 text-xs text-slate-600">
+              <span>Rows per page</span>
+              <select
+                value={pageSize}
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white"
+              >
+                {PAGE_SIZE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => handlePageChange(1)}
+                disabled={page <= 1 || totalPages <= 1}
+                className="px-2 py-1 text-xs border border-slate-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePageChange('prev')}
+                disabled={page <= 1 || totalPages <= 1}
+                className="px-2 py-1 text-xs border border-slate-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+              >
+                ‹
+              </button>
+              <span className="text-xs text-slate-600 px-1">
+                Page <span className="font-semibold">{page}</span> of{' '}
+                <span className="font-semibold">{totalPages}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => handlePageChange('next')}
+                disabled={page >= totalPages || totalPages <= 1}
+                className="px-2 py-1 text-xs border border-slate-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+              >
+                ›
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePageChange(totalPages)}
+                disabled={page >= totalPages || totalPages <= 1}
+                className="px-2 py-1 text-xs border border-slate-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+              >
+                »
+              </button>
+            </div>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100 text-sm">
             <thead className="bg-slate-50 text-slate-600 uppercase text-xs tracking-wider">
@@ -351,7 +517,7 @@ const RfpWorkflow = () => {
                   <td colSpan={columnCount} className="px-4 py-6 text-center text-slate-500">No RFPs found.</td>
                 </tr>
               )}
-              {!loading && rfps.map((rfp) => (
+              {!loading && paginatedRfps.map((rfp) => (
                 <tr key={rfp.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-900">{rfp.rfp_id || 'Pending'}</td>
                   <td className="px-4 py-3 text-slate-700">LD-{rfp.lead_id}</td>
@@ -372,10 +538,9 @@ const RfpWorkflow = () => {
                     )}
                   </td>
                   <td className="px-4 py-3 text-slate-700">
-                    {rfp.products && rfp.products.length > 0 
-                      ? rfp.products.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0).toFixed(2)
-                      : (rfp.quantity || '-')
-                    }
+                    {rfp.products && rfp.products.length > 0
+                      ? rfp.products.reduce((sum, p) => sum + (parseFloat(p.length) || 0), 0).toFixed(2)
+                      : (rfp.length || '-')}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusBadge(rfp.status)}`}>
@@ -384,20 +549,26 @@ const RfpWorkflow = () => {
                   </td>
                   {!permissions.isProduction && (
                     <td className="px-4 py-3 text-slate-700">
-                      {rfp.calculated_price ? formatCurrency(rfp.calculated_price) : '—'}
+                      {rfp.calculator_total_price || rfp.calculated_price
+                        ? formatCurrency(rfp.calculator_total_price || rfp.calculated_price)
+                        : '—'}
                     </td>
                   )}
                   <td className="px-4 py-3 text-slate-700">{rfp.quotation_number || '—'}</td>
                   <td className="px-4 py-3 text-slate-700">{rfp.work_order_number || '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
-                      {permissions.isDh && rfp.status === 'pending_dh' && (
+                      {permissions.isDh && (
                         <button
                           onClick={() => openRfpApprovalModal(rfp)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 hover:bg-blue-700 text-white"
+                          className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md text-white ${
+                            rfp.status === 'pending_dh'
+                              ? 'bg-blue-600 hover:bg-blue-700'
+                              : 'bg-slate-700 hover:bg-slate-800'
+                          }`}
                         >
                           <FilePlus2 className="w-3 h-3" />
-                          Review & Approve
+                          {rfp.status === 'pending_dh' ? 'Review & Approve' : 'View'}
                         </button>
                       )}
                       {permissions.isAccounts && ['approved', 'pricing_ready'].includes(rfp.status) && (
@@ -801,6 +972,7 @@ const RfpWorkflow = () => {
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Length</th>
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Target Price</th>
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
@@ -808,7 +980,9 @@ const RfpWorkflow = () => {
                           <tr key={product.id || index} className="hover:bg-slate-50">
                             <td className="px-4 py-3 text-sm text-slate-700 font-medium">{index + 1}</td>
                             <td className="px-4 py-3 text-sm font-semibold text-slate-900">{product.product_spec || 'N/A'}</td>
-                            <td className="px-4 py-3 text-sm text-slate-700">{product.quantity || '0.00'}</td>
+                            <td className="px-4 py-3 text-sm text-slate-700">
+                              {product.quantity ? product.quantity : '—'}
+                            </td>
                             <td className="px-4 py-3 text-sm text-slate-700">
                               {product.length ? `${product.length} ${product.length_unit || 'Mtr'}` : 'N/A'}
                             </td>
@@ -826,6 +1000,21 @@ const RfpWorkflow = () => {
                                 {product.availability_status?.replace(/_/g, ' ') || 'N/A'}
                               </span>
                             </td>
+                            <td className="px-4 py-3">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openCalculatorForProduct(selectedRfp, product.product_spec, {
+                                    quantity: product.quantity,
+                                    length: product.length
+                                  })
+                                }
+                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 text-white"
+                              >
+                                <Clock className="w-3 h-3" />
+                                Calculate Price
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -837,6 +1026,84 @@ const RfpWorkflow = () => {
                   </div>
                 )}
               </div>
+
+              {/* Calculator Log Book */}
+              {selectedRfp.calculator_pricing_log && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-900">Pricing Log (Calculator)</h3>
+                  {(() => {
+                    const log = selectedRfp.calculator_pricing_log || {};
+                    const rateTypeLabelMap = {
+                      alu_per_mtr: 'Aluminium / Mtr',
+                      alloy_per_mtr: 'Alloy / Mtr',
+                      alu_per_kg: 'Aluminium / Kg',
+                      alloy_per_kg: 'Alloy / Kg'
+                    };
+                    const lengthUsed =
+                      log.length !== undefined && log.length !== null
+                        ? log.length
+                        : (log.quantity !== undefined && log.quantity !== null ? log.quantity : '—');
+                    return (
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-slate-800">
+                          <div>
+                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Selected Product</div>
+                            <div>{log.productSpec || '—'}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Family</div>
+                            <div>{log.family || 'AAAC'}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Length / Quantity Used</div>
+                            <div>{lengthUsed}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Rate Type</div>
+                            <div>{log.rateType ? rateTypeLabelMap[log.rateType] || log.rateType : '—'}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Base Rate</div>
+                            <div>
+                              {typeof log.basePerUnit === 'number'
+                                ? formatCurrency(log.basePerUnit)
+                                : (log.basePerUnit ? formatCurrency(log.basePerUnit) : '—')}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Base Amount</div>
+                            <div>
+                              {typeof log.baseTotal === 'number'
+                                ? formatCurrency(log.baseTotal)
+                                : (log.baseTotal ? formatCurrency(log.baseTotal) : '—')}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Total After Charges</div>
+                            <div className="font-semibold text-emerald-700">
+                              {typeof log.totalPrice === 'number'
+                                ? formatCurrency(log.totalPrice)
+                                : (log.totalPrice ? formatCurrency(log.totalPrice) : '—')}
+                            </div>
+                          </div>
+                        </div>
+                        {Array.isArray(log.extraCharges) && log.extraCharges.length > 0 && (
+                          <div>
+                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Additional Charges</div>
+                            <ul className="text-sm text-slate-800 list-disc list-inside space-y-1">
+                              {log.extraCharges.map((row, idx) => (
+                                <li key={idx}>
+                                  {(row.label || 'Charge')} – {row.amount ? formatCurrency(row.amount) : '₹0.00'}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
 
               {/* Special Requirements */}
               {selectedRfp.special_requirements && (

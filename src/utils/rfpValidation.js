@@ -40,7 +40,7 @@ export const RFP_VALIDATION_RULES = {
     }
   },
   DELIVERY_TIMELINE: {
-    required: true,
+    required: false,
     cannotBePast: true
   },
   SPECIAL_REQUIREMENTS: {
@@ -181,10 +181,6 @@ export const validateProduct = (product, index = 0, needsRfp = true) => {
   const errors = {}
   let isValid = true
 
-  if (!needsRfp) {
-    return { isValid: true, errors: {} }
-  }
-
   // Validate productSpec
   const productSpecValidation = validateProductField(
     'Product Specification',
@@ -196,37 +192,48 @@ export const validateProduct = (product, index = 0, needsRfp = true) => {
     isValid = false
   }
 
-  // Validate quantity
-  const quantityValidation = validateProductField(
-    'Quantity',
-    product.quantity,
-    RFP_VALIDATION_RULES.PRODUCT.QUANTITY
-  )
-  if (!quantityValidation.isValid) {
-    errors.quantity = quantityValidation.error
-    isValid = false
-  }
+  if (needsRfp) {
+    // For RFP products: length is mandatory, quantity & target price optional
+    const lengthValidation = validateProductField(
+      'Length',
+      product.length,
+      RFP_VALIDATION_RULES.PRODUCT.LENGTH
+    )
+    if (!lengthValidation.isValid) {
+      errors.length = lengthValidation.error
+      isValid = false
+    }
+  } else {
+    // For non-RFP save-decision products: original strict rules
+    const quantityValidation = validateProductField(
+      'Quantity',
+      product.quantity,
+      RFP_VALIDATION_RULES.PRODUCT.QUANTITY
+    )
+    if (!quantityValidation.isValid) {
+      errors.quantity = quantityValidation.error
+      isValid = false
+    }
 
-  // Validate length
-  const lengthValidation = validateProductField(
-    'Length',
-    product.length,
-    RFP_VALIDATION_RULES.PRODUCT.LENGTH
-  )
-  if (!lengthValidation.isValid) {
-    errors.length = lengthValidation.error
-    isValid = false
-  }
+    const lengthValidation = validateProductField(
+      'Length',
+      product.length,
+      RFP_VALIDATION_RULES.PRODUCT.LENGTH
+    )
+    if (!lengthValidation.isValid) {
+      errors.length = lengthValidation.error
+      isValid = false
+    }
 
-  // Validate targetPrice
-  const targetPriceValidation = validateProductField(
-    'Target Price',
-    product.targetPrice,
-    RFP_VALIDATION_RULES.PRODUCT.TARGET_PRICE
-  )
-  if (!targetPriceValidation.isValid) {
-    errors.targetPrice = targetPriceValidation.error
-    isValid = false
+    const targetPriceValidation = validateProductField(
+      'Target Price',
+      product.targetPrice,
+      RFP_VALIDATION_RULES.PRODUCT.TARGET_PRICE
+    )
+    if (!targetPriceValidation.isValid) {
+      errors.targetPrice = targetPriceValidation.error
+      isValid = false
+    }
   }
 
   return { isValid, errors }

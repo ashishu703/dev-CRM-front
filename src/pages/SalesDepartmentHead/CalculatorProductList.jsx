@@ -7,9 +7,27 @@ export default function CalculatorProductList({ setActiveView }) {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedProduct, setSelectedProduct] = useState(null)
+  const [rfpContext, setRfpContext] = useState(null)
 
   useEffect(() => {
     loadProducts()
+  }, [])
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem('rfpCalculatorRequest')
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (!parsed || !parsed.family) return
+      setRfpContext(parsed)
+      if (parsed.family === 'AAAC') {
+        setSelectedProduct('aaac')
+      } else if (parsed.family === 'ACSR') {
+        setSelectedProduct('acsr')
+      }
+    } catch {
+      // ignore malformed storage
+    }
   }, [])
 
   const loadProducts = () => {
@@ -52,11 +70,23 @@ export default function CalculatorProductList({ setActiveView }) {
 
   // If calculator is selected, show calculator component
   if (selectedProduct === 'aaac') {
-    return <AaacCalculator setActiveView={setActiveView} onBack={() => setSelectedProduct(null)} />
+    return (
+      <AaacCalculator
+        setActiveView={setActiveView}
+        onBack={() => setSelectedProduct(null)}
+        rfpContext={rfpContext}
+      />
+    )
   }
 
   if (selectedProduct === 'acsr') {
-    return <AcsrCalculator setActiveView={setActiveView} onBack={() => setSelectedProduct(null)} />
+    return (
+      <AcsrCalculator
+        setActiveView={setActiveView}
+        onBack={() => setSelectedProduct(null)}
+        rfpContext={rfpContext}
+      />
+    )
   }
 
   if (loading) {

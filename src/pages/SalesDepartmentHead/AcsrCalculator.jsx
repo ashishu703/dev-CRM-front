@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react"
 import { Calculator, ArrowLeft, RefreshCw, Zap } from "lucide-react"
 import { io } from "socket.io-client"
-import { ACSR_PRODUCTS, calculateAllProducts, DEFAULT_RATES } from "../../constants/acsrProducts"
+import { calculateAllProducts, DEFAULT_RATES } from "../../constants/acsrProducts"
+import rfpService from "../../services/RfpService"
+import Toast from "../../utils/Toast"
 
-export default function AcsrCalculator({ setActiveView, rates: externalRates, onBack }) {
+export default function AcsrCalculator({ setActiveView, rates: externalRates, onBack, rfpContext }) {
   const [products, setProducts] = useState([])
   const [rates, setRates] = useState(DEFAULT_RATES)
   const [customNoOfWiresAluminium, setCustomNoOfWiresAluminium] = useState("")
@@ -13,6 +15,10 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
   const [customCalculations, setCustomCalculations] = useState(null)
   const [socketConnected, setSocketConnected] = useState(false)
   const [rateUpdateNotification, setRateUpdateNotification] = useState(null)
+  const [selectedIndex, setSelectedIndex] = useState(null)
+  const [showChargesModal, setShowChargesModal] = useState(false)
+  const [chargesRows, setChargesRows] = useState([{ label: 'Drum', amount: '' }])
+  const [hasExtraCharges, setHasExtraCharges] = useState(true)
 
   const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:4500'
 
@@ -89,45 +95,69 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
     }
   }, [externalRates])
 
+  // Auto-select product based on requested spec (case-sensitive)
+  useEffect(() => {
+    if (!rfpContext?.productSpec || !products.length) return
+    const spec = rfpContext.productSpec
+    const idx = products.findIndex(p => spec.includes(p.name))
+    if (idx >= 0) {
+      setSelectedIndex(idx)
+    }
+  }, [rfpContext, products])
+
   // Socket.io listener for real-time rate updates
   useEffect(() => {
     const token = localStorage.getItem('authToken')
     if (!token) return
 
-    const socket = io(SOCKET_URL, {
-      auth: { token },
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      reconnectionAttempts: 5
-    })
+    let socket
+    try {
+      socket = io(SOCKET_URL, {
+        auth: { token },
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 3
+      })
 
-    socket.on('connect', () => {
-      console.log('✅ Socket.IO connected - ACSR rates')
-      setSocketConnected(true)
-    })
+      socket.on('connect', () => {
+        console.log('✅ Socket.IO connected - ACSR rates')
+        setSocketConnected(true)
+      })
 
-    socket.on('disconnect', () => {
+      socket.on('disconnect', () => {
+        setSocketConnected(false)
+      })
+
+      socket.on('connect_error', () => {
+        console.warn('Socket.IO connection error for ACSR calculator - disabling live updates')
+        setSocketConnected(false)
+        socket.disconnect()
+      })
+
+      socket.on('acsr:rates:updated', (data) => {
+        const updatedRates = {
+          aluminium_cg_grade: parseFloat(data.aluminium_cg_grade) || rates.aluminium_cg_grade,
+          aluminium_ec_grade: parseFloat(data.aluminium_ec_grade) || rates.aluminium_ec_grade,
+          steel_rate: parseFloat(data.steel_rate) || rates.steel_rate
+        }
+        setRates(updatedRates)
+        calculateAndSetProducts(updatedRates)
+        setRateUpdateNotification(`Rates updated by ${data.updated_by}`)
+        setTimeout(() => setRateUpdateNotification(null), 3000)
+      })
+    } catch (error) {
+      console.warn('Socket.IO init failed for ACSR calculator:', error)
       setSocketConnected(false)
-    })
-
-    socket.on('acsr:rates:updated', (data) => {
-      const updatedRates = {
-        aluminium_cg_grade: parseFloat(data.aluminium_cg_grade) || rates.aluminium_cg_grade,
-        aluminium_ec_grade: parseFloat(data.aluminium_ec_grade) || rates.aluminium_ec_grade,
-        steel_rate: parseFloat(data.steel_rate) || rates.steel_rate
-      }
-      setRates(updatedRates)
-      calculateAndSetProducts(updatedRates)
-      setRateUpdateNotification(`Rates updated by ${data.updated_by}`)
-      setTimeout(() => setRateUpdateNotification(null), 3000)
-    })
+    }
 
     return () => {
-      socket.disconnect()
+      if (socket) {
+        socket.disconnect()
+      }
     }
-  }, [rates])
+  }, [])
 
   // Calculate all products with current rates
   const calculateAndSetProducts = (currentRates) => {
@@ -189,6 +219,106 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
     } catch (error) {
       console.error('Error calculating custom product:', error)
       alert('Error calculating custom product')
+    }
+  }
+
+  const selectedProduct = selectedIndex != null ? products[selectedIndex] : null
+
+  const handleConfirmSelection = () => {
+    if (!selectedProduct || !rfpContext) {
+      alert('Please select a product row first')
+      return
+    }
+    setShowChargesModal(true)
+  }
+
+  const updateChargeRow = (index, key, value) => {
+    setChargesRows((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, [key]: value } : row))
+    )
+  }
+
+  const addChargeRow = () => {
+    setChargesRows((rows) => [...rows, { label: '', amount: '' }])
+  }
+
+  const removeChargeRow = (index) => {
+    setChargesRows((rows) => rows.filter((_, i) => i !== index))
+  }
+
+  const handleSaveCharges = async () => {
+    if (!selectedProduct || !rfpContext) {
+      setShowChargesModal(false)
+      return
+    }
+
+    const basePerMtr = parseFloat(selectedProduct.cost_conductor_isi_per_mtr || 0) || 0
+    const lengthMtr = parseFloat(rfpContext.length || rfpContext.quantity || 0) || 0
+    const baseTotal = basePerMtr * lengthMtr
+
+    const extraRows = hasExtraCharges ? chargesRows : []
+    const extraCharges = extraRows
+      .map((row) => Number.parseFloat(row.amount) || 0)
+      .filter((v) => Number.isFinite(v))
+    const extraTotal = extraCharges.reduce((sum, v) => sum + v, 0)
+
+    const totalPrice = baseTotal + extraTotal
+
+    try {
+      window.localStorage.setItem(
+        'rfpCalculatorResult',
+        JSON.stringify({
+          family: 'ACSR',
+          rfpId: rfpContext.rfpId,
+          rfpRequestId: rfpContext.rfpRequestId,
+          productSpec: rfpContext.productSpec,
+          length: lengthMtr,
+          basePerMtr,
+          baseTotal,
+          extraCharges: extraRows,
+          totalPrice
+        })
+      )
+    } catch {
+      // ignore storage failure
+    }
+
+    window.dispatchEvent(
+      new CustomEvent('rfpCalculatorPriceReady', {
+        detail: {
+          family: 'ACSR',
+          rfpId: rfpContext.rfpId,
+          rfpRequestId: rfpContext.rfpRequestId,
+          totalPrice
+        }
+      })
+    )
+
+    // Auto-approve the RFP from calculator
+    try {
+      await rfpService.approve(rfpContext.rfpRequestId, {
+        calculatorTotalPrice: totalPrice,
+        calculatorDetail: {
+          family: 'ACSR',
+          rfpId: rfpContext.rfpId,
+          rfpRequestId: rfpContext.rfpRequestId,
+          productSpec: rfpContext.productSpec,
+          length: lengthMtr,
+          basePerMtr,
+          baseTotal,
+          extraCharges: extraRows,
+          totalPrice
+        }
+      })
+      Toast.success('RFP approved with calculator pricing.')
+    } catch (error) {
+      console.error('Error auto-approving RFP from ACSR calculator:', error)
+      Toast.error(error?.message || 'Failed to approve RFP from calculator')
+    }
+
+    setShowChargesModal(false)
+    if (setActiveView) {
+      setActiveView('rfp-workflow')
     }
   }
 
@@ -266,8 +396,24 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
             </thead>
             <tbody className="divide-y divide-gray-100">
               {products.filter(p => p.name !== 'CUSTOM').map((product, index) => (
-                <tr key={index} className="hover:bg-blue-50 transition-colors">
-                  <td className="px-2 py-1 text-xs font-semibold text-gray-900 border-r border-gray-200">{product.name}</td>
+                <tr
+                  key={index}
+                  className={`hover:bg-blue-50 transition-colors cursor-pointer ${
+                    selectedIndex === index ? 'bg-blue-50' : ''
+                  }`}
+                  onClick={() => setSelectedIndex(index)}
+                >
+                  <td className="px-2 py-1 text-xs font-semibold text-gray-900 border-r border-gray-200">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="radio"
+                        className="text-blue-600"
+                        checked={selectedIndex === index}
+                        onChange={() => setSelectedIndex(index)}
+                      />
+                      <span>{product.name}</span>
+                    </div>
+                  </td>
                   <td className="px-2 py-1 text-xs text-gray-700 border-r border-gray-200">{product.no_of_wires_aluminium}/{product.size_aluminium}</td>
                   <td className="px-2 py-1 text-xs text-gray-700 border-r border-gray-200">{product.no_of_wires_steel}/{product.size_steel}</td>
                   <td className="px-2 py-1 text-xs text-gray-700 border-r border-gray-200 text-center">{product.no_of_wires_aluminium}</td>
@@ -388,12 +534,12 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
                       <span className="font-medium">💡 Tip:</span> Enter wire counts and sizes to calculate custom ACSR product pricing instantly
                     </div>
                     <button
-                      onClick={handleCustomCalculate}
-                      disabled={!customNoOfWiresAluminium || !customNoOfWiresSteel || !customSizeAluminium || !customSizeSteel}
-                      className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                      onClick={handleConfirmSelection}
+                      disabled={!selectedProduct}
+                      className="px-2 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                     >
                       <Calculator className="w-3 h-3" />
-                      Calculate Custom
+                      Use Selected
                     </button>
                   </div>
                 </td>
@@ -402,6 +548,90 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
           </table>
         </div>
       </div>
+      {/* Extra Charges Modal */}
+      {showChargesModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+            <h2 className="text-lg font-semibold">Additional Charges</h2>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-700">Any other charges (drum, transportation, others)?</span>
+                <div className="flex items-center gap-2 text-sm">
+                  <label className="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      checked={hasExtraCharges === false}
+                      onChange={() => setHasExtraCharges(false)}
+                    />
+                    No
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      checked={hasExtraCharges === true}
+                      onChange={() => setHasExtraCharges(true)}
+                    />
+                    Yes
+                  </label>
+                </div>
+              </div>
+              {hasExtraCharges && (
+                <div className="space-y-3 max-h-64 overflow-y-auto border-t border-gray-200 pt-3">
+                  {chargesRows.map((row, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                        placeholder="Charge label (e.g. Drum, Transportation)"
+                        value={row.label}
+                        onChange={(e) => updateChargeRow(idx, 'label', e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        className="w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                        placeholder="Amount"
+                        value={row.amount}
+                        onChange={(e) => updateChargeRow(idx, 'amount', e.target.value)}
+                      />
+                      {chargesRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeChargeRow(idx)}
+                          className="px-2 py-1 text-xs text-rose-600 hover:text-rose-700"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addChargeRow}
+                    className="text-xs text-blue-600 hover:text-blue-700"
+                  >
+                    + Add another charge
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowChargesModal(false)}
+                className="px-4 py-2 text-sm border rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCharges}
+                className="px-4 py-2 text-sm text-white bg-emerald-600 rounded-lg"
+              >
+                Save & Return to RFP
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
