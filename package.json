@@ -16,6 +16,7 @@
     "country-state-city": "^3.2.1",
     "firebase": "^10.7.1",
     "framer-motion": "^10.16.5",
+    "hyperformula": "^3.0.1",
     "html2canvas": "^1.4.1",
     "html2pdf.js": "^0.12.0",
     "leaflet": "^1.9.4",
@@ -30,7 +31,8 @@
     "react-window": "^2.2.3",
     "react-window-infinite-loader": "^2.0.0",
     "recharts": "^3.2.0",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/react": "^18.2.37",
