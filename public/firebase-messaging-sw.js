@@ -5,32 +5,23 @@ let firebaseInitialized = false;
 let messaging = null;
 let vapidKey = null;
 
-// Register event handlers immediately (required by Firebase)
-// These must be registered on initial script evaluation
-
-// Push event handler - must be registered immediately
 self.addEventListener('push', (event) => {
   if (!messaging || !firebaseInitialized) {
     console.warn('[SW] Firebase not initialized yet, ignoring push event');
     return;
   }
   
-  // Firebase messaging will handle this
-  // This is just a placeholder to satisfy Firebase requirements
 });
 
-// Push subscription change handler - must be registered immediately
 self.addEventListener('pushsubscriptionchange', (event) => {
   if (!messaging || !firebaseInitialized) {
     console.warn('[SW] Firebase not initialized yet, ignoring subscription change');
     return;
   }
   
-  // Firebase messaging will handle this
-  // This is just a placeholder to satisfy Firebase requirements
+  
 });
 
-// Notification click handler - must be registered immediately
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   
@@ -49,7 +40,6 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Initialize Firebase when VAPID key is received
 self.addEventListener('message', async (event) => {
   if (event.data && event.data.type === 'INIT_FIREBASE') {
     try {
@@ -77,7 +67,6 @@ self.addEventListener('message', async (event) => {
         
         console.log('[SW] Firebase initialized successfully');
         
-        // Register background message handler
         messaging.onBackgroundMessage((payload) => {
           console.log('[SW] Background message received:', payload);
           
