@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 
 const PriceUpdation = () => {
   const [formData, setFormData] = useState({ alu_price_per_kg: '', alloy_price_per_kg: '' });
+  const [originalPrices, setOriginalPrices] = useState({ alu_price_per_kg: 0, alloy_price_per_kg: 0 });
   const [pricesData, setPricesData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -35,12 +36,22 @@ const PriceUpdation = () => {
       if (!response.ok) throw new Error('Failed to fetch prices');
 
       const data = await response.json();
+      console.log('AAAC API Response:', data); // Debug log
+      
       setPricesData(data.data);
 
       if (data.data) {
+        console.log('AAAC Price Data:', data.data); // Debug log
+        
+        // Set form data with actual API values
         setFormData({
           alu_price_per_kg: data.data.alu_price_per_kg || '',
           alloy_price_per_kg: data.data.alloy_price_per_kg || ''
+        });
+
+        setOriginalPrices({
+          alu_price_per_kg: parseFloat(data.data.alu_price_per_kg) || 0,
+          alloy_price_per_kg: parseFloat(data.data.alloy_price_per_kg) || 0
         });
 
         localStorage.setItem('aaacCurrentPrices', JSON.stringify({
@@ -99,14 +110,25 @@ const PriceUpdation = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.alu_price_per_kg || !formData.alloy_price_per_kg) {
-      setErrorMessage('Both prices are required');
-      setTimeout(() => setErrorMessage(''), 3000);
-      return;
+    // Prepare data - only update fields that have been changed
+    const submitData = {};
+    
+    // Only include aluminum price if it has been changed
+    if (formData.alu_price_per_kg && parseFloat(formData.alu_price_per_kg) !== originalPrices.alu_price_per_kg) {
+      submitData.alu_price_per_kg = formData.alu_price_per_kg;
+    } else {
+      submitData.alu_price_per_kg = originalPrices.alu_price_per_kg;
+    }
+    
+    // Only include alloy price if it has been changed
+    if (formData.alloy_price_per_kg && parseFloat(formData.alloy_price_per_kg) !== originalPrices.alloy_price_per_kg) {
+      submitData.alloy_price_per_kg = formData.alloy_price_per_kg;
+    } else {
+      submitData.alloy_price_per_kg = originalPrices.alloy_price_per_kg;
     }
 
-    const alu = parseFloat(formData.alu_price_per_kg);
-    const alloy = parseFloat(formData.alloy_price_per_kg);
+    const alu = parseFloat(submitData.alu_price_per_kg);
+    const alloy = parseFloat(submitData.alloy_price_per_kg);
 
     if (isNaN(alu) || isNaN(alloy) || alu <= 0 || alloy <= 0) {
       setErrorMessage('Prices must be valid positive numbers');
@@ -124,7 +146,7 @@ const PriceUpdation = () => {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(submitData)
       });
 
       if (!response.ok) {
@@ -139,6 +161,12 @@ const PriceUpdation = () => {
         alu_price_per_kg: alu,
         alloy_price_per_kg: alloy
       }));
+
+      // Update original prices after successful save
+      setOriginalPrices({
+        alu_price_per_kg: alu,
+        alloy_price_per_kg: alloy
+      });
 
       await fetchPrices();
       setTimeout(() => setSuccessMessage(''), 4000);
@@ -277,13 +305,34 @@ const PriceUpdation = () => {
                   <input
                     type="number"
                     name="alu_price_per_kg"
-                    value={formData.alu_price_per_kg}
+                    value={formData.alu_price_per_kg || ''}
                     onChange={handleInputChange}
-                    placeholder="0.00"
+                    placeholder={`Current: ${originalPrices.alu_price_per_kg.toFixed(2)}`}
                     step="0.01"
                     min="0"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
+                  {/* Updated Price Display */}
+                  <div className="mt-1 text-xs">
+                    {formData.alu_price_per_kg && parseFloat(formData.alu_price_per_kg) !== originalPrices.alu_price_per_kg ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-500">Previous: ₹{originalPrices.alu_price_per_kg.toFixed(2)}</span>
+                        <span className={`font-medium ${
+                          parseFloat(formData.alu_price_per_kg) > originalPrices.alu_price_per_kg 
+                            ? 'text-green-600' 
+                            : parseFloat(formData.alu_price_per_kg) < originalPrices.alu_price_per_kg 
+                            ? 'text-red-600' 
+                            : 'text-gray-600'
+                        }`}>
+                          Current: ₹{parseFloat(formData.alu_price_per_kg).toFixed(2)}
+                          {parseFloat(formData.alu_price_per_kg) > originalPrices.alu_price_per_kg && ' ↗'}
+                          {parseFloat(formData.alu_price_per_kg) < originalPrices.alu_price_per_kg && ' ↘'}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-500">Current: ₹{originalPrices.alu_price_per_kg.toFixed(2)}</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-slate-600 font-semibold text-sm">
                   ₹{parseFloat(formData.alu_price_per_kg || 0).toFixed(2)}/kg
@@ -302,13 +351,39 @@ const PriceUpdation = () => {
                   <input
                     type="number"
                     name="alloy_price_per_kg"
-                    value={formData.alloy_price_per_kg}
+                    value={formData.alloy_price_per_kg || ''}
                     onChange={handleInputChange}
-                    placeholder="0.00"
+                    placeholder={`Current: ${originalPrices.alloy_price_per_kg.toFixed(2)}`}
                     step="0.01"
                     min="0"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
+                  {/* Updated Price Display */}
+                  <div className="mt-1 text-xs">
+                    {formData.alloy_price_per_kg && parseFloat(formData.alloy_price_per_kg) !== originalPrices.alloy_price_per_kg ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-500">Previous: ₹{originalPrices.alloy_price_per_kg.toFixed(2)}</span>
+                        <span className={`font-medium ${
+                          parseFloat(formData.alloy_price_per_kg) > originalPrices.alloy_price_per_kg 
+                            ? 'text-green-600' 
+                            : parseFloat(formData.alloy_price_per_kg) < originalPrices.alloy_price_per_kg 
+                            ? 'text-red-600' 
+                            : 'text-gray-600'
+                        }`}>
+                          Current: ₹{parseFloat(formData.alloy_price_per_kg).toFixed(2)}
+                          {parseFloat(formData.alloy_price_per_kg) > originalPrices.alloy_price_per_kg && ' ↗'}
+                          {parseFloat(formData.alloy_price_per_kg) < originalPrices.alloy_price_per_kg && ' ↘'}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-500">Current: ₹{originalPrices.alloy_price_per_kg.toFixed(2)}</span>
+                    )}
+                  </div>
+                      </div>
+                    ) : (
+                      <span className="text-gray-500">Current: ₹{(parseFloat(formData.alloy_price_per_kg) || originalPrices.alloy_price_per_kg).toFixed(2)}</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-slate-600 font-semibold text-sm">
                   ₹{parseFloat(formData.alloy_price_per_kg || 0).toFixed(2)}/kg

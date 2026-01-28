@@ -3,87 +3,176 @@ import { Calculator, Save, RefreshCw, AlertCircle, CheckCircle } from "lucide-re
 import rawMaterialService from "../../api/admin_api/rawMaterialService"
 
 export default function PriceManagement() {
-  const [rawMaterials, setRawMaterials] = useState([
-    { id: 'aluminium_ec_grade', name: 'ALUMINIUM EC GRADE', price: 0 },
-    { id: 'aluminium_cg_grade', name: 'ALUMINIUM CG GRADE', price: 0 },
-    { id: 'pvc_rp_inner', name: 'PVC RP INNER', price: 0 },
-    { id: 'pvc_rp_outer', name: 'PVC RP OUTER', price: 0 },
-    { id: 'aluminium_alloy', name: 'ALUMINIUM ALLOY', price: 0 },
-    { id: 'copper_lme_grade', name: 'COPPER LME GRADE', price: 0 },
-    { id: 'xlpe', name: 'XLPE', price: 0 },
-    { id: 'pvc_st1_type_a', name: 'PVC ST1/TYPE A', price: 0 },
-    { id: 'pvc_st2', name: 'PVC ST2', price: 0 },
-    { id: 'fr_pvc', name: 'FR PVC', price: 0 },
-    { id: 'frlsh_pvc', name: 'FRLSH PVC', price: 0 },
-    { id: 'gi_wire_0_6mm', name: 'G.I WIRE 0.6 MM', price: 0 },
-    { id: 'gi_wire_1_4mm', name: 'G.I WIRE 1.4 MM', price: 0 },
-    { id: 'gi_armouring_strip', name: 'G.I ARMOURING STRIP', price: 0 },
-    { id: 'ld', name: 'LD', price: 0 },
-    { id: 'steel_rate', name: 'STEEL RATE', price: 0 },
-    { id: 'pvc_st1_st2', name: 'PVC ST1 + PVC ST2', price: 0 },
-    { id: 'aluminium_alloy_grade_t4', name: 'ALUMINIUM ALLOY GRADE T4', price: 0 }
-  ])
+  // Single source of truth: rates from backend
+  const [rates, setRates] = useState({})
+  // Separate state for user edits only
+  const [editedRates, setEditedRates] = useState({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
-  const [lastUpdated, setLastUpdated] = useState(null)
+
+  // Material definitions
+  const materialDefinitions = [
+    { id: 'aluminium_ec_grade', name: 'ALUMINIUM EC GRADE' },
+    { id: 'aluminium_cg_grade', name: 'ALUMINIUM CG GRADE' },
+    { id: 'pvc_rp_inner', name: 'PVC RP INNER' },
+    { id: 'pvc_rp_outer', name: 'PVC RP OUTER' },
+    { id: 'aluminium_alloy', name: 'ALUMINIUM ALLOY' },
+    { id: 'copper_lme_grade', name: 'COPPER LME GRADE' },
+    { id: 'xlpe', name: 'XLPE' },
+    { id: 'pvc_st1_type_a', name: 'PVC ST1/TYPE A' },
+    { id: 'pvc_st2', name: 'PVC ST2' },
+    { id: 'fr_pvc', name: 'FR PVC' },
+    { id: 'frlsh_pvc', name: 'FRLSH PVC' },
+    { id: 'gi_wire_0_6mm', name: 'G.I WIRE 0.6 MM' },
+    { id: 'gi_wire_1_4mm', name: 'G.I WIRE 1.4 MM' },
+    { id: 'gi_armouring_strip', name: 'G.I ARMOURING STRIP' },
+    { id: 'ld', name: 'LD' },
+    { id: 'steel_rate', name: 'STEEL RATE' },
+    { id: 'pvc_st1_st2', name: 'PVC ST1 + PVC ST2' },
+    { id: 'aluminium_alloy_grade_t4', name: 'ALUMINIUM ALLOY GRADE T4' }
+  ]
 
   useEffect(() => {
     loadCurrentRates()
   }, [])
 
+  /**
+   * Load current rates from backend
+   * rawMaterialService already unwraps response.data, so response IS the data
+   */
   const loadCurrentRates = async () => {
     try {
       setLoading(true)
       const response = await rawMaterialService.getCurrentRates()
-      if (response.success) {
-        setRawMaterials(prev => 
-          prev.map(material => ({
-            ...material,
-            price: response.data[material.id] || 0
-          }))
-        )
-        setLastUpdated(response.data.lastUpdated || null)
+      
+      console.log('📥 Full API response:', response)
+      
+      // The service returns data directly (not wrapped in { success, data: {...} })
+      if (response && response.aluminium_ec_grade !== undefined) {
+        const parsedRates = {}
+        Object.keys(response).forEach(key => {
+          const value = response[key]
+          // Convert string prices to numbers, keep lastUpdated as-is
+          if (key === 'lastUpdated') {
+            parsedRates[key] = value
+          } else {
+            parsedRates[key] = parseFloat(value) || 0
+          }
+        })
+        
+        console.log('✅ Parsed rates:', parsedRates)
+        setRates(parsedRates)
+        setEditedRates({})
+      } else {
+        console.warn('⚠️ Invalid response:', response)
       }
     } catch (error) {
-      console.error('Error loading raw material rates:', error)
+      console.error('❌ Error loading raw material rates:', error)
       showMessage('error', 'Failed to load current rates')
     } finally {
       setLoading(false)
     }
   }
 
-  const handlePriceChange = (materialId, newPrice) => {
-    setRawMaterials(prev =>
-      prev.map(material =>
-        material.id === materialId
-          ? { ...material, price: parseFloat(newPrice) || 0 }
-          : material
-      )
-    )
+  /**
+   * SAFE: Only track actual user changes, never overwrite with empty values
+   */
+  const handlePriceChange = (materialId, newValue) => {
+    const numericValue = parseFloat(newValue)
+    
+    if (newValue === '' || newValue === null || newValue === undefined) {
+      // User cleared the field - remove from editedRates to preserve original
+      const updatedEdited = { ...editedRates }
+      delete updatedEdited[materialId]
+      setEditedRates(updatedEdited)
+    } else if (!isNaN(numericValue) && numericValue >= 0) {
+      // Valid numeric input - track the change
+      setEditedRates(prev => ({
+        ...prev,
+        [materialId]: numericValue
+      }))
+    }
   }
 
+  /**
+   * Safe payload builder - ONLY changed fields, no empty values
+   */
+  const buildSafePayload = () => {
+    const payload = {}
+    
+    Object.keys(editedRates).forEach(materialId => {
+      const newValue = editedRates[materialId]
+      const currentValue = rates[materialId]
+      
+      // Only send if: value exists AND (changed OR wasn't set before)
+      if (newValue !== '' && newValue !== null && newValue !== undefined) {
+        if (newValue !== currentValue) {
+          payload[materialId] = parseFloat(newValue)
+        }
+      }
+    })
+    
+    return payload
+  }
+
+  /**
+   * Save only changed fields, then refresh from server
+   */
   const saveAllRates = async () => {
     try {
       setSaving(true)
-      const rates = {}
-      rawMaterials.forEach(material => {
-        rates[material.id] = material.price
-      })
+      const payload = buildSafePayload()
+      
+      if (Object.keys(payload).length === 0) {
+        showMessage('info', 'No changes to save')
+        return
+      }
 
-      const response = await rawMaterialService.updateRawMaterialRates(rates)
-      if (response.success) {
-        showMessage('success', 'All raw material rates saved successfully!')
-        setLastUpdated(new Date())
+      const response = await rawMaterialService.updateRawMaterialRates(payload)
+      
+      console.log('💾 Save response:', response)
+      
+      if (response && response.success) {
+        showMessage('success', 'Rates updated!')
+        // Refresh all rates from server to ensure UI shows latest
+        await loadCurrentRates()
       } else {
-        showMessage('error', 'Failed to save rates')
+        showMessage('error', 'Failed to save')
       }
     } catch (error) {
-      console.error('Error saving rates:', error)
-      showMessage('error', 'Failed to save rates')
+      console.error('❌ Error saving:', error)
+      showMessage('error', 'Failed to save')
     } finally {
       setSaving(false)
     }
+  }
+
+  /**
+   * Get input value - show edited OR current rate
+   */
+  const getInputValue = (materialId) => {
+    if (editedRates.hasOwnProperty(materialId)) {
+      return editedRates[materialId]
+    }
+    return rates[materialId] || ''
+  }
+
+  /**
+   * Get effective current value for display
+   */
+  const getCurrentValue = (materialId) => {
+    return editedRates.hasOwnProperty(materialId)
+      ? editedRates[materialId]
+      : (rates[materialId] || 0)
+  }
+
+  /**
+   * Check if field was modified by user
+   */
+  const isFieldModified = (materialId) => {
+    return editedRates.hasOwnProperty(materialId) &&
+           editedRates[materialId] !== rates[materialId]
   }
 
   const showMessage = (type, text) => {
@@ -136,7 +225,12 @@ export default function PriceManagement() {
       {/* Raw Materials Table */}
       <div className="bg-white border-2 border-gray-200 rounded-lg p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-gray-900">Raw Material Rates</h2>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Raw Material Rates</h2>
+            <div className="mt-2 text-sm text-gray-600">
+              Modified fields: {Object.keys(editedRates).length} of {materialDefinitions.length} materials
+            </div>
+          </div>
           <div className="flex items-center gap-3">
             <button
               onClick={loadCurrentRates}
@@ -147,7 +241,7 @@ export default function PriceManagement() {
             </button>
             <button
               onClick={saveAllRates}
-              disabled={saving}
+              disabled={saving || Object.keys(editedRates).length === 0}
               className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? (
@@ -158,7 +252,7 @@ export default function PriceManagement() {
               ) : (
                 <>
                   <Save className="w-4 h-4" />
-                  Save All Rates
+                  Save Changes ({Object.keys(editedRates).length})
                 </>
               )}
             </button>
@@ -166,31 +260,64 @@ export default function PriceManagement() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {rawMaterials.map((material) => (
-            <div key={material.id} className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {material.name}
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">₹</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={material.price}
-                  onChange={(e) => handlePriceChange(material.id, e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="0.00"
-                />
+          {materialDefinitions.map((material) => {
+            const currentValue = getCurrentValue(material.id)
+            const displayValue = rates[material.id] || 0
+            const isModified = isFieldModified(material.id)
+            
+            return (
+              <div key={material.id} className={`border rounded-lg p-4 transition-colors ${
+                isModified ? 'border-indigo-300 bg-indigo-50' : 'border-gray-200 hover:border-indigo-300'
+              }`}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {material.name}
+                  {isModified && <span className="ml-2 text-indigo-600 text-xs">• Modified</span>}
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">₹</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={getInputValue(material.id)}
+                    onChange={(e) => handlePriceChange(material.id, e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder={`Current: ${displayValue.toFixed(2)}`}
+                  />
+                </div>
+                
+                {/* Updated Price Display */}
+                <div className="mt-2 text-xs">
+                  {isModified ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Previous: ₹{displayValue.toFixed(2)}</span>
+                      <span className={`font-medium ${
+                        currentValue > displayValue 
+                          ? 'text-green-600' 
+                          : currentValue < displayValue 
+                          ? 'text-red-600' 
+                          : 'text-gray-600'
+                      }`}>
+                        Updated: ₹{currentValue.toFixed(2)}
+                        {currentValue > displayValue && ' ↗'}
+                        {currentValue < displayValue && ' ↘'}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-gray-500">
+                      Current: ₹{displayValue.toFixed(2)}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
-        {lastUpdated && (
+        {rates.lastUpdated && (
           <div className="mt-6 pt-4 border-t border-gray-200">
             <p className="text-xs text-gray-500">
-              Last updated: {new Date(lastUpdated).toLocaleString('en-IN', { 
+              Last updated: {new Date(rates.lastUpdated).toLocaleString('en-IN', { 
                 dateStyle: 'medium', 
                 timeStyle: 'short' 
               })}

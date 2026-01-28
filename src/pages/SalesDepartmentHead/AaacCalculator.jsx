@@ -3,7 +3,7 @@ import { Calculator, ArrowLeft, RefreshCw, Zap } from "lucide-react"
 import { io } from "socket.io-client"
 import { AAAC_PRODUCTS, calculateAllProducts, DEFAULT_PRICES } from "../../constants/aaacProducts"
 
-export default function AaacCalculator({ setActiveView, prices: externalPrices }) {
+export default function AaacCalculator({ setActiveView, prices: externalPrices, onBack }) {
   const [products, setProducts] = useState([])
   const [prices, setPrices] = useState(DEFAULT_PRICES)
   const [customDiameter, setCustomDiameter] = useState("")
@@ -33,11 +33,22 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices }
         
         if (response.ok) {
           const data = await response.json();
-          // Backend returns rates in response
-          if (data.success && data.data) {
+          console.log('📥 Full API response from rates endpoint:', data);
+          
+          // Backend returns: { success: true, data: {...rates} }
+          const ratesData = data?.data || data;
+          console.log('🔍 Extracted rates data:', ratesData);
+          
+          // Check for Aluminium CG Grade - required
+          const aluCGPrice = ratesData?.aluminium_cg_grade;
+          const alloyT4Price = ratesData?.aluminium_alloy_grade_t4;
+          
+          console.log('🔍 Checking prices:', { aluCGPrice, alloyT4Price });
+          
+          if (aluCGPrice !== undefined) {
             const fetchedPrices = {
-              alu_price_per_kg: parseFloat(data.data.aluminium_ec_grade),
-              alloy_price_per_kg: parseFloat(data.data.aluminium_alloy)
+              alu_price_per_kg: parseFloat(aluCGPrice) || 0,
+              alloy_price_per_kg: parseFloat(alloyT4Price) || 0  // Use 0 if not found
             };
             setPrices(fetchedPrices);
             calculateAndSetProducts(fetchedPrices);
@@ -45,6 +56,8 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices }
             localStorage.setItem('aaacCurrentPrices', JSON.stringify(fetchedPrices));
             console.log('✅ Fetched prices from backend:', fetchedPrices);
             return;
+          } else {
+            console.warn('⚠️ Aluminium CG Grade price not found in response');
           }
         }
       } catch (error) {
@@ -229,7 +242,7 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices }
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setActiveView ? setActiveView('calculator') : window.history.back()}
+            onClick={() => onBack ? onBack() : (setActiveView ? setActiveView('calculator') : window.history.back())}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -255,57 +268,59 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices }
       <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6 border border-gray-100">
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
           <h2 className="text-lg font-bold text-white">AAAC Products Pricing</h2>
-          <p className="text-blue-100 text-sm">Current market prices: Alu ₹{(parseFloat(prices.alu_price_per_kg) || 0).toFixed(2)}/kg | Alloy ₹{(parseFloat(prices.alloy_price_per_kg) || 0).toFixed(2)}/kg</p>
+          <p className="text-blue-100 text-sm">Current market prices: Aluminium CG Grade ₹{(parseFloat(prices.alu_price_per_kg) || 0).toFixed(2)}/kg | Aluminium Alloy Grade T4 ₹{(parseFloat(prices.alloy_price_per_kg) || 0).toFixed(2)}/kg</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-full">
+          <table className="w-full min-w-full border-collapse">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r border-gray-200">NAME</th>
-                <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r border-gray-200">Nominal Area</th>
-                <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r border-gray-200">No of Strands</th>
-                <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r border-gray-200">Diameter</th>
-                <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r border-gray-200">Aluminium Weight</th>
-                <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r border-gray-200">Alu Price in Kg</th>
-                <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r border-gray-200">Alloy Price in KG</th>
-                <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r border-gray-200">Cost of Conductor (Aluminium) Per Mtr</th>
-                <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r border-gray-200">Cost of Conductor (Alloy) Per Mtr</th>
-                <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r border-gray-200">Cost of Conductor (Aluminium) Per KG</th>
-                <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Cost of Conductor (Alloy) Per KG</th>
+              <tr className="bg-gray-100 border-b-2 border-gray-300">
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">NAME</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Nominal Area</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">No of Strands</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Diameter</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Aluminium Weight</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Aluminium CG Grade</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Aluminium Alloy Grade T4</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Cost of Conductor (Aluminium) Per Mtr</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Cost of Conductor (Alloy) Per Mtr</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Cost of Conductor (Aluminium) Per KG</th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Cost of Conductor (Alloy) Per KG</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {products.map((product, index) => (
-                <tr key={index} className="hover:bg-blue-50 transition-colors">
-                  <td className="px-4 py-4 text-sm font-semibold text-gray-900 border-r border-gray-200">{product.name}</td>
-                  <td className="px-4 py-4 text-sm text-gray-700 border-r border-gray-200 font-mono">
+                <tr key={index} className="border-b border-gray-200 hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm font-semibold text-gray-900">
+                    {product.name}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
                     {(parseFloat(product.calculated_nominal_area) || parseFloat(product.nominal_area) || 0).toFixed(2)}
                   </td>
-                  <td className="px-4 py-4 text-sm text-gray-700 border-r border-gray-200 text-center">{product.no_of_strands}</td>
-                  <td className="px-4 py-4 text-sm text-gray-700 border-r border-gray-200 font-mono">{(parseFloat(product.diameter) || 0).toFixed(2)}</td>
-                  <td className="px-4 py-4 text-sm text-gray-700 border-r border-gray-200 font-mono">{(parseFloat(product.aluminium_weight) || 0).toFixed(2)}</td>
-                  <td className="px-4 py-4 text-sm font-semibold text-blue-600 border-r border-gray-200 font-mono">{prices.alu_price_per_kg.toFixed(2)}</td>
-                  <td className="px-4 py-4 text-sm font-semibold text-blue-600 border-r border-gray-200 font-mono">{prices.alloy_price_per_kg.toFixed(2)}</td>
-                  <td className="px-4 py-4 text-sm text-gray-700 border-r border-gray-200 font-mono">{(parseFloat(product.cost_alu_per_mtr) || 0).toFixed(8)}</td>
-                  <td className="px-4 py-4 text-sm text-gray-700 border-r border-gray-200 font-mono">{(parseFloat(product.cost_alloy_per_mtr) || 0).toFixed(8)}</td>
-                  <td className="px-4 py-4 text-sm text-gray-700 border-r border-gray-200 font-mono">{(parseFloat(product.cost_alu_per_kg) || 0).toFixed(2)}</td>
-                  <td className="px-4 py-4 text-sm text-gray-700 font-mono">{(parseFloat(product.cost_alloy_per_kg) || 0).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-700">{product.no_of_strands}</td>
+                  <td className="px-4 py-3 text-sm text-gray-700">{(parseFloat(product.diameter) || 0).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-700">{(parseFloat(product.aluminium_weight) || 0).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-sm font-semibold text-blue-600">{prices.alu_price_per_kg.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-sm font-semibold text-blue-600">{prices.alloy_price_per_kg.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-700">{(parseFloat(product.cost_alu_per_mtr) || 0).toFixed(8)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-700">{(parseFloat(product.cost_alloy_per_mtr) || 0).toFixed(8)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-700">{(parseFloat(product.cost_alu_per_kg) || 0).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-700">{(parseFloat(product.cost_alloy_per_kg) || 0).toFixed(2)}</td>
                 </tr>
               ))}
               {/* Custom Row with Integrated Calculator */}
-              <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200">
-                <td className="px-4 py-4 border-r border-gray-200">
+              <tr className="bg-blue-50 border-b-2 border-gray-300">
+                <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
                     <span className="text-sm font-bold text-blue-900">Custom Product</span>
                   </div>
                 </td>
-                <td className="px-4 py-4 border-r border-gray-200">
-                  <div className="text-sm font-mono text-gray-900">
+                <td className="px-4 py-3">
+                  <div className="text-sm text-gray-900">
                     {customCalculations?.nominal_area ? (parseFloat(customCalculations.nominal_area) || 0).toFixed(2) : '0.00'}
                   </div>
                 </td>
-                <td className="px-4 py-4 border-r border-gray-200">
+                <td className="px-4 py-3">
                   <input
                     type="number"
                     step="1"
@@ -315,7 +330,7 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices }
                     placeholder="Strands"
                   />
                 </td>
-                <td className="px-4 py-4 border-r border-gray-200">
+                <td className="px-4 py-3">
                   <input
                     type="number"
                     step="0.01"
@@ -325,35 +340,35 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices }
                     placeholder="Diameter"
                   />
                 </td>
-                <td className="px-4 py-4 border-r border-gray-200">
-                  <div className="text-sm font-mono text-gray-900">
+                <td className="px-4 py-3">
+                  <div className="text-sm text-gray-900">
                     {(parseFloat(customCalculations?.aluminium_weight) || 0).toFixed(2)}
                   </div>
                 </td>
-                <td className="px-4 py-4 text-sm font-semibold text-blue-600 border-r border-gray-200 font-mono">{prices.alu_price_per_kg.toFixed(2)}</td>
-                <td className="px-4 py-4 text-sm font-semibold text-blue-600 border-r border-gray-200 font-mono">{prices.alloy_price_per_kg.toFixed(2)}</td>
-                <td className="px-4 py-4 border-r border-gray-200">
-                  <div className="text-sm font-mono text-gray-900">
+                <td className="px-4 py-3 text-sm font-semibold text-blue-600">{prices.alu_price_per_kg.toFixed(2)}</td>
+                <td className="px-4 py-3 text-sm font-semibold text-blue-600">{prices.alloy_price_per_kg.toFixed(2)}</td>
+                <td className="px-4 py-3">
+                  <div className="text-sm text-gray-900">
                     {(parseFloat(customCalculations?.cost_alu_per_mtr) || 0).toFixed(8)}
                   </div>
                 </td>
-                <td className="px-4 py-4 border-r border-gray-200">
-                  <div className="text-sm font-mono text-gray-900">
+                <td className="px-4 py-3">
+                  <div className="text-sm text-gray-900">
                     {(parseFloat(customCalculations?.cost_alloy_per_mtr) || 0).toFixed(8)}
                   </div>
                 </td>
-                <td className="px-4 py-4 border-r border-gray-200">
-                  <div className="text-sm font-mono text-gray-900">
+                <td className="px-4 py-3">
+                  <div className="text-sm text-gray-900">
                     {(parseFloat(customCalculations?.cost_alu_per_kg) || (prices.alu_price_per_kg ? prices.alu_price_per_kg * 1.1 : 0)).toFixed(2)}
                   </div>
                 </td>
-                <td className="px-4 py-4">
-                  <div className="text-sm font-mono text-gray-900">
+                <td className="px-4 py-3">
+                  <div className="text-sm text-gray-900">
                     {(parseFloat(customCalculations?.cost_alloy_per_kg) || (prices.alloy_price_per_kg ? prices.alloy_price_per_kg * 1.1 : 0)).toFixed(2)}
                   </div>
                 </td>
               </tr>
-              <tr className="bg-blue-50 border-2 border-t-0 border-blue-200">
+              <tr className="bg-blue-50 border-b border-gray-300">
                 <td colSpan="11" className="px-4 py-3">
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-gray-600">
