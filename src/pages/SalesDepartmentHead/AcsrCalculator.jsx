@@ -236,12 +236,12 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
       </div>
 
       {/* Products Table */}
-      <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6 border border-gray-100 max-h-96">
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6 border border-gray-100">
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2">
           <h2 className="text-sm font-bold text-white">ACSR Products Pricing</h2>
           <p className="text-blue-100 text-xs">Current rates: Alu CG ₹{(parseFloat(rates.aluminium_cg_grade) || 0).toFixed(2)}/kg | Alu EC ₹{(parseFloat(rates.aluminium_ec_grade) || 0).toFixed(2)}/kg | Steel ₹{(parseFloat(rates.steel_rate) || 0).toFixed(2)}/kg</p>
         </div>
-        <div className="overflow-x-auto overflow-y-auto max-h-80">
+        <div className="overflow-x-auto">
           <table className="w-full min-w-full text-xs">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">

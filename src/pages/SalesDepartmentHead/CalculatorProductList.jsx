@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react"
 import { Calculator, ArrowRight, Sparkles } from "lucide-react"
 import AaacCalculator from "./AaacCalculator"
 import AcsrCalculator from "./AcsrCalculator"
+import AbCableCalculator from "./AbCableCalculator"
 
 export default function CalculatorProductList({ setActiveView }) {
   const [products, setProducts] = useState([])
@@ -33,8 +34,17 @@ export default function CalculatorProductList({ setActiveView }) {
         defaultUnit: 'KM',
         description: 'Calculate pricing and specifications for all ACSR cable types and variants'
       }
+
+      const abCableProduct = {
+        id: 'ab_cable',
+        name: 'Aerial Bunched Cable (AB Cable)',
+        image: "/images/products/aerial bunch cable.jpeg",
+        hsn: '8544',
+        defaultUnit: 'KM',
+        description: 'Calculate pricing for AB Cable (ISI + COMM variants) using Excel-based formulas'
+      }
       
-      setProducts([aaacProduct, acsrProduct])
+      setProducts([aaacProduct, acsrProduct, abCableProduct])
     } catch (error) {
       console.error('Error loading products:', error)
     } finally {
@@ -47,6 +57,8 @@ export default function CalculatorProductList({ setActiveView }) {
       setSelectedProduct('aaac')
     } else if (product.id === 'acsr') {
       setSelectedProduct('acsr')
+    } else if (product.id === 'ab_cable') {
+      setSelectedProduct('ab_cable')
     }
   }
 
@@ -57,6 +69,10 @@ export default function CalculatorProductList({ setActiveView }) {
 
   if (selectedProduct === 'acsr') {
     return <AcsrCalculator setActiveView={setActiveView} onBack={() => setSelectedProduct(null)} />
+  }
+
+  if (selectedProduct === 'ab_cable') {
+    return <AbCableCalculator setActiveView={setActiveView} onBack={() => setSelectedProduct(null)} />
   }
 
   if (loading) {
