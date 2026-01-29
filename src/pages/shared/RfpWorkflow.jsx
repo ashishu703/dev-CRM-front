@@ -111,24 +111,24 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
   const openCalculatorForProduct = (rfp, productSpec, productMeta = {}) => {
     const spec = (productSpec || '').trim();
     if (!spec) return;
+    const normalizedSpec = spec.toUpperCase();
 
     const baseContext = {
       productSpec: spec,
       rfpId: rfp.rfp_id || null,
       rfpRequestId: rfp.id,
       quantity: productMeta.quantity ?? rfp.quantity ?? null,
-      length: productMeta.length ?? null
+      length: productMeta.length ?? null,
+      lengthUnit: productMeta.lengthUnit ?? null
     };
 
     const openCalculatorCb = onOpenCalculator || ((context) => {
-      // Always store context for calculator
       try {
         window.localStorage.setItem(
           'rfpCalculatorRequest',
           JSON.stringify(context)
         );
       } catch {
-        // ignore storage errors
       }
 
       if (typeof setActiveView === 'function') {
@@ -136,17 +136,19 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       }
     });
 
-    // Case-sensitive checks for known product families
-    if (spec.includes('AAAC')) {
+    if (normalizedSpec.includes('AAAC')) {
       openCalculatorCb({ family: 'AAAC', ...baseContext });
       return;
     }
-    if (spec.includes('ACSR')) {
+    if (normalizedSpec.includes('ACSR')) {
       openCalculatorCb({ family: 'ACSR', ...baseContext });
       return;
     }
+    if (normalizedSpec.includes('AB CABLE') || normalizedSpec.includes('AERIAL BUNCHED')) {
+      openCalculatorCb({ family: 'AB_CABLE', ...baseContext });
+      return;
+    }
 
-    // Unknown family – treat as coming soon
     window.alert('Calculator for this product is coming soon.');
   };
 
@@ -218,7 +220,6 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
           }
         }
       } catch {
-        // ignore malformed storage
       }
 
       const response = await rfpService.approve(rfpId, {
@@ -228,7 +229,6 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       fetchRfps();
       setShowRfpApprovalModal(false);
       setSelectedRfp(null);
-      // Trigger refresh of RFP Record tab
       window.dispatchEvent(new CustomEvent('rfpRecordUpdated', { detail: { type: 'approved', rfpId: response?.data?.rfp_id } }))
     } catch (error) {
       setError(error.message || 'Failed to approve RFP');
@@ -252,11 +252,9 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
   };
 
   const openRfpApprovalModal = async (rfp) => {
-    // Fetch full RFP details with products
     try {
       const response = await rfpService.getById(rfp.id);
       if (response.success && response.data) {
-        // Response structure: { rfp, prices, auditLogs }
         const rfpData = response.data.rfp || response.data;
         setSelectedRfp(rfpData);
         setShowRfpApprovalModal(true);

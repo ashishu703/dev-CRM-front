@@ -25,6 +25,8 @@ export default function CalculatorProductList({ setActiveView }) {
         setSelectedProduct('aaac')
       } else if (parsed.family === 'ACSR') {
         setSelectedProduct('acsr')
+      } else if (parsed.family === 'AB_CABLE') {
+        setSelectedProduct('ab_cable')
       }
     } catch {
       // ignore malformed storage
