@@ -14,9 +14,12 @@ export default function CalculatorProductList({ setActiveView }) {
     loadProducts()
   }, [])
 
-  // Auto-fetch: when user clicks "Calculate Price" from RFP, context is stored here – redirect straight to the right calculator
+  // Auto-open a specific calculator only when coming from RFP "Calculate Price"; sidebar "Calculator" always shows the three cards
   useEffect(() => {
     try {
+      const fromRfp = window.sessionStorage.getItem('calculatorFromRfp')
+      if (!fromRfp) return
+      window.sessionStorage.removeItem('calculatorFromRfp')
       const raw = window.localStorage.getItem('rfpCalculatorRequest')
       if (!raw) return
       const parsed = JSON.parse(raw)

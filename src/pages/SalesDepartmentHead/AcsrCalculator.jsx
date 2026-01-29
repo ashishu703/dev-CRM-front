@@ -96,9 +96,9 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
     }
   }, [externalRates])
 
-  // Auto-select product based on requested spec (case-sensitive)
+  // Auto-select product based on requested spec (case-sensitive); skip if isCustom
   useEffect(() => {
-    if (!rfpContext?.productSpec || !products.length) return
+    if (rfpContext?.isCustom || !rfpContext?.productSpec || !products.length) return
     const spec = rfpContext.productSpec
     const idx = products.findIndex(p => spec.includes(p.name))
     if (idx >= 0) {
@@ -176,7 +176,7 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
 
   const handleCustomCalculate = () => {
     if (!customNoOfWiresAluminium || !customNoOfWiresSteel || !customSizeAluminium || !customSizeSteel) {
-      alert('Please enter all values for custom calculation')
+      Toast.error('Please enter all values for custom calculation (AL wires, Steel wires, AL size, Steel size)')
       return
     }
 
@@ -187,7 +187,7 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
 
     if (isNaN(noOfWiresAluminium) || isNaN(noOfWiresSteel) || isNaN(sizeAluminium) || isNaN(sizeSteel) ||
         noOfWiresAluminium <= 0 || noOfWiresSteel <= 0 || sizeAluminium <= 0 || sizeSteel <= 0) {
-      alert('Please enter valid positive numbers')
+      Toast.error('Please enter valid positive numbers')
       return
     }
 
@@ -219,15 +219,46 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
       })
     } catch (error) {
       console.error('Error calculating custom product:', error)
-      alert('Error calculating custom product')
+      Toast.error('Error calculating custom product')
     }
   }
 
-  const selectedProduct = selectedIndex != null ? products[selectedIndex] : null
+  const CUSTOM_INDEX = -1
+  const selectedProduct =
+    selectedIndex === CUSTOM_INDEX
+      ? customCalculations
+        ? {
+            total_weight: customCalculations.total_weight,
+            cost_conductor_isi_per_mtr: customCalculations.cost_conductor_isi_per_mtr,
+            cost_conductor_commercial_per_mtr: customCalculations.cost_conductor_commercial_per_mtr,
+            cost_conductor_isi_per_kg: customCalculations.cost_conductor_isi_per_kg,
+            cost_conductor_commercial_per_kg: customCalculations.cost_conductor_commercial_per_kg
+          }
+        : null
+      : selectedIndex != null && products[selectedIndex]
+        ? products[selectedIndex]
+        : null
+
+  useEffect(() => {
+    if (rfpContext?.isCustom) setSelectedIndex(CUSTOM_INDEX)
+  }, [rfpContext?.isCustom])
+
+  // Pre-fill custom row from RFP productSpec when possible (e.g. "30/2.59" "7/2.59" → AL wires/size, Steel wires/size)
+  useEffect(() => {
+    if (!rfpContext?.isCustom || !rfpContext?.productSpec) return
+    const spec = String(rfpContext.productSpec).trim()
+    const matches = [...spec.matchAll(/(\d+)\s*\/\s*([\d.]+)/g)]
+    if (matches.length >= 2 && !customNoOfWiresAluminium && !customSizeAluminium) {
+      setCustomNoOfWiresAluminium(matches[0][1])
+      setCustomSizeAluminium(matches[0][2])
+      setCustomNoOfWiresSteel(matches[1][1])
+      setCustomSizeSteel(matches[1][2])
+    }
+  }, [rfpContext?.isCustom, rfpContext?.productSpec])
 
   const handleConfirmSelection = () => {
     if (!selectedProduct || !rfpContext) {
-      alert('Please select a product row first')
+      Toast.error(selectedIndex === CUSTOM_INDEX ? 'Enter wire counts & sizes and click Calculate first' : 'Please select a product row first')
       return
     }
     setShowChargesModal(true)
@@ -470,9 +501,19 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
                 </tr>
               ))}
               {/* Custom Row */}
-              <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200">
+              <tr
+                className={`cursor-pointer border-2 border-blue-200 ${selectedIndex === CUSTOM_INDEX ? 'bg-blue-100' : 'bg-gradient-to-r from-blue-50 to-indigo-50'} hover:bg-blue-100`}
+                onClick={() => setSelectedIndex(CUSTOM_INDEX)}
+              >
                 <td className="px-2 py-1 border-r border-gray-200">
                   <div className="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      className="text-blue-600"
+                      checked={selectedIndex === CUSTOM_INDEX}
+                      onChange={() => setSelectedIndex(CUSTOM_INDEX)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
                     <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
                     <span className="text-xs font-bold text-blue-900">Custom</span>
                   </div>
@@ -566,18 +607,27 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
               </tr>
               <tr className="bg-blue-50 border-2 border-t-0 border-blue-200">
                 <td colSpan="18" className="px-2 py-1">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-xs text-gray-600">
-                      <span className="font-medium">💡 Tip:</span> Enter wire counts and sizes to calculate custom ACSR product pricing instantly
+                      <span className="font-medium">💡 Tip:</span> Enter wire counts and sizes, click Calculate, then Use Selected to add charges and save to RFP
                     </div>
-                    <button
-                      onClick={handleConfirmSelection}
-                      disabled={!selectedProduct}
-                      className="px-2 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                    >
-                      <Calculator className="w-3 h-3" />
-                      Use Selected
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleCustomCalculate(); }}
+                        className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold"
+                      >
+                        Calculate
+                      </button>
+                      <button
+                        onClick={handleConfirmSelection}
+                        disabled={!selectedProduct}
+                        className="px-2 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                      >
+                        <Calculator className="w-3 h-3" />
+                        Use Selected
+                      </button>
+                    </div>
                   </div>
                 </td>
               </tr>

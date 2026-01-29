@@ -251,11 +251,40 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices, 
     }
   }
 
-  const selectedProduct = products.find(p => p.id === selectedProductId) || null
+  const CUSTOM_PRODUCT_ID = 'custom'
+  const selectedProduct =
+    selectedProductId === CUSTOM_PRODUCT_ID
+      ? customCalculations
+        ? {
+            cost_alu_per_mtr: customCalculations.cost_alu_per_mtr,
+            cost_alloy_per_mtr: customCalculations.cost_alloy_per_mtr,
+            cost_alu_per_kg: customCalculations.cost_alu_per_kg,
+            cost_alloy_kg: customCalculations.cost_alloy_per_kg
+          }
+        : null
+      : products.find((p) => p.id === selectedProductId) || null
+
+  useEffect(() => {
+    if (rfpContext?.isCustom) setSelectedProductId(CUSTOM_PRODUCT_ID)
+  }, [rfpContext?.isCustom])
+
+  // Pre-fill custom row from RFP productSpec when possible (e.g. "6/1.5" or "6 x 1.5" → strands, diameter)
+  useEffect(() => {
+    if (!rfpContext?.isCustom || !rfpContext?.productSpec) return
+    const spec = String(rfpContext.productSpec).trim()
+    const match = spec.match(/(\d+)\s*[\/xX×]\s*([\d.]+)/)
+    if (match) {
+      const [, strands, diameter] = match
+      if (strands && diameter && !customNoOfStrands && !customDiameter) {
+        setCustomNoOfStrands(strands)
+        setCustomDiameter(diameter)
+      }
+    }
+  }, [rfpContext?.isCustom, rfpContext?.productSpec])
 
   const handleConfirmSelection = () => {
     if (!selectedProduct || !rfpContext) {
-      alert('Please select a product row first')
+      Toast.error(selectedProductId === CUSTOM_PRODUCT_ID ? 'Enter strands & diameter and click Calculate first' : 'Please select a product row first')
       return
     }
     setShowChargesModal(true)
@@ -516,9 +545,19 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices, 
                 </tr>
               ))}
               {/* Custom Row with Integrated Calculator */}
-              <tr className="bg-blue-50 border-b-2 border-gray-300">
+              <tr
+                className={`border-b-2 border-gray-300 cursor-pointer ${selectedProductId === CUSTOM_PRODUCT_ID ? 'bg-blue-100' : 'bg-blue-50'} hover:bg-blue-100`}
+                onClick={() => setSelectedProductId(CUSTOM_PRODUCT_ID)}
+              >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      className="text-blue-600"
+                      checked={selectedProductId === CUSTOM_PRODUCT_ID}
+                      onChange={() => setSelectedProductId(CUSTOM_PRODUCT_ID)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
                     <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
                     <span className="text-sm font-bold text-blue-900">Custom Product</span>
                   </div>
@@ -578,18 +617,27 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices, 
               </tr>
               <tr className="bg-blue-50 border-b border-gray-300">
                 <td colSpan="11" className="px-4 py-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="text-sm text-gray-600">
-                      <span className="font-medium">💡 Tip:</span> Enter number of strands and diameter to calculate custom product pricing instantly
+                      <span className="font-medium">💡 Tip:</span> Enter strands & diameter, click Calculate, then Use Selected Row to add charges and save to RFP
                     </div>
-                    <button
-                      onClick={handleConfirmSelection}
-                      disabled={!selectedProduct}
-                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                      <Calculator className="w-4 h-4" />
-                      Use Selected Row
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleCustomCalculate(); }}
+                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold"
+                      >
+                        Calculate
+                      </button>
+                      <button
+                        onClick={handleConfirmSelection}
+                        disabled={!selectedProduct}
+                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        <Calculator className="w-4 h-4" />
+                        Use Selected Row
+                      </button>
+                    </div>
                   </div>
                 </td>
               </tr>

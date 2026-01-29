@@ -129,6 +129,7 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
           'rfpCalculatorRequest',
           JSON.stringify(context)
         );
+        window.sessionStorage.setItem('calculatorFromRfp', '1');
       } catch {
       }
 
@@ -150,7 +151,12 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       return;
     }
 
-    window.alert('Calculator for this product is coming soon.');
+    // Custom / unknown product: open AAAC or ACSR with isCustom so DH can use the Custom row
+    if (normalizedSpec.includes('ACSR') || normalizedSpec.includes('STEEL') || normalizedSpec.includes('REINFORCED')) {
+      openCalculatorCb({ family: 'ACSR', isCustom: true, ...baseContext });
+      return;
+    }
+    openCalculatorCb({ family: 'AAAC', isCustom: true, ...baseContext });
   };
 
   const fetchRfps = async () => {
