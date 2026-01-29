@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react"
 import { Calculator, ArrowLeft, RefreshCw, Zap } from "lucide-react"
 import { io } from "socket.io-client"
 import { calculateAllProducts, DEFAULT_PRICES } from "../../constants/aaacProducts"
-import rfpService from "../../services/RfpService"
 import Toast from "../../utils/Toast"
+import rfpService from "../../services/RfpService"
 
 export default function AaacCalculator({ setActiveView, prices: externalPrices, onBack, rfpContext }) {
   const [products, setProducts] = useState([])
@@ -341,14 +341,10 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices, 
       })
     )
 
-    // Auto-approve the RFP from calculator
-    try {
-      await rfpService.approve(rfpContext.rfpRequestId, {
-        calculatorTotalPrice: totalPrice,
-        calculatorDetail: {
+    if (rfpContext.rfpRequestId && rfpContext.productSpec != null) {
+      try {
+        const calculatorDetail = {
           family: 'AAAC',
-          rfpId: rfpContext.rfpId,
-          rfpRequestId: rfpContext.rfpRequestId,
           productSpec: rfpContext.productSpec,
           length: lengthValue,
           rateType,
@@ -357,13 +353,20 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices, 
           extraCharges: extraRows,
           totalPrice
         }
-      })
-      Toast.success('RFP approved with calculator pricing.')
-    } catch (error) {
-      console.error('Error auto-approving RFP from calculator:', error)
-      Toast.error(error?.message || 'Failed to approve RFP from calculator')
+        await rfpService.setProductCalculatorPrice(rfpContext.rfpRequestId, {
+          productSpec: rfpContext.productSpec,
+          totalPrice,
+          calculatorDetail
+        })
+        try {
+          window.localStorage.setItem('rfpApprovalReopen', JSON.stringify({ rfpRequestId: rfpContext.rfpRequestId, at: Date.now() }))
+        } catch { /* ignore */ }
+      } catch (err) {
+        Toast.error(err?.message || 'Failed to save price to RFP')
+      }
     }
 
+    Toast.success('Pricing saved. Returning to RFP Workflow — Approve will enable when all products are priced.')
     setShowChargesModal(false)
     if (setActiveView) {
       setActiveView('rfp-workflow')

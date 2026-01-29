@@ -1106,7 +1106,9 @@ const LeadsSimplified = () => {
   const fetchQuotationAndPICounts = async () => {
     try {
       setLoadingCounts(true);
-      const result = await leadsFilterService.fetchQuotationAndPICounts();
+      // Quotation approval is no longer required (pricing decided upstream),
+      // so don't fetch "pending/verification/sent_for_approval" quotation buckets here.
+      const result = await leadsFilterService.fetchQuotationAndPICounts({ includeQuotationPending: false });
       setQuotationCounts(result.quotationCounts);
       setPiCounts(result.piCounts);
       return result;
@@ -1133,6 +1135,15 @@ const LeadsSimplified = () => {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  // Quotation approval is not used by Department Head – clear quotation filter if it was active
+  useEffect(() => {
+    if (statusFilter.type === 'quotation') {
+      setStatusFilter({ type: null, status: null });
+      setFilteredCustomerIds(new Set());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // OPTIMIZED: Load counts on initial mount, but don't load all leads until filters are used
   useEffect(() => {
@@ -1765,6 +1776,8 @@ const LeadsSimplified = () => {
         assignmentFilter={assignmentFilter}
         assignedCount={assignedCount}
         unassignedCount={unassignedCount}
+        showQuotationPending={false}
+        showQuotationSection={false}
         onBadgeClick={handleBadgeClick}
         onAssignmentFilter={async (filter) => {
           // OPTIMIZED: Load all leads before applying assignment filter
@@ -2405,8 +2418,6 @@ const LeadsSimplified = () => {
         isValueAssigned={isValueAssigned}
         onViewQuotation={handleViewQuotation}
         onDownloadPDF={handleDownloadPDF}
-        onApproveQuotation={handleApproveQuotation}
-        onRejectQuotation={handleRejectQuotation}
         onViewPI={handleViewPI}
         onApprovePI={handleApprovePI}
         onRejectPI={handleRejectPI}
@@ -2736,16 +2747,6 @@ const LeadsSimplified = () => {
                 handleViewQuotation(quotation.id);
               } else {
                 toastManager.error('Quotation data is missing');
-              }
-            }}
-            onApproveQuotation={(quotation) => {
-              if (quotation?.id) {
-                handleApproveQuotation(quotation.id);
-              }
-            }}
-            onRejectQuotation={(quotation) => {
-              if (quotation?.id) {
-                handleRejectQuotation(quotation.id);
               }
             }}
             onPIView={(pi) => {

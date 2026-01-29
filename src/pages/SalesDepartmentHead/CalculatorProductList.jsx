@@ -14,6 +14,7 @@ export default function CalculatorProductList({ setActiveView }) {
     loadProducts()
   }, [])
 
+  // Auto-fetch: when user clicks "Calculate Price" from RFP, context is stored here – redirect straight to the right calculator
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem('rfpCalculatorRequest')
@@ -104,7 +105,13 @@ export default function CalculatorProductList({ setActiveView }) {
   }
 
   if (selectedProduct === 'ab_cable') {
-    return <AbCableCalculator setActiveView={setActiveView} onBack={() => setSelectedProduct(null)} />
+    return (
+      <AbCableCalculator
+        setActiveView={setActiveView}
+        onBack={() => setSelectedProduct(null)}
+        rfpContext={rfpContext}
+      />
+    )
   }
 
   if (loading) {

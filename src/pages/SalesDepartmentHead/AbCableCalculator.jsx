@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Calculator, RefreshCw } from "lucide-react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
+import { ArrowLeft, Calculator, Clock, RefreshCw } from "lucide-react";
 import {
   AB_CABLE_EXCEL_PUBLIC_PATH,
   AB_CABLE_RATE_HEADERS,
+  AB_CABLE_TYPE_ISI,
+  AB_CABLE_COMM_TYPES,
 } from "../../constants/abCableConstants";
 import {
   buildAbCableGroups,
@@ -10,6 +12,8 @@ import {
   readRowAsObject,
   setRowCellByHeader,
 } from "../../utils/abCableExcelEngine";
+import Toast from "../../utils/Toast";
+import rfpService from "../../services/RfpService";
 
 function fmtNumber(v, digits = 2) {
   const n = typeof v === "number" ? v : parseFloat(v);
@@ -17,11 +21,18 @@ function fmtNumber(v, digits = 2) {
   return v ?? "";
 }
 
-export default function AbCableCalculator({ setActiveView, onBack }) {
+export default function AbCableCalculator({ setActiveView, onBack, rfpContext }) {
   const [loading, setLoading] = useState(true);
   const [engine, setEngine] = useState(null);
   const [groups, setGroups] = useState([]);
   const [rates, setRates] = useState(null);
+  const [selectedSize, setSelectedSize] = useState("");
+  const [selectedType, setSelectedType] = useState(AB_CABLE_TYPE_ISI);
+  const [showChargesModal, setShowChargesModal] = useState(false);
+  const [chargesRows, setChargesRows] = useState([{ label: "Drum", amount: "" }]);
+  const [hasExtraCharges, setHasExtraCharges] = useState(true);
+  const tableBodyRef = useRef(null);
+  const sizeMismatchWarnedRef = useRef(false);
 
   const dataRows = useMemo(() => {
     if (!engine) return [];
@@ -37,6 +48,148 @@ export default function AbCableCalculator({ setActiveView, onBack }) {
     }
     return rows;
   }, [engine]);
+
+  // One radio per SIZE (select size), one radio per TYPE within that size (select type)
+  const selectedRowIndex = useMemo(() => {
+    if (!selectedSize || !selectedType) return null;
+    const typeUpper = selectedType.toUpperCase();
+    const idx = dataRows.findIndex(({ row }, i) => {
+      const t = String(row["TYPE"] || "").trim().toUpperCase();
+      const s = String(row["SIZE"] || "").trim();
+      const groupSize = t === "ISI" ? s : (() => {
+        for (let j = i - 1; j >= 0; j--) {
+          if (String(dataRows[j].row["TYPE"] || "").trim().toUpperCase() === "ISI") return String(dataRows[j].row["SIZE"] || "").trim();
+        }
+        return s;
+      })();
+      return groupSize === selectedSize && t === typeUpper;
+    });
+    return idx >= 0 ? idx : null;
+  }, [dataRows, selectedSize, selectedType]);
+
+  const selectedRowData = selectedRowIndex != null ? dataRows[selectedRowIndex] : null;
+  const selectedFinalRate = selectedRowData ? parseFloat(selectedRowData.row["FINAL RATE"]) : null;
+
+  const uniqueSizes = useMemo(() => {
+    const sizes = new Set();
+    dataRows.forEach(({ row }) => {
+      const type = String(row["TYPE"] || "").trim().toUpperCase();
+      const size = String(row["SIZE"] || "").trim();
+      if (type === "ISI" && size && !size.toUpperCase().startsWith("COMM")) sizes.add(size);
+    });
+    return Array.from(sizes).sort((a, b) => {
+      const na = parseFloat(a);
+      const nb = parseFloat(b);
+      if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+      return String(a).localeCompare(String(b));
+    });
+  }, [dataRows]);
+
+  // Group rows by size: each group = one SIZE (e.g. 3CX16+16 SQ MM) covering its 4 variants (ISI, COMM-1, COMM-2, COMM-3)
+  const sizeGroups = useMemo(() => {
+    const groups = [];
+    let current = null;
+    dataRows.forEach(({ row }, dataIndex) => {
+      const type = String(row["TYPE"] || "").trim().toUpperCase();
+      const size = String(row["SIZE"] || "").trim();
+      if (type === "ISI" && size && !size.toUpperCase().startsWith("COMM")) {
+        current = { size, dataIndices: [dataIndex] };
+        groups.push(current);
+      } else if (current) {
+        current.dataIndices.push(dataIndex);
+      }
+    });
+    return groups;
+  }, [dataRows]);
+
+  // Normalize size string for matching (RFP may send "3C x 16+16 SQ MM", Excel has "3CX16+16 SQ MM")
+  const normalizeForMatch = (str) =>
+    String(str || "")
+      .toUpperCase()
+      .replace(/\s+/g, " ")
+      .replace(/\s*X\s*/gi, "X")
+      .replace(/\s/g, "");
+
+  // Extract size token from RFP spec (e.g. "AB CABLE 3CX16 SQMM" -> "3CX16", "3CX70 SQMM" -> "3CX70")
+  const extractSizeTokenFromSpec = (productSpec) => {
+    const norm = normalizeForMatch(productSpec || "");
+    const m = norm.match(/\d+CX\d+/);
+    return m ? m[0] : null;
+  };
+
+  // Auto-select size + variant from RFP productSpec so DH lands on the right size without searching
+  useEffect(() => {
+    if (!dataRows.length || !uniqueSizes.length) return;
+    if (rfpContext?.productSpec) {
+      const spec = String(rfpContext.productSpec || "").toUpperCase().replace(/\s+/g, " ");
+      const specNorm = normalizeForMatch(rfpContext.productSpec);
+      const sizeToken = extractSizeTokenFromSpec(rfpContext.productSpec);
+      // 1) Match by extracted size token (e.g. "3CX16" from "AB CABLE 3CX16 SQMM" -> Excel "3CX16+16 SQ MM")
+      let matchSize =
+        (sizeToken && uniqueSizes.find((s) => normalizeForMatch(s).includes(sizeToken))) ||
+        uniqueSizes.find((s) => normalizeForMatch(s) === specNorm) ||
+        uniqueSizes.find(
+          (s) =>
+            spec.includes(s) ||
+            spec.includes(s.replace(/\s/g, "")) ||
+            specNorm.includes(normalizeForMatch(s)) ||
+            normalizeForMatch(s).includes(specNorm)
+        );
+      let matchType = AB_CABLE_TYPE_ISI;
+      if (spec.includes("COMM-3")) matchType = "COMM-3";
+      else if (spec.includes("COMM-2")) matchType = "COMM-2";
+      else if (spec.includes("COMM-1") || spec.includes("COMM 1")) matchType = "COMM-1";
+      else if (spec.includes("ISI")) matchType = AB_CABLE_TYPE_ISI;
+      if (matchSize) {
+        const typeExists = dataRows.some(({ row }, i) => {
+          const t = String(row["TYPE"] || "").trim().toUpperCase();
+          const s = String(row["SIZE"] || "").trim();
+          const g = t === "ISI" ? s : (() => {
+            for (let j = i - 1; j >= 0; j--) {
+              if (String(dataRows[j].row["TYPE"] || "").trim().toUpperCase() === "ISI") return String(dataRows[j].row["SIZE"] || "").trim();
+            }
+            return s;
+          })();
+          return g === matchSize && t === matchType.toUpperCase();
+        });
+        setSelectedSize(matchSize);
+        setSelectedType(typeExists ? matchType : AB_CABLE_TYPE_ISI);
+        return;
+      }
+    }
+    if (!selectedSize) {
+      setSelectedSize(uniqueSizes[0]);
+      setSelectedType(AB_CABLE_TYPE_ISI);
+    }
+  }, [dataRows.length, uniqueSizes, rfpContext?.productSpec]);
+
+  // Warn once if user selected a different size than RFP product (e.g. RFP 3CX16 but selected 3CX25)
+  useEffect(() => {
+    if (!rfpContext?.productSpec || selectedRowIndex == null || !selectedRowData || sizeMismatchWarnedRef.current) return;
+    const expectedToken = extractSizeTokenFromSpec(rfpContext.productSpec);
+    const selectedSizeStr = String(selectedRowData.row["SIZE"] || "").trim();
+    const selectedToken = extractSizeTokenFromSpec(selectedSizeStr);
+    if (expectedToken && selectedToken && expectedToken !== selectedToken) {
+      sizeMismatchWarnedRef.current = true;
+      Toast.warning(
+        `RFP product is ${expectedToken} but you selected ${selectedToken}. Make sure this is intended before saving.`
+      );
+    }
+  }, [rfpContext?.productSpec, selectedRowIndex, selectedRowData]);
+
+  // Scroll selected row into view (when from RFP, delay slightly so table has painted)
+  useEffect(() => {
+    if (selectedRowIndex == null || !tableBodyRef.current) return;
+    const scrollToRow = () => {
+      const rowEl = tableBodyRef.current?.querySelector(`[data-row-index="${selectedRowIndex}"]`);
+      if (rowEl) rowEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+    if (rfpContext?.productSpec) {
+      const t = setTimeout(scrollToRow, 300);
+      return () => clearTimeout(t);
+    }
+    scrollToRow();
+  }, [selectedRowIndex, rfpContext?.productSpec]);
 
   const loadExcel = async () => {
     setLoading(true);
@@ -123,6 +276,90 @@ export default function AbCableCalculator({ setActiveView, onBack }) {
     setEngine({ ...engine });
   };
 
+  const updateChargeRow = (index, key, value) => {
+    setChargesRows((rows) => rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
+  };
+  const addChargeRow = () => setChargesRows((rows) => [...rows, { label: "", amount: "" }]);
+  const removeChargeRow = (index) => setChargesRows((rows) => rows.filter((_, i) => i !== index));
+
+  const handleConfirmSelection = () => {
+    if (selectedRowIndex == null || !rfpContext) {
+      Toast.error("Please select a product (Size + Type) first");
+      return;
+    }
+    setShowChargesModal(true);
+  };
+
+  const handleSaveCharges = async () => {
+    if (!rfpContext || selectedRowData == null) {
+      setShowChargesModal(false);
+      return;
+    }
+    const basePerUnit = Number(selectedFinalRate) || 0;
+    const lengthValue = parseFloat(rfpContext.length || rfpContext.quantity || 0) || 0;
+    const baseTotal = basePerUnit * lengthValue;
+    const extraRows = hasExtraCharges ? chargesRows : [];
+    const extraCharges = extraRows.map((row) => Number.parseFloat(row.amount) || 0).filter(Number.isFinite);
+    const extraTotal = extraCharges.reduce((sum, v) => sum + v, 0);
+    const totalPrice = baseTotal + extraTotal;
+    const productSpec = `${selectedRowData.row["SIZE"] || ""} ${selectedRowData.row["TYPE"] || ""}`.trim() || rfpContext.productSpec;
+    const rateType = String(selectedRowData.row["TYPE"] || "").trim() || AB_CABLE_TYPE_ISI;
+
+    try {
+      window.localStorage.setItem(
+        "rfpCalculatorResult",
+        JSON.stringify({
+          family: "AB_CABLE",
+          rfpId: rfpContext.rfpId,
+          rfpRequestId: rfpContext.rfpRequestId,
+          productSpec: productSpec || rfpContext.productSpec,
+          length: lengthValue,
+          rateType,
+          basePerUnit,
+          baseTotal,
+          extraCharges: extraRows,
+          totalPrice,
+        })
+      );
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(
+      new CustomEvent("rfpCalculatorPriceReady", {
+        detail: { family: "AB_CABLE", rfpId: rfpContext.rfpId, rfpRequestId: rfpContext.rfpRequestId, totalPrice },
+      })
+    );
+    // Backend matches by RFP's product_spec; use rfpContext.productSpec so the correct row is updated
+    const specForApi = rfpContext.productSpec || productSpec;
+    if (rfpContext.rfpRequestId && specForApi != null) {
+      try {
+        const calculatorDetail = {
+          family: "AB_CABLE",
+          productSpec: specForApi,
+          length: lengthValue,
+          rateType,
+          basePerUnit,
+          baseTotal,
+          extraCharges: extraRows,
+          totalPrice,
+        };
+        await rfpService.setProductCalculatorPrice(rfpContext.rfpRequestId, {
+          productSpec: specForApi,
+          totalPrice,
+          calculatorDetail,
+        });
+        try {
+          window.localStorage.setItem("rfpApprovalReopen", JSON.stringify({ rfpRequestId: rfpContext.rfpRequestId, at: Date.now() }));
+        } catch { /* ignore */ }
+      } catch (err) {
+        Toast.error(err?.message || "Failed to save price to RFP");
+      }
+    }
+    Toast.success("Pricing saved. Returning to RFP Workflow — Approve will enable when all products are priced.");
+    setShowChargesModal(false);
+    if (setActiveView) setActiveView("rfp-workflow");
+  };
+
   if (loading) {
     return (
       <div className="p-6">
@@ -161,15 +398,20 @@ export default function AbCableCalculator({ setActiveView, onBack }) {
         </button>
       </div>
 
-      {/* Table */}
+      {/* Single table card – selection row built into table */}
       <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6 border border-gray-100">
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2">
           <h2 className="text-sm font-bold text-white">Aerial Bunched Cable (AB Cable) – ISI + COMM</h2>
-          <p className="text-blue-100 text-xs">
-            Formulas are computed from the Excel sheet; Accounts rates (if available) override the blue-box columns.
+          <p className="text-blue-100 text-xs mt-0.5">
+            Size → Variant (ISI / COMM-1 / COMM-2 / COMM-3). Price for selected row below.
           </p>
+          {selectedRowData && Number.isFinite(selectedFinalRate) && (
+            <p className="text-white text-xs font-semibold mt-1.5 bg-white/20 rounded px-2 py-0.5 inline-block">
+              <span className="font-bold">{selectedSize}</span> · <span className="font-bold">{selectedType}</span>: ₹{fmtNumber(selectedFinalRate)}/km
+            </p>
+          )}
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" ref={tableBodyRef}>
           <table className="w-full min-w-full text-xs">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -208,13 +450,65 @@ export default function AbCableCalculator({ setActiveView, onBack }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {dataRows.map(({ rowIndex, row }) => {
-                const messengerVal = row["INSULATION THICKNESS (MESSENGER)"] ?? "";
+              {sizeGroups.flatMap((group, groupIdx) =>
+                group.dataIndices.map((dataIndex, variantIdx) => {
+                  const { rowIndex, row } = dataRows[dataIndex];
+                  const messengerVal = row["INSULATION THICKNESS (MESSENGER)"] ?? "";
+                  const sizeVal = String(row["SIZE"] || "").trim();
+                  const typeVal = String(row["TYPE"] || "").trim().toUpperCase();
+                  const isSizeRow = typeVal === "ISI";
+                  const isSelected = selectedRowIndex === dataIndex;
+                  const sizeChecked = selectedSize === group.size;
+                  const typeChecked = selectedSize === group.size && selectedType.toUpperCase() === typeVal;
+                  const isFirstInGroup = variantIdx === 0;
 
-                return (
-                  <tr key={rowIndex} className="hover:bg-blue-50 transition-colors">
-                    <td className="px-2 py-1 text-gray-700 border-r border-gray-200">{row["SIZE"] ?? ""}</td>
-                    <td className="px-2 py-1 text-gray-700 border-r border-gray-200">{row["TYPE"] ?? ""}</td>
+                  return (
+                    <tr
+                      key={`${groupIdx}-${dataIndex}`}
+                      data-row-index={dataIndex}
+                      onClick={() => {
+                        setSelectedSize(group.size);
+                        setSelectedType(row["TYPE"] || AB_CABLE_TYPE_ISI);
+                      }}
+                      className={`transition-colors cursor-pointer ${
+                        isSelected ? "bg-blue-100" : "hover:bg-blue-50/70"
+                      } ${variantIdx > 0 ? "border-t border-gray-100" : ""} ${groupIdx > 0 && variantIdx === 0 ? "border-t-2 border-slate-300" : ""}`}
+                    >
+                      {isFirstInGroup ? (
+                        <td
+                          rowSpan={group.dataIndices.length}
+                          className={`px-2 py-1 text-gray-700 border-r border-gray-200 align-middle ${isSelected ? "bg-blue-100" : "bg-slate-50"}`}
+                        >
+                          <label className="flex items-center gap-1.5 cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="radio"
+                              name="ab-size"
+                              checked={sizeChecked}
+                              onChange={() => {
+                                setSelectedSize(group.size);
+                                setSelectedType(AB_CABLE_TYPE_ISI);
+                              }}
+                              className="text-blue-600"
+                            />
+                            <span className="font-semibold text-gray-900">{group.size}</span>
+                          </label>
+                        </td>
+                      ) : null}
+                      <td className="px-2 py-1 text-gray-700 border-r border-gray-200">
+                        <label className="flex items-center gap-1.5 cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="radio"
+                            name={`ab-type-${group.size}`}
+                            checked={typeChecked}
+                            onChange={() => {
+                              setSelectedSize(group.size);
+                              setSelectedType(row["TYPE"] || "");
+                            }}
+                            className="text-blue-600"
+                          />
+                          <span>{row["TYPE"] ?? ""}</span>
+                        </label>
+                      </td>
                     <td className="px-2 py-1 text-gray-700 border-r border-gray-200 text-center">
                       {fmtNumber(row["PHASE SIZE"], 2)}
                     </td>
@@ -274,12 +568,94 @@ export default function AbCableCalculator({ setActiveView, onBack }) {
                     </td>
                     <td className="px-2 py-1 text-gray-700 text-right">{fmtNumber(row["FINAL RATE"], 2)}</td>
                   </tr>
-                );
-              })}
+                  );
+                })
+              )}
+              {rfpContext && (
+                <tr className="bg-blue-50 border-t-2 border-blue-200">
+                  <td colSpan={20} className="px-2 py-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-600">
+                        Selected: <strong>{selectedSize}</strong> · <strong>{selectedType}</strong> — Price ₹{selectedFinalRate != null ? fmtNumber(selectedFinalRate) : "—"}/km. Click to save this variant&apos;s pricing to RFP.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleConfirmSelection}
+                        disabled={selectedRowIndex == null}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Clock className="w-3 h-3" />
+                        Calculate Price & Save to RFP
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Extra Charges Modal (when from RFP) */}
+      {showChargesModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+            <h2 className="text-lg font-semibold">Additional Charges</h2>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-700">Any other charges (drum, transportation, others)?</span>
+                <div className="flex items-center gap-2 text-sm">
+                  <label className="flex items-center gap-1">
+                    <input type="radio" checked={hasExtraCharges === false} onChange={() => setHasExtraCharges(false)} />
+                    No
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input type="radio" checked={hasExtraCharges === true} onChange={() => setHasExtraCharges(true)} />
+                    Yes
+                  </label>
+                </div>
+              </div>
+              {hasExtraCharges && (
+                <div className="space-y-3 max-h-64 overflow-y-auto border-t border-gray-200 pt-3">
+                  {chargesRows.map((row, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                        placeholder="Charge label"
+                        value={row.label}
+                        onChange={(e) => updateChargeRow(idx, "label", e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        className="w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                        placeholder="Amount"
+                        value={row.amount}
+                        onChange={(e) => updateChargeRow(idx, "amount", e.target.value)}
+                      />
+                      {chargesRows.length > 1 && (
+                        <button type="button" onClick={() => removeChargeRow(idx)} className="px-2 py-1 text-xs text-rose-600 hover:text-rose-700">
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button" onClick={addChargeRow} className="text-xs text-blue-600 hover:text-blue-700">
+                    + Add another charge
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowChargesModal(false)} className="px-4 py-2 text-sm border rounded-lg">
+                Cancel
+              </button>
+              <button type="button" onClick={handleSaveCharges} className="px-4 py-2 text-sm text-white bg-emerald-600 rounded-lg">
+                Save & Return to RFP
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react"
 import { Calculator, ArrowLeft, RefreshCw, Zap } from "lucide-react"
 import { io } from "socket.io-client"
 import { calculateAllProducts, DEFAULT_RATES } from "../../constants/acsrProducts"
-import rfpService from "../../services/RfpService"
 import Toast from "../../utils/Toast"
+import rfpService from "../../services/RfpService"
 
 export default function AcsrCalculator({ setActiveView, rates: externalRates, onBack, rfpContext }) {
   const [products, setProducts] = useState([])
@@ -19,6 +19,7 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
   const [showChargesModal, setShowChargesModal] = useState(false)
   const [chargesRows, setChargesRows] = useState([{ label: 'Drum', amount: '' }])
   const [hasExtraCharges, setHasExtraCharges] = useState(true)
+  const [rateType, setRateType] = useState('isi_per_mtr')
 
   const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:4500'
 
@@ -252,9 +253,28 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
       return
     }
 
-    const basePerMtr = parseFloat(selectedProduct.cost_conductor_isi_per_mtr || 0) || 0
     const lengthMtr = parseFloat(rfpContext.length || rfpContext.quantity || 0) || 0
-    const baseTotal = basePerMtr * lengthMtr
+    const totalWeightPerKm = parseFloat(selectedProduct.total_weight) || 0
+    const weightPerMtr = totalWeightPerKm / 1000
+
+    let basePerUnit = 0
+    if (rateType === 'isi_per_mtr') {
+      basePerUnit = parseFloat(selectedProduct.cost_conductor_isi_per_mtr || 0) || 0
+    } else if (rateType === 'comm_per_mtr') {
+      basePerUnit = parseFloat(selectedProduct.cost_conductor_commercial_per_mtr || 0) || 0
+    } else if (rateType === 'isi_per_kg') {
+      basePerUnit = parseFloat(selectedProduct.cost_conductor_isi_per_kg || 0) || 0
+    } else if (rateType === 'comm_per_kg') {
+      basePerUnit = parseFloat(selectedProduct.cost_conductor_commercial_per_kg || 0) || 0
+    }
+
+    let baseTotal = 0
+    if (rateType === 'isi_per_kg' || rateType === 'comm_per_kg') {
+      const kg = lengthMtr * weightPerMtr
+      baseTotal = kg * basePerUnit
+    } else {
+      baseTotal = lengthMtr * basePerUnit
+    }
 
     const extraRows = hasExtraCharges ? chargesRows : []
     const extraCharges = extraRows
@@ -264,20 +284,23 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
 
     const totalPrice = baseTotal + extraTotal
 
+    const calculatorDetail = {
+      family: 'ACSR',
+      rfpId: rfpContext.rfpId,
+      rfpRequestId: rfpContext.rfpRequestId,
+      productSpec: rfpContext.productSpec,
+      length: lengthMtr,
+      rateType,
+      basePerUnit,
+      baseTotal,
+      extraCharges: extraRows,
+      totalPrice
+    }
+
     try {
       window.localStorage.setItem(
         'rfpCalculatorResult',
-        JSON.stringify({
-          family: 'ACSR',
-          rfpId: rfpContext.rfpId,
-          rfpRequestId: rfpContext.rfpRequestId,
-          productSpec: rfpContext.productSpec,
-          length: lengthMtr,
-          basePerMtr,
-          baseTotal,
-          extraCharges: extraRows,
-          totalPrice
-        })
+        JSON.stringify(calculatorDetail)
       )
     } catch {
       // ignore storage failure
@@ -294,28 +317,22 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
       })
     )
 
-    // Auto-approve the RFP from calculator
-    try {
-      await rfpService.approve(rfpContext.rfpRequestId, {
-        calculatorTotalPrice: totalPrice,
-        calculatorDetail: {
-          family: 'ACSR',
-          rfpId: rfpContext.rfpId,
-          rfpRequestId: rfpContext.rfpRequestId,
+    if (rfpContext.rfpRequestId && rfpContext.productSpec != null) {
+      try {
+        await rfpService.setProductCalculatorPrice(rfpContext.rfpRequestId, {
           productSpec: rfpContext.productSpec,
-          length: lengthMtr,
-          basePerMtr,
-          baseTotal,
-          extraCharges: extraRows,
-          totalPrice
-        }
-      })
-      Toast.success('RFP approved with calculator pricing.')
-    } catch (error) {
-      console.error('Error auto-approving RFP from ACSR calculator:', error)
-      Toast.error(error?.message || 'Failed to approve RFP from calculator')
+          totalPrice,
+          calculatorDetail
+        })
+        try {
+          window.localStorage.setItem('rfpApprovalReopen', JSON.stringify({ rfpRequestId: rfpContext.rfpRequestId, at: Date.now() }))
+        } catch { /* ignore */ }
+      } catch (err) {
+        Toast.error(err?.message || 'Failed to save price to RFP')
+      }
     }
 
+    Toast.success('Pricing saved. Returning to RFP Workflow — Approve will enable when all products are priced.')
     setShowChargesModal(false)
     if (setActiveView) {
       setActiveView('rfp-workflow')
@@ -367,9 +384,29 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
 
       {/* Products Table */}
       <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6 border border-gray-100">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3 space-y-2">
           <h2 className="text-sm font-bold text-white">ACSR Products Pricing</h2>
           <p className="text-blue-100 text-xs">Current rates: Alu CG ₹{(parseFloat(rates.aluminium_cg_grade) || 0).toFixed(2)}/kg | Alu EC ₹{(parseFloat(rates.aluminium_ec_grade) || 0).toFixed(2)}/kg | Steel ₹{(parseFloat(rates.steel_rate) || 0).toFixed(2)}/kg</p>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-blue-100">
+            <span className="font-semibold">Rate type for calculation:</span>
+            {[
+              { key: 'isi_per_mtr', label: 'ISI / Mtr' },
+              { key: 'comm_per_mtr', label: 'COMM / Mtr' },
+              { key: 'isi_per_kg', label: 'ISI / Kg' },
+              { key: 'comm_per_kg', label: 'COMM / Kg' }
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setRateType(key)}
+                className={`px-3 py-1 rounded-full border text-xs font-medium ${
+                  rateType === key ? 'bg-white text-blue-700 border-white' : 'border-blue-200 text-blue-100 hover:bg-blue-500/30'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-full text-xs">

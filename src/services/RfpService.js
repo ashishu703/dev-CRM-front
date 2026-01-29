@@ -24,6 +24,14 @@ class RfpService {
     return apiClient.post(API_ENDPOINTS.RFP_APPROVE(id), payload);
   }
 
+  async setProductCalculatorPrice(id, data) {
+    return apiClient.post(API_ENDPOINTS.RFP_PRODUCT_CALCULATOR_PRICE(id), data);
+  }
+
+  async clearProductCalculatorPrice(id, data) {
+    return apiClient.post(API_ENDPOINTS.RFP_PRODUCT_CALCULATOR_PRICE_CLEAR(id), data);
+  }
+
   async reject(id, reason) {
     return apiClient.post(API_ENDPOINTS.RFP_REJECT(id), { reason });
   }

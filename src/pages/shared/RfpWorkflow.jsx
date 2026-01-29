@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle, Clock, FilePlus2, RefreshCw, XCircle, X } from 'lucide-react';
+import { CheckCircle, Clock, FilePlus2, RefreshCw, Trash2, XCircle, X } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import apiClient from '../../utils/apiClient';
 import rfpService from '../../services/RfpService';
 import productPriceService from '../../services/ProductPriceService';
 import { getProducts } from '../../constants/products';
+import Toast from '../../utils/Toast';
 
 const formatCurrency = (value) => {
   const amount = Number(value || 0);
@@ -169,6 +170,31 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
     fetchRfps();
   }, []);
 
+  // When returning from calculator after saving price: re-open approval modal with fresh RFP data so Approve enables when all priced
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem('rfpApprovalReopen');
+      if (!raw) return;
+      const { rfpRequestId, at } = JSON.parse(raw);
+      window.localStorage.removeItem('rfpApprovalReopen');
+      if (!rfpRequestId || !at || Date.now() - at > 60000) return; // ignore if older than 60s
+      rfpService
+        .getById(rfpRequestId)
+        .then((res) => {
+          if (res.success && res.data) {
+            const rfpData = res.data.rfp || res.data;
+            setSelectedRfp(rfpData);
+            setShowRfpApprovalModal(true);
+            setRejectionReason('');
+            setError('');
+          }
+        })
+        .catch(() => {});
+    } catch {
+      try { window.localStorage.removeItem('rfpApprovalReopen'); } catch { /* ignore */ }
+    }
+  }, []);
+
   const openModal = (setter, rfp, resetFn) => {
     setSelectedRfp(rfp || null);
     if (resetFn) resetFn();
@@ -263,6 +289,77 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       }
     } catch (error) {
       setError(error.message || 'Failed to load RFP details');
+    }
+  };
+
+  const allProductsPriced = useMemo(() => {
+    if (!selectedRfp?.products?.length) return false;
+    return selectedRfp.products.every((p) => {
+      const price = p.target_price ?? p.targetPrice;
+      if (price === undefined || price === null || price === '') return false;
+      const n = Number(price);
+      return Number.isFinite(n);
+    });
+  }, [selectedRfp?.products]);
+
+  // Refetch RFP in approval modal when a calculator saves price (so target_price list stays current)
+  useEffect(() => {
+    const handler = (e) => {
+      const rfpRequestId = e.detail?.rfpRequestId;
+      if (!rfpRequestId) return;
+      rfpService
+        .getById(rfpRequestId)
+        .then((res) => {
+          if (res.success && res.data) {
+            const rfpData = res.data.rfp || res.data;
+            setSelectedRfp((prev) =>
+              prev && String(prev.id) === String(rfpData.id) ? rfpData : prev
+            );
+          }
+        })
+        .catch(() => {});
+    };
+    window.addEventListener('rfpCalculatorPriceReady', handler);
+    return () => window.removeEventListener('rfpCalculatorPriceReady', handler);
+  }, []);
+
+  // Pending calculator result from localStorage (before DH Approve) – so pricing shows after "Save & Return to RFP"
+  const pendingCalculatorLog = (() => {
+    if (!showRfpApprovalModal || !selectedRfp) return null;
+    try {
+      const raw = window.localStorage.getItem('rfpCalculatorResult');
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed) return null;
+      const matches =
+        (parsed.rfpRequestId && String(parsed.rfpRequestId) === String(selectedRfp.id)) ||
+        (parsed.rfpId && selectedRfp.rfp_id && String(parsed.rfpId) === String(selectedRfp.rfp_id));
+      return matches ? parsed : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const [clearingProductSpec, setClearingProductSpec] = useState(null);
+
+  const handleClearProductPrice = async (rfpId, productSpec) => {
+    if (!productSpec || !rfpId) return;
+    if (!window.confirm('Remove this calculated price? You can recalculate using "Calculate Price".')) return;
+    setClearingProductSpec(productSpec);
+    setError('');
+    try {
+      await rfpService.clearProductCalculatorPrice(rfpId, { productSpec });
+      const res = await rfpService.getById(rfpId);
+      if (res.success && res.data) {
+        const rfpData = res.data.rfp || res.data;
+        setSelectedRfp(rfpData);
+        Toast.success('Price removed. Use "Calculate Price" to set again.');
+      }
+    } catch (err) {
+      setError(err?.message || 'Failed to remove price');
+      Toast.error(err?.message || 'Failed to remove price');
+    } finally {
+      setClearingProductSpec(null);
     }
   };
 
@@ -364,8 +461,7 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
     <div className="p-4 sm:p-6 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">RFP Workflow</p>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Pricing → Quotation → Work Order</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">RFP Workflow</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -894,6 +990,29 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
             </div>
 
             <div className="p-6 space-y-6">
+              {/* Pricing progress summary */}
+              {selectedRfp.products?.length > 0 && (() => {
+                const priced = selectedRfp.products.filter(
+                  (p) => p.target_price != null && p.target_price !== '' && Number.isFinite(Number(p.target_price))
+                ).length;
+                const total = selectedRfp.products.reduce(
+                  (sum, p) => sum + (Number(p.target_price) || 0),
+                  0
+                );
+                return (
+                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
+                    <span className="text-sm font-semibold text-emerald-800">
+                      {priced} of {selectedRfp.products.length} product(s) priced
+                    </span>
+                    {priced > 0 && (
+                      <span className="text-sm font-bold text-emerald-900">
+                        Total calculated: {formatCurrency(total)}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* RFP Summary Section */}
               <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-xl p-6 border border-slate-200">
                 <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
@@ -957,18 +1076,18 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
               </div>
 
               {/* Products Table Section */}
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Products in this RFP</h3>
+              <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                <h3 className="text-lg font-bold text-slate-900 mb-4 px-1">Products in this RFP</h3>
                 {selectedRfp.products && selectedRfp.products.length > 0 ? (
-                  <div className="border border-slate-200 rounded-xl overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-slate-100">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[720px]">
+                      <thead className="bg-slate-100 border-b border-slate-200">
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">#</th>
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Product Specification</th>
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Quantity</th>
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Length</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Target Price</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Price</th>
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Status</th>
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Action</th>
                         </tr>
@@ -984,8 +1103,10 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                             <td className="px-4 py-3 text-sm text-slate-700">
                               {product.length ? `${product.length} ${product.length_unit || 'Mtr'}` : 'N/A'}
                             </td>
-                            <td className="px-4 py-3 text-sm text-slate-700">
-                              {product.target_price ? formatCurrency(product.target_price) : 'N/A'}
+                            <td className="px-4 py-3 text-sm">
+                              {product.target_price != null && Number.isFinite(Number(product.target_price))
+                                ? <span className="font-semibold text-emerald-700">{formatCurrency(product.target_price)}</span>
+                                : <span className="text-slate-500">N/A</span>}
                             </td>
                             <td className="px-4 py-3">
                               <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
@@ -999,19 +1120,34 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                               </span>
                             </td>
                             <td className="px-4 py-3">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openCalculatorForProduct(selectedRfp, product.product_spec, {
-                                    quantity: product.quantity,
-                                    length: product.length
-                                  })
-                                }
-                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 text-white"
-                              >
-                                <Clock className="w-3 h-3" />
-                                Calculate Price
-                              </button>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openCalculatorForProduct(selectedRfp, product.product_spec, {
+                                      quantity: product.quantity,
+                                      length: product.length
+                                    })
+                                  }
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 text-white"
+                                >
+                                  <Clock className="w-3 h-3" />
+                                  Calculate Price
+                                </button>
+                                {(product.target_price != null && product.target_price !== '' && Number.isFinite(Number(product.target_price))) ||
+                                (product.calculator_log && typeof product.calculator_log === 'object') ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleClearProductPrice(selectedRfp.id, product.product_spec)}
+                                    disabled={clearingProductSpec === product.product_spec}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-rose-100 text-rose-700 hover:bg-rose-200 disabled:opacity-50"
+                                    title="Remove calculated price"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    {clearingProductSpec === product.product_spec ? 'Removing…' : 'Remove price'}
+                                  </button>
+                                ) : null}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1025,83 +1161,116 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                 )}
               </div>
 
-              {/* Calculator Log Book */}
-              {selectedRfp.calculator_pricing_log && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                  <h3 className="text-sm font-semibold text-slate-900">Pricing Log (Calculator)</h3>
-                  {(() => {
-                    const log = selectedRfp.calculator_pricing_log || {};
-                    const rateTypeLabelMap = {
-                      alu_per_mtr: 'Aluminium / Mtr',
-                      alloy_per_mtr: 'Alloy / Mtr',
-                      alu_per_kg: 'Aluminium / Kg',
-                      alloy_per_kg: 'Alloy / Kg'
-                    };
-                    const lengthUsed =
-                      log.length !== undefined && log.length !== null
-                        ? log.length
-                        : (log.quantity !== undefined && log.quantity !== null ? log.quantity : '—');
-                    return (
-                      <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-slate-800">
-                          <div>
-                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Selected Product</div>
-                            <div>{log.productSpec || '—'}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Family</div>
-                            <div>{log.family || 'AAAC'}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Length / Quantity Used</div>
-                            <div>{lengthUsed}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Rate Type</div>
-                            <div>{log.rateType ? rateTypeLabelMap[log.rateType] || log.rateType : '—'}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Base Rate</div>
-                            <div>
-                              {typeof log.basePerUnit === 'number'
-                                ? formatCurrency(log.basePerUnit)
-                                : (log.basePerUnit ? formatCurrency(log.basePerUnit) : '—')}
+              {/* Per-product Pricing Log: scrollable list of calculated prices with details (up to 10 products) */}
+              {selectedRfp.products && selectedRfp.products.length > 0 && (() => {
+                const rateTypeLabelMap = {
+                  alu_per_mtr: 'Aluminium / Mtr',
+                  alloy_per_mtr: 'Alloy / Mtr',
+                  alu_per_kg: 'Aluminium / Kg',
+                  alloy_per_kg: 'Alloy / Kg',
+                  isi_per_mtr: 'ISI / Mtr',
+                  comm_per_mtr: 'COMM / Mtr',
+                  isi_per_kg: 'ISI / Kg',
+                  comm_per_kg: 'COMM / Kg',
+                  ISI: 'ISI',
+                  'COMM-1': 'COMM-1',
+                  'COMM-2': 'COMM-2',
+                  'COMM-3': 'COMM-3'
+                };
+                const productSpecMatch = (a, b) =>
+                  a && b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+                const itemsWithLog = selectedRfp.products
+                  .map((product) => {
+                    const log =
+                      product.calculator_log &&
+                      (typeof product.calculator_log === 'object' ? product.calculator_log : null) ||
+                      (pendingCalculatorLog && productSpecMatch(pendingCalculatorLog.productSpec, product.product_spec) ? pendingCalculatorLog : null);
+                    const hasPrice =
+                      (product.target_price != null && product.target_price !== '' && Number.isFinite(Number(product.target_price))) ||
+                      (log && (log.totalPrice != null || log.totalPrice === 0));
+                    return { product, log, hasPrice };
+                  })
+                  .filter(({ hasPrice }) => hasPrice);
+                if (itemsWithLog.length === 0) return null;
+                const specDiff = (a, b) => a && b && String(a).trim().toLowerCase() !== String(b).trim().toLowerCase();
+                return (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                    <h3 className="text-base font-bold text-slate-900 mb-3">Calculator details — {itemsWithLog.length} product(s) calculated</h3>
+                    <p className="text-xs text-slate-600 mb-4">Inputs used and result for each product (Save &amp; Return from calculator)</p>
+                    <div className="max-h-[400px] overflow-y-auto space-y-5 pr-1" style={{ scrollBehavior: 'smooth' }}>
+                      {itemsWithLog.map(({ product, log }, idx) => {
+                        const detail = log || {};
+                        const lengthUsed =
+                          detail.length !== undefined && detail.length !== null
+                            ? detail.length
+                            : (detail.quantity !== undefined && detail.quantity !== null ? detail.quantity : (product.length ?? '—'));
+                        const totalDisplay = detail.totalPrice != null || detail.totalPrice === 0
+                          ? formatCurrency(detail.totalPrice)
+                          : (product.target_price != null ? formatCurrency(product.target_price) : '—');
+                        const calculatedSpec = detail.productSpec || product.product_spec;
+                        const rfpSpec = product.product_spec;
+                        const isVariantMismatch = specDiff(calculatedSpec, rfpSpec);
+                        return (
+                          <div key={product.id || idx} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                            <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-200">
+                              <div>
+                                <span className="text-sm font-bold text-slate-900">
+                                  RFP line: {product.product_spec || 'Product'}
+                                </span>
+                                {isVariantMismatch && calculatedSpec && (
+                                  <p className="text-xs text-amber-700 mt-1 font-medium">
+                                    Updated / calculated for: {calculatedSpec}
+                                  </p>
+                                )}
+                              </div>
+                              <span className="text-lg font-bold text-emerald-700">{totalDisplay}</span>
+                            </div>
+                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Inputs used</div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-800 mb-4">
+                              <div>
+                                <span className="text-slate-500">Length / Qty used:</span>{' '}
+                                <span className="font-medium">{lengthUsed}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500">Rate type:</span>{' '}
+                                <span className="font-medium">{detail.rateType ? (rateTypeLabelMap[detail.rateType] || detail.rateType) : '—'}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500">Family:</span>{' '}
+                                <span className="font-medium">{detail.family || '—'}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500">Base (per unit):</span>{' '}
+                                <span className="font-medium">
+                                  {detail.basePerUnit != null ? formatCurrency(detail.basePerUnit) : (detail.basePerMtr != null ? formatCurrency(detail.basePerMtr) : '—')}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500">Base amount:</span>{' '}
+                                <span className="font-medium">{detail.baseTotal != null ? formatCurrency(detail.baseTotal) : '—'}</span>
+                              </div>
+                              {Array.isArray(detail.extraCharges) && detail.extraCharges.length > 0 && (
+                                <div className="sm:col-span-2">
+                                  <span className="text-slate-500">Additional charges:</span>
+                                  <ul className="mt-1 text-slate-700 list-disc list-inside space-y-0.5">
+                                    {detail.extraCharges.map((row, i) => (
+                                      <li key={i}>{(row.label || 'Charge')} – {row.amount != null ? formatCurrency(row.amount) : '₹0.00'}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                            <div className="pt-2 border-t border-slate-100">
+                              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Result</span>
+                              <p className="text-base font-bold text-emerald-700 mt-1">Total: {totalDisplay}</p>
                             </div>
                           </div>
-                          <div>
-                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Base Amount</div>
-                            <div>
-                              {typeof log.baseTotal === 'number'
-                                ? formatCurrency(log.baseTotal)
-                                : (log.baseTotal ? formatCurrency(log.baseTotal) : '—')}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Total After Charges</div>
-                            <div className="font-semibold text-emerald-700">
-                              {typeof log.totalPrice === 'number'
-                                ? formatCurrency(log.totalPrice)
-                                : (log.totalPrice ? formatCurrency(log.totalPrice) : '—')}
-                            </div>
-                          </div>
-                        </div>
-                        {Array.isArray(log.extraCharges) && log.extraCharges.length > 0 && (
-                          <div>
-                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Additional Charges</div>
-                            <ul className="text-sm text-slate-800 list-disc list-inside space-y-1">
-                              {log.extraCharges.map((row, idx) => (
-                                <li key={idx}>
-                                  {(row.label || 'Charge')} – {row.amount ? formatCurrency(row.amount) : '₹0.00'}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Special Requirements */}
               {selectedRfp.special_requirements && (
@@ -1134,6 +1303,12 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                 </div>
               )}
 
+              {!allProductsPriced && selectedRfp?.products?.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-sm">
+                  Approve is allowed only when every product has a calculated price showing here. Use &quot;Calculate Price&quot; for each product so the price appears in this table, then Approve will enable.
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
                 <button
@@ -1152,7 +1327,8 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                 </button>
                 <button
                   onClick={() => handleApprove(selectedRfp.id)}
-                  className="px-6 py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2"
+                  disabled={!allProductsPriced}
+                  className="px-6 py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                 >
                   <CheckCircle className="w-4 h-4" />
                   Approve RFP

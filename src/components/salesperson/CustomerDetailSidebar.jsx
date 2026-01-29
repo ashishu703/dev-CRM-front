@@ -1,5 +1,5 @@
 import React from 'react'
-import { X, Eye, Package, Send, Trash2, FileText, Receipt, Pencil, User, Phone, Mail, Building2, MapPin, Globe, Hash, Tag, Clock, CheckCircle, MessageSquare, Calendar } from 'lucide-react'
+import { X, Eye, Package, Trash2, FileText, Receipt, Pencil, User, Phone, Mail, Building2, MapPin, Globe, Hash, Tag, Clock, CheckCircle, MessageSquare, Calendar } from 'lucide-react'
 import { QuotationHelper } from '../../utils/QuotationHelper'
 import Toast from '../../utils/Toast'
 import apiClient from '../../utils/apiClient'
@@ -358,15 +358,7 @@ export default function CustomerDetailSidebar({
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          {quotation.status !== 'approved' && quotation.status !== 'rejected' && quotation.status !== 'pending_verification' && quotation.status !== 'pending' && (
-                            <button 
-                              onClick={() => onSendQuotation(quotation)} 
-                              className="p-1.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600 rounded-lg shadow-sm transition-all duration-200" 
-                              title="Send for Verification"
-                            >
-                              <Send className="h-3.5 w-3.5" />
-                            </button>
-                          )}
+                          {/* Quotation approval is not required anymore (pricing decided upstream) */}
                           {isApprovedQuotation(quotation) && !isPaymentCompleted(quotation) && (
                             <button 
                               onClick={() => {
