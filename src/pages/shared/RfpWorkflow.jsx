@@ -30,11 +30,11 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
   const [selectedRfp, setSelectedRfp] = useState(null);
   const [createForm, setCreateForm] = useState({
     leadId: '',
-    productSpec: '3×16',
+    productSpec: '',
     quantity: '',
     deliveryTimeline: '',
     specialRequirements: '',
-    availabilityStatus: 'not_in_stock'
+    availabilityStatus: ''
   });
   const [priceForm, setPriceForm] = useState({
     rawMaterialPrice: '',
@@ -60,7 +60,7 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
     reason: ''
   });
   const [priceListForm, setPriceListForm] = useState({
-    productSpec: '3×16',
+    productSpec: '',
     unitPrice: '',
     validUntil: ''
   });
