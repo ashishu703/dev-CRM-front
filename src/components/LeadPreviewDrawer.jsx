@@ -174,22 +174,7 @@ const LeadPreviewDrawer = ({
                         >
                           Download PDF
                         </button>
-                        {(['pending_verification', 'pending'].includes(quotation.status)) && (
-                          <>
-                            <button 
-                              onClick={() => onApproveQuotation(quotation.id)}
-                              className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs"
-                            >
-                              Approve
-                            </button>
-                            <button 
-                              onClick={() => onRejectQuotation(quotation.id)}
-                              className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-xs"
-                            >
-                              Reject
-                            </button>
-                          </>
-                        )}
+                        {/* Quotation approval is not required anymore (pricing decided upstream) */}
                       </div>
                     </div>
                   </div>

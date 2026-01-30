@@ -226,13 +226,15 @@ class LeadsFilterService {
     };
   }
 
-  async fetchQuotationAndPICounts() {
+  async fetchQuotationAndPICounts(options = {}) {
+    const { includeQuotationPending = true } = options;
+
     const [pendingVerification, pending, approved, rejected, sentForApproval, allPIs] = await Promise.all([
-      this.fetchPendingVerificationQuotations(),
-      this.fetchQuotationsByStatus('pending'),
+      includeQuotationPending ? this.fetchPendingVerificationQuotations() : Promise.resolve([]),
+      includeQuotationPending ? this.fetchQuotationsByStatus('pending') : Promise.resolve([]),
       this.fetchQuotationsByStatus('approved'),
       this.fetchQuotationsByStatus('rejected'),
-      this.fetchQuotationsByStatus('sent_for_approval'),
+      includeQuotationPending ? this.fetchQuotationsByStatus('sent_for_approval') : Promise.resolve([]),
       this.fetchAllPIs()
     ]);
 

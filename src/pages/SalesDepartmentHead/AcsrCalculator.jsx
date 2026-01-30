@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react"
 import { Calculator, ArrowLeft, RefreshCw, Zap } from "lucide-react"
 import { io } from "socket.io-client"
 import { calculateAllProducts, DEFAULT_RATES } from "../../constants/acsrProducts"
-import rfpService from "../../services/RfpService"
 import Toast from "../../utils/Toast"
+import rfpService from "../../services/RfpService"
 
 export default function AcsrCalculator({ setActiveView, rates: externalRates, onBack, rfpContext }) {
   const [products, setProducts] = useState([])
@@ -19,6 +19,7 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
   const [showChargesModal, setShowChargesModal] = useState(false)
   const [chargesRows, setChargesRows] = useState([{ label: 'Drum', amount: '' }])
   const [hasExtraCharges, setHasExtraCharges] = useState(true)
+  const [rateType, setRateType] = useState('isi_per_mtr')
 
   const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:4500'
 
@@ -95,9 +96,9 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
     }
   }, [externalRates])
 
-  // Auto-select product based on requested spec (case-sensitive)
+  // Auto-select product based on requested spec (case-sensitive); skip if isCustom
   useEffect(() => {
-    if (!rfpContext?.productSpec || !products.length) return
+    if (rfpContext?.isCustom || !rfpContext?.productSpec || !products.length) return
     const spec = rfpContext.productSpec
     const idx = products.findIndex(p => spec.includes(p.name))
     if (idx >= 0) {
@@ -175,7 +176,7 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
 
   const handleCustomCalculate = () => {
     if (!customNoOfWiresAluminium || !customNoOfWiresSteel || !customSizeAluminium || !customSizeSteel) {
-      alert('Please enter all values for custom calculation')
+      Toast.error('Please enter all values for custom calculation (AL wires, Steel wires, AL size, Steel size)')
       return
     }
 
@@ -186,7 +187,7 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
 
     if (isNaN(noOfWiresAluminium) || isNaN(noOfWiresSteel) || isNaN(sizeAluminium) || isNaN(sizeSteel) ||
         noOfWiresAluminium <= 0 || noOfWiresSteel <= 0 || sizeAluminium <= 0 || sizeSteel <= 0) {
-      alert('Please enter valid positive numbers')
+      Toast.error('Please enter valid positive numbers')
       return
     }
 
@@ -218,15 +219,46 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
       })
     } catch (error) {
       console.error('Error calculating custom product:', error)
-      alert('Error calculating custom product')
+      Toast.error('Error calculating custom product')
     }
   }
 
-  const selectedProduct = selectedIndex != null ? products[selectedIndex] : null
+  const CUSTOM_INDEX = -1
+  const selectedProduct =
+    selectedIndex === CUSTOM_INDEX
+      ? customCalculations
+        ? {
+            total_weight: customCalculations.total_weight,
+            cost_conductor_isi_per_mtr: customCalculations.cost_conductor_isi_per_mtr,
+            cost_conductor_commercial_per_mtr: customCalculations.cost_conductor_commercial_per_mtr,
+            cost_conductor_isi_per_kg: customCalculations.cost_conductor_isi_per_kg,
+            cost_conductor_commercial_per_kg: customCalculations.cost_conductor_commercial_per_kg
+          }
+        : null
+      : selectedIndex != null && products[selectedIndex]
+        ? products[selectedIndex]
+        : null
+
+  useEffect(() => {
+    if (rfpContext?.isCustom) setSelectedIndex(CUSTOM_INDEX)
+  }, [rfpContext?.isCustom])
+
+  // Pre-fill custom row from RFP productSpec when possible (e.g. "30/2.59" "7/2.59" → AL wires/size, Steel wires/size)
+  useEffect(() => {
+    if (!rfpContext?.isCustom || !rfpContext?.productSpec) return
+    const spec = String(rfpContext.productSpec).trim()
+    const matches = [...spec.matchAll(/(\d+)\s*\/\s*([\d.]+)/g)]
+    if (matches.length >= 2 && !customNoOfWiresAluminium && !customSizeAluminium) {
+      setCustomNoOfWiresAluminium(matches[0][1])
+      setCustomSizeAluminium(matches[0][2])
+      setCustomNoOfWiresSteel(matches[1][1])
+      setCustomSizeSteel(matches[1][2])
+    }
+  }, [rfpContext?.isCustom, rfpContext?.productSpec])
 
   const handleConfirmSelection = () => {
     if (!selectedProduct || !rfpContext) {
-      alert('Please select a product row first')
+      Toast.error(selectedIndex === CUSTOM_INDEX ? 'Enter wire counts & sizes and click Calculate first' : 'Please select a product row first')
       return
     }
     setShowChargesModal(true)
@@ -252,9 +284,28 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
       return
     }
 
-    const basePerMtr = parseFloat(selectedProduct.cost_conductor_isi_per_mtr || 0) || 0
     const lengthMtr = parseFloat(rfpContext.length || rfpContext.quantity || 0) || 0
-    const baseTotal = basePerMtr * lengthMtr
+    const totalWeightPerKm = parseFloat(selectedProduct.total_weight) || 0
+    const weightPerMtr = totalWeightPerKm / 1000
+
+    let basePerUnit = 0
+    if (rateType === 'isi_per_mtr') {
+      basePerUnit = parseFloat(selectedProduct.cost_conductor_isi_per_mtr || 0) || 0
+    } else if (rateType === 'comm_per_mtr') {
+      basePerUnit = parseFloat(selectedProduct.cost_conductor_commercial_per_mtr || 0) || 0
+    } else if (rateType === 'isi_per_kg') {
+      basePerUnit = parseFloat(selectedProduct.cost_conductor_isi_per_kg || 0) || 0
+    } else if (rateType === 'comm_per_kg') {
+      basePerUnit = parseFloat(selectedProduct.cost_conductor_commercial_per_kg || 0) || 0
+    }
+
+    let baseTotal = 0
+    if (rateType === 'isi_per_kg' || rateType === 'comm_per_kg') {
+      const kg = lengthMtr * weightPerMtr
+      baseTotal = kg * basePerUnit
+    } else {
+      baseTotal = lengthMtr * basePerUnit
+    }
 
     const extraRows = hasExtraCharges ? chargesRows : []
     const extraCharges = extraRows
@@ -264,20 +315,23 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
 
     const totalPrice = baseTotal + extraTotal
 
+    const calculatorDetail = {
+      family: 'ACSR',
+      rfpId: rfpContext.rfpId,
+      rfpRequestId: rfpContext.rfpRequestId,
+      productSpec: rfpContext.productSpec,
+      length: lengthMtr,
+      rateType,
+      basePerUnit,
+      baseTotal,
+      extraCharges: extraRows,
+      totalPrice
+    }
+
     try {
       window.localStorage.setItem(
         'rfpCalculatorResult',
-        JSON.stringify({
-          family: 'ACSR',
-          rfpId: rfpContext.rfpId,
-          rfpRequestId: rfpContext.rfpRequestId,
-          productSpec: rfpContext.productSpec,
-          length: lengthMtr,
-          basePerMtr,
-          baseTotal,
-          extraCharges: extraRows,
-          totalPrice
-        })
+        JSON.stringify(calculatorDetail)
       )
     } catch {
       // ignore storage failure
@@ -294,28 +348,22 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
       })
     )
 
-    // Auto-approve the RFP from calculator
-    try {
-      await rfpService.approve(rfpContext.rfpRequestId, {
-        calculatorTotalPrice: totalPrice,
-        calculatorDetail: {
-          family: 'ACSR',
-          rfpId: rfpContext.rfpId,
-          rfpRequestId: rfpContext.rfpRequestId,
+    if (rfpContext.rfpRequestId && rfpContext.productSpec != null) {
+      try {
+        await rfpService.setProductCalculatorPrice(rfpContext.rfpRequestId, {
           productSpec: rfpContext.productSpec,
-          length: lengthMtr,
-          basePerMtr,
-          baseTotal,
-          extraCharges: extraRows,
-          totalPrice
-        }
-      })
-      Toast.success('RFP approved with calculator pricing.')
-    } catch (error) {
-      console.error('Error auto-approving RFP from ACSR calculator:', error)
-      Toast.error(error?.message || 'Failed to approve RFP from calculator')
+          totalPrice,
+          calculatorDetail
+        })
+        try {
+          window.localStorage.setItem('rfpApprovalReopen', JSON.stringify({ rfpRequestId: rfpContext.rfpRequestId, at: Date.now() }))
+        } catch { /* ignore */ }
+      } catch (err) {
+        Toast.error(err?.message || 'Failed to save price to RFP')
+      }
     }
 
+    Toast.success('Pricing saved. Returning to RFP Workflow — Approve will enable when all products are priced.')
     setShowChargesModal(false)
     if (setActiveView) {
       setActiveView('rfp-workflow')
@@ -367,9 +415,29 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
 
       {/* Products Table */}
       <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6 border border-gray-100">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3 space-y-2">
           <h2 className="text-sm font-bold text-white">ACSR Products Pricing</h2>
           <p className="text-blue-100 text-xs">Current rates: Alu CG ₹{(parseFloat(rates.aluminium_cg_grade) || 0).toFixed(2)}/kg | Alu EC ₹{(parseFloat(rates.aluminium_ec_grade) || 0).toFixed(2)}/kg | Steel ₹{(parseFloat(rates.steel_rate) || 0).toFixed(2)}/kg</p>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-blue-100">
+            <span className="font-semibold">Rate type for calculation:</span>
+            {[
+              { key: 'isi_per_mtr', label: 'ISI / Mtr' },
+              { key: 'comm_per_mtr', label: 'COMM / Mtr' },
+              { key: 'isi_per_kg', label: 'ISI / Kg' },
+              { key: 'comm_per_kg', label: 'COMM / Kg' }
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setRateType(key)}
+                className={`px-3 py-1 rounded-full border text-xs font-medium ${
+                  rateType === key ? 'bg-white text-blue-700 border-white' : 'border-blue-200 text-blue-100 hover:bg-blue-500/30'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-full text-xs">
@@ -433,9 +501,19 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
                 </tr>
               ))}
               {/* Custom Row */}
-              <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200">
+              <tr
+                className={`cursor-pointer border-2 border-blue-200 ${selectedIndex === CUSTOM_INDEX ? 'bg-blue-100' : 'bg-gradient-to-r from-blue-50 to-indigo-50'} hover:bg-blue-100`}
+                onClick={() => setSelectedIndex(CUSTOM_INDEX)}
+              >
                 <td className="px-2 py-1 border-r border-gray-200">
                   <div className="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      className="text-blue-600"
+                      checked={selectedIndex === CUSTOM_INDEX}
+                      onChange={() => setSelectedIndex(CUSTOM_INDEX)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
                     <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
                     <span className="text-xs font-bold text-blue-900">Custom</span>
                   </div>
@@ -529,18 +607,27 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
               </tr>
               <tr className="bg-blue-50 border-2 border-t-0 border-blue-200">
                 <td colSpan="18" className="px-2 py-1">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-xs text-gray-600">
-                      <span className="font-medium">💡 Tip:</span> Enter wire counts and sizes to calculate custom ACSR product pricing instantly
+                      <span className="font-medium">💡 Tip:</span> Enter wire counts and sizes, click Calculate, then Use Selected to add charges and save to RFP
                     </div>
-                    <button
-                      onClick={handleConfirmSelection}
-                      disabled={!selectedProduct}
-                      className="px-2 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                    >
-                      <Calculator className="w-3 h-3" />
-                      Use Selected
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleCustomCalculate(); }}
+                        className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold"
+                      >
+                        Calculate
+                      </button>
+                      <button
+                        onClick={handleConfirmSelection}
+                        disabled={!selectedProduct}
+                        className="px-2 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                      >
+                        <Calculator className="w-3 h-3" />
+                        Use Selected
+                      </button>
+                    </div>
                   </div>
                 </td>
               </tr>

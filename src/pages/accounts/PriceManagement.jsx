@@ -30,7 +30,9 @@ export default function PriceManagement() {
     { id: 'ld', name: 'LD' },
     { id: 'steel_rate', name: 'STEEL RATE' },
     { id: 'pvc_st1_st2', name: 'PVC ST1 + PVC ST2' },
-    { id: 'aluminium_alloy_grade_t4', name: 'ALUMINIUM ALLOY GRADE T4' }
+    { id: 'aluminium_alloy_grade_t4', name: 'ALUMINIUM ALLOY GRADE T4' },
+    { id: 'master_batch_xlpe', name: 'MASTER BATCH (XLPE)' },
+    { id: 'master_batch_pvc', name: 'MASTER BATCH (PVC)' }
   ]
 
   useEffect(() => {

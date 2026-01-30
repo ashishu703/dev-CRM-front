@@ -80,6 +80,8 @@ export function useQuotationFlow(customerId, isRefreshing = false) {
         discountRate: quotationData.discountRate || 0, 
         discountAmount: quotationData.discountAmount || 0,
         totalAmount: quotationData.total, 
+        // Pricing is already decided upstream; quotation doesn't need DH approval
+        status: isEdit ? undefined : 'approved',
         template: quotationData.template || '',
         
         paymentMode: quotationData.paymentMode || '',
@@ -129,22 +131,6 @@ export function useQuotationFlow(customerId, isRefreshing = false) {
           const updatedQuotation = QuotationHelper.normalizeQuotation(response.data, viewingCustomer);
           setQuotations(prev => prev.map(q => (q.id === quotationId ? updatedQuotation : q)));
           Toast.success('Quotation updated successfully!');
-          
-          // Auto-submit for approval after edit
-          try {
-            const submitResponse = await quotationService.submitForVerification(quotationId);
-            if (submitResponse?.success) {
-              const newStatus = submitResponse.data?.status || 'pending';
-              setQuotations(prev => prev.map(q => (q.id === quotationId ? { ...q, status: newStatus, verificationSentAt: new Date().toISOString() } : q)));
-              Toast.success('Quotation updated and sent for approval!');
-            } else {
-              Toast.warning('Quotation updated but failed to submit for approval. Please submit manually.');
-            }
-          } catch (submitError) {
-            console.error('Error submitting for approval:', submitError);
-            Toast.warning('Quotation updated but failed to submit for approval. Please submit manually.');
-          }
-          
           return true;
         }
       } else {
@@ -248,22 +234,12 @@ export function useQuotationFlow(customerId, isRefreshing = false) {
   }
 
   const handleSendQuotation = async (quotation) => {
-    if (!quotation.id) {
-      Toast.warning('Please save the quotation first before sending for verification.')
+    // Quotation approval is no longer required (pricing already decided upstream)
+    if (!quotation?.id) {
+      Toast.warning('Please save the quotation first.')
       return
     }
-    try {
-      const res = await quotationService.submitForVerification(quotation.id)
-      if (res?.success) {
-        const newStatus = res.data?.status || 'pending'
-        setQuotations(prev => prev.map(q => (q.id === quotation.id ? { ...q, status: newStatus, verificationSentAt: new Date().toISOString() } : q)))
-        Toast.success('Sent to Department Head for verification.')
-      } else {
-        Toast.error('Failed to submit for verification')
-      }
-    } catch (e) {
-      Toast.error('Failed to submit for verification')
-    }
+    Toast.info('Quotation approval is not required. You can proceed to create PI.')
   }
 
   const handleDeleteQuotation = async (quotation) => {

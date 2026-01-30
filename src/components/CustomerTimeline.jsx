@@ -8,8 +8,6 @@ const CustomerTimeline = ({
   onClose,
   onReassign,
   onQuotationView,
-  onApproveQuotation,
-  onRejectQuotation,
   onPIView,
   onApprovePI,
   onRejectPI
@@ -363,36 +361,6 @@ const CustomerTimeline = ({
                                   View
                                 </button>
                               )}
-                              {onApproveQuotation &&
-                                (status === 'pending' ||
-                                  status === 'pending_verification' ||
-                                  status === 'pending_approval') && (
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      await onApproveQuotation(q);
-                                      setRefreshKey((k) => k + 1);
-                                    }}
-                                    className="px-2 py-0.5 text-[9px] rounded-md font-semibold bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600 shadow-sm transition-all"
-                                  >
-                                    Approve
-                                  </button>
-                                )}
-                              {onRejectQuotation &&
-                                (status === 'pending' ||
-                                  status === 'pending_verification' ||
-                                  status === 'pending_approval') && (
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      await onRejectQuotation(q);
-                                      setRefreshKey((k) => k + 1);
-                                    }}
-                                    className="px-2 py-0.5 text-[9px] rounded-md font-semibold bg-gradient-to-r from-red-500 to-rose-500 text-white hover:from-red-600 hover:to-rose-600 shadow-sm transition-all"
-                                  >
-                                    Reject
-                                  </button>
-                                )}
                             </div>
 
                             {pis.length > 0 && (
