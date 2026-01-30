@@ -150,6 +150,13 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       openCalculatorCb({ family: 'AB_CABLE', ...baseContext });
       return;
     }
+    if (
+      (normalizedSpec.includes('MULTI CORE') && normalizedSpec.includes('XLPE') && normalizedSpec.includes('ARMOURED')) ||
+      (normalizedSpec.includes('XLPE') && normalizedSpec.includes('ALUMINIUM ARMOURED'))
+    ) {
+      openCalculatorCb({ family: 'MC_XLPE_ARMOURED', ...baseContext });
+      return;
+    }
 
     // Custom / unknown product: open AAAC or ACSR with isCustom so DH can use the Custom row
     if (normalizedSpec.includes('ACSR') || normalizedSpec.includes('STEEL') || normalizedSpec.includes('REINFORCED')) {
@@ -1185,6 +1192,12 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                 };
                 const productSpecMatch = (a, b) =>
                   a && b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+                const familyLabelMap = {
+                  AAAC: 'AAAC',
+                  ACSR: 'ACSR',
+                  AB_CABLE: 'Aerial Bunched Cable',
+                  MC_XLPE_ARMOURED: 'Multi Core XLPE Armoured'
+                };
                 const itemsWithLog = selectedRfp.products
                   .map((product) => {
                     const log =
@@ -1237,13 +1250,20 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                                 <span className="text-slate-500">Length / Qty used:</span>{' '}
                                 <span className="font-medium">{lengthUsed}</span>
                               </div>
-                              <div>
-                                <span className="text-slate-500">Rate type:</span>{' '}
-                                <span className="font-medium">{detail.rateType ? (rateTypeLabelMap[detail.rateType] || detail.rateType) : '—'}</span>
-                              </div>
+                              {detail.family === 'MC_XLPE_ARMOURED' ? (
+                                <div>
+                                  <span className="text-slate-500">Selected specification:</span>{' '}
+                                  <span className="font-medium">{detail.selectedSpec || '—'}</span>
+                                </div>
+                              ) : (
+                                <div>
+                                  <span className="text-slate-500">Rate type:</span>{' '}
+                                  <span className="font-medium">{detail.rateType ? (rateTypeLabelMap[detail.rateType] || detail.rateType) : '—'}</span>
+                                </div>
+                              )}
                               <div>
                                 <span className="text-slate-500">Family:</span>{' '}
-                                <span className="font-medium">{detail.family || '—'}</span>
+                                <span className="font-medium">{detail.family ? (familyLabelMap[detail.family] || detail.family) : '—'}</span>
                               </div>
                               <div>
                                 <span className="text-slate-500">Base (per unit):</span>{' '}

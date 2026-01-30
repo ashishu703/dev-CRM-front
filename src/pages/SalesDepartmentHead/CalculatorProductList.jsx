@@ -3,6 +3,7 @@ import { Calculator, ArrowRight, Sparkles } from "lucide-react"
 import AaacCalculator from "./AaacCalculator"
 import AcsrCalculator from "./AcsrCalculator"
 import AbCableCalculator from "./AbCableCalculator"
+import McXlpeArmouredCalculator from "./McXlpeArmouredCalculator"
 
 export default function CalculatorProductList({ setActiveView }) {
   const [products, setProducts] = useState([])
@@ -29,8 +30,10 @@ export default function CalculatorProductList({ setActiveView }) {
         setSelectedProduct('aaac')
       } else if (parsed.family === 'ACSR') {
         setSelectedProduct('acsr')
-      } else if (parsed.family === 'AB_CABLE') {
+      } else       if (parsed.family === 'AB_CABLE') {
         setSelectedProduct('ab_cable')
+      } else if (parsed.family === 'MC_XLPE_ARMOURED') {
+        setSelectedProduct('mc_xlpe_armoured')
       }
     } catch {
       // ignore malformed storage
@@ -67,8 +70,17 @@ export default function CalculatorProductList({ setActiveView }) {
         defaultUnit: 'KM',
         description: 'Calculate pricing for AB Cable (ISI + COMM variants) using Excel-based formulas'
       }
+
+      const mcXlpeArmouredProduct = {
+        id: 'mc_xlpe_armoured',
+        name: 'Multi Core XLPE Insulated Aluminium Armoured Cable',
+        image: "/images/products/multi core xlpe insulated aluminium armoured cable.jpeg",
+        hsn: '8544',
+        defaultUnit: 'KM',
+        description: '1 Strand MC Armoured Cable (Wire & Strip) – Excel-based formulas, raw material from Account'
+      }
       
-      setProducts([aaacProduct, acsrProduct, abCableProduct])
+      setProducts([aaacProduct, acsrProduct, abCableProduct, mcXlpeArmouredProduct])
     } catch (error) {
       console.error('Error loading products:', error)
     } finally {
@@ -83,6 +95,8 @@ export default function CalculatorProductList({ setActiveView }) {
       setSelectedProduct('acsr')
     } else if (product.id === 'ab_cable') {
       setSelectedProduct('ab_cable')
+    } else if (product.id === 'mc_xlpe_armoured') {
+      setSelectedProduct('mc_xlpe_armoured')
     }
   }
 
@@ -110,6 +124,16 @@ export default function CalculatorProductList({ setActiveView }) {
   if (selectedProduct === 'ab_cable') {
     return (
       <AbCableCalculator
+        setActiveView={setActiveView}
+        onBack={() => setSelectedProduct(null)}
+        rfpContext={rfpContext}
+      />
+    )
+  }
+
+  if (selectedProduct === 'mc_xlpe_armoured') {
+    return (
+      <McXlpeArmouredCalculator
         setActiveView={setActiveView}
         onBack={() => setSelectedProduct(null)}
         rfpContext={rfpContext}
