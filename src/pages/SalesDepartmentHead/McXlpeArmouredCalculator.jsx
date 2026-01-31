@@ -76,7 +76,7 @@ const COL_CONFIG = [
   { key: "FINAL RATE", label: "Final Rate", type: "formula" },
 ];
 
-export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpContext }) {
+export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpContext: rfpContextProp }) {
   const [loading, setLoading] = useState(true);
   const [engine, setEngine] = useState(null);
   const [groups, setGroups] = useState([]);
@@ -86,8 +86,11 @@ export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpCon
   );
   const [perRowCovering, setPerRowCovering] = useState({});
   const [selectedRowIndex, setSelectedRowIndex] = useState(null);
+  const [rfpContextFromStorage, setRfpContextFromStorage] = useState(null);
   const tableBodyRef = useRef(null);
   const hasAutoSelectedRef = useRef(false);
+
+  const rfpContext = rfpContextProp || rfpContextFromStorage;
 
   const flatDataRows = useMemo(() => {
     if (!engine || !groups.length) return [];
@@ -130,6 +133,19 @@ export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpCon
   useEffect(() => {
     loadExcel();
   }, []);
+
+  // When opened from RFP, parent may pass rfpContext; if not, read from localStorage so Save & Return shows
+  useEffect(() => {
+    if (rfpContextProp) return;
+    try {
+      const raw = window.localStorage.getItem("rfpCalculatorRequest");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.family === "MC_XLPE_ARMOURED") setRfpContextFromStorage(parsed);
+    } catch {
+      // ignore
+    }
+  }, [rfpContextProp]);
 
   // Auto-select row from RFP productSpec (e.g. "2 core 4 sq mm", "3C x 6", "4 Core 16 SQMM") – once per load
   useEffect(() => {
@@ -247,13 +263,41 @@ export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpCon
       `${selectedRowData.cores} Core ${selectedRowData.area} MC XLPE Armoured`.trim() || rfpContext.productSpec;
 
     const baseTotal = totalPrice;
+    const row = selectedRowData.row || {};
+    const fullRowData = {};
+    Object.entries(row).forEach(([k, v]) => {
+      if (k && v != null && v !== "") {
+        fullRowData[k] = typeof v === "number" ? v : (Number.isFinite(parseFloat(v)) ? parseFloat(v) : v);
+      }
+    });
+    const productSpecification = {
+      ...fullRowData,
+      name: `${selectedRowData.cores} Core ${selectedRowData.area}`,
+      cores: selectedRowData.cores,
+      size: selectedRowData.area,
+      conductorType: selectedRowData.conductor || "Aluminium",
+      wireStripCovering: selectedRowData.wireStripCovering,
+      quantity: lengthKm,
+      quantityUnit: rfpContext.lengthUnit || rfpContext.quantityUnit || "Km",
+      basePerUnit,
+      baseTotal,
+      totalPrice,
+      family: "MC_XLPE_ARMOURED"
+    };
     const calculatorDetail = {
       family: "MC_XLPE_ARMOURED",
       rfpId: rfpContext.rfpId,
       rfpRequestId: rfpContext.rfpRequestId,
       productSpec: rfpContext.productSpec,
+      productSpecification,
       selectedSpec: `${selectedRowData.cores} Core ${selectedRowData.area}`,
+      cores: selectedRowData.cores,
+      size: selectedRowData.area,
+      conductorType: selectedRowData.conductor || "Aluminium",
+      wireStripCovering: selectedRowData.wireStripCovering,
+      quantity: lengthKm,
       length: lengthKm,
+      quantityUnit: rfpContext.lengthUnit || rfpContext.quantityUnit || "Km",
       basePerUnit,
       baseTotal,
       totalPrice,
@@ -452,33 +496,32 @@ export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpCon
                 }
                 return rows;
               })}
-              {rfpContext && (
-                <tr className="bg-blue-50 border-t-2 border-blue-200">
-                  <td colSpan={COL_CONFIG.length + 1} className="px-2 py-2">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <span className="text-xs text-gray-700">
-                        Selected: <strong>{selectedSpecLabel || "—"}</strong>
-                        {Number.isFinite(selectedFinalRate) && (
-                          <> — ₹{fmtNumber(selectedFinalRate)}/km</>
-                        )}
-                        . Select a row (radio) then save to RFP.
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleSaveToRfp}
-                        disabled={selectedRowIndex == null}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Clock className="w-3 h-3" />
-                        Calculate Price & Save to RFP
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
+        {/* RFP: Save and Return bar – always visible below table when opened from RFP */}
+        {rfpContext && (
+          <div className="border-t-2 border-emerald-200 bg-emerald-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-gray-800">
+              Selected: <strong>{selectedSpecLabel || "—"}</strong>
+              {Number.isFinite(selectedFinalRate) && (
+                <> — ₹{fmtNumber(selectedFinalRate)}/km</>
+              )}
+              {!selectedSpecLabel && (
+                <span className="text-amber-700"> Select a row (radio) above.</span>
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={handleSaveToRfp}
+              disabled={selectedRowIndex == null}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            >
+              <Clock className="w-4 h-4" />
+              Save and Return to RFP
+            </button>
+          </div>
+        )}
         {/* Legend – column types */}
         <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex flex-wrap items-center gap-4 text-xs">
           <span className="font-semibold text-gray-700">Column types:</span>

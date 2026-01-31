@@ -5,6 +5,8 @@ import { PDFDownloader } from '../utils/PDFDownloader'
 import Toast from '../utils/Toast'
 import { Download, X } from 'lucide-react'
 import { withRfpTemplateFields } from '../utils/withRfpTemplateFields'
+import { QuotationDataMapper } from '../utils/QuotationDataMapper'
+import { COMPANY_BRANCHES, DEFAULT_BRANCH } from '../config/appConfig'
 
 export default function PIPreview({ piData, companyBranches, user, onClose }) {
   const [templateHtml, setTemplateHtml] = React.useState('')
@@ -76,9 +78,25 @@ export default function PIPreview({ piData, companyBranches, user, onClose }) {
     )
   }
 
-  const branch = piData.selectedBranch && companyBranches?.[piData.selectedBranch]
-    ? companyBranches[piData.selectedBranch]
-    : (companyBranches ? Object.values(companyBranches)[0] : {})
+  // Resolve branch: companyBranches may be empty (fetch not done) or keyed by UUID vs 'ANODE'
+  const branch =
+    (piData.selectedBranch && companyBranches?.[piData.selectedBranch]) ||
+    (companyBranches && Object.values(companyBranches)[0]) ||
+    (DEFAULT_BRANCH && COMPANY_BRANCHES?.[DEFAULT_BRANCH]) ||
+    (COMPANY_BRANCHES && Object.values(COMPANY_BRANCHES)[0]) ||
+    {}
+  const branchName = branch?.name || branch?.companyName || branch?.legalName || 'ANODE ELECTRIC PVT. LTD.'
+  const bankDetails =
+    QuotationDataMapper.normalizeBankDetails(piData.bankDetails, branchName) ||
+    {
+      branch: branchName,
+      branchName,
+      bankName: '',
+      accountNumber: '',
+      ifscCode: '',
+      accountHolderName: branchName,
+      account_holder_name: branchName
+    }
 
   return (
     <div className="fixed inset-0 z-[120] overflow-auto bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4">
@@ -95,6 +113,7 @@ export default function PIPreview({ piData, companyBranches, user, onClose }) {
                 ...piData,
                 branch,
                 billTo: piData.billTo,
+                bankDetails,
                 user,
                 templateKey: piData.template,
                 templateType: 'pi'

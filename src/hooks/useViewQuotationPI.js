@@ -169,7 +169,7 @@ export function useViewQuotationPI(companyBranches, user) {
         return;
       }
 
-      // Fetch PI details
+      // Fetch PI first, then quotation + payments in parallel (faster View open)
       const piResponse = await proformaInvoiceService.getPI(piId);
       if (!piResponse?.success) {
         Toast.error('Failed to fetch PI details');
@@ -182,14 +182,20 @@ export function useViewQuotationPI(companyBranches, user) {
         return;
       }
 
-      // Get complete quotation data with ALL fields from DB
       let completeQuotation = quotation;
+      let paymentsFromApi = [];
       if (!completeQuotation && piData.quotation_id) {
-        // Use getQuotation to get all fields including bank_details, terms_sections
-        const quotationResponse = await quotationService.getQuotation(piData.quotation_id);
+        const [quotationResponse, payRes] = await Promise.all([
+          quotationService.getQuotation(piData.quotation_id),
+          paymentService.getPaymentsByQuotation(piData.quotation_id).catch(() => ({ data: [] }))
+        ]);
         if (quotationResponse?.success && quotationResponse?.data) {
           completeQuotation = quotationResponse.data;
         }
+        paymentsFromApi = Array.isArray(payRes?.data) ? payRes.data : [];
+      } else if (completeQuotation && piData.quotation_id) {
+        const payRes = await paymentService.getPaymentsByQuotation(piData.quotation_id).catch(() => ({ data: [] }));
+        paymentsFromApi = Array.isArray(payRes?.data) ? payRes.data : [];
       }
 
       if (!completeQuotation) {
@@ -221,6 +227,19 @@ export function useViewQuotationPI(companyBranches, user) {
           ? JSON.parse(completeQuotation.terms_sections)
           : completeQuotation.terms_sections;
       }
+      const rawTerms = termsSections || completeQuotation.termsSections;
+      let terms = [];
+      try {
+        const baseTerms = Array.isArray(rawTerms) ? rawTerms : (typeof rawTerms === 'string' ? JSON.parse(rawTerms) : []);
+        if (Array.isArray(baseTerms)) {
+          terms = baseTerms.map((sec) => ({
+            title: sec.title || '',
+            points: Array.isArray(sec.points) ? sec.points : []
+          }));
+        }
+      } catch (e) {
+        // terms parsing failed
+      }
 
       let billToFromQuotation = null;
       if (completeQuotation.bill_to) {
@@ -229,87 +248,121 @@ export function useViewQuotationPI(companyBranches, user) {
           : completeQuotation.bill_to;
       }
 
-      // Map quotation items
+      // Map quotation items; for revised PI apply amendment_detail so only effective items and totals are shown
       const quotationItems = completeQuotation.items || [];
-      const mappedItems = quotationItems.map(item => ({
-        id: item.id || Math.random(),
-        productName: item.product_name || item.productName || item.description || 'Product',
-        description: item.product_name || item.productName || item.description || 'Product',
-        subDescription: item.description || '',
-        hsn: item.hsn_code || item.hsn || item.hsnCode || '85446090',
-        hsnCode: item.hsn_code || item.hsn || item.hsnCode || '85446090',
-        dueOn: new Date().toISOString().split('T')[0],
-        quantity: Number(item.quantity) || 1,
-        unit: item.unit || 'Nos',
-        rate: Number(item.buyer_rate || item.unit_price || item.unitPrice || item.buyerRate || 0),
-        buyerRate: Number(item.unit_price || item.buyer_rate || item.unitPrice || item.buyerRate || 0),
-        amount: Number(item.taxable_amount ?? item.amount ?? item.taxable ?? item.total_amount ?? item.total ?? 0),
-        gstRate: Number(item.gst_rate ?? item.gstRate ?? 18),
-        gstMultiplier: 1 + Number(item.gst_rate ?? item.gstRate ?? 18) / 100
-      }));
-
-      // Calculate totals
-      const subtotal = mappedItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
-      const discountRate = Number(completeQuotation.discount_rate ?? completeQuotation.discountRate ?? 0);
-      const discountAmount = Number(completeQuotation.discount_amount ?? completeQuotation.discountAmount ?? (subtotal * discountRate) / 100);
-      const taxableAmount = Math.max(0, subtotal - discountAmount);
-      const taxRate = Number(completeQuotation.tax_rate ?? completeQuotation.taxRate ?? 18);
-      const taxAmount = Number(completeQuotation.tax_amount ?? completeQuotation.taxAmount ?? (taxableAmount * taxRate) / 100);
-      const piTotal = Number(piData.total_amount ?? piData.totalAmount ?? 0);
-      const quotationTotal = Number(completeQuotation.total_amount ?? completeQuotation.total ?? 0);
-      const finalTotal = piTotal > 0 ? piTotal : (quotationTotal > 0 ? quotationTotal : (taxableAmount + taxAmount));
-
-      // Calculate advance payment
-      let advancePayment = 0;
-      let originalQuotationTotal = quotationTotal;
-      let approvedPayments = [];
-      try {
-        const payRes = await paymentService.getPaymentsByQuotation(piData.quotation_id);
-        const allPayments = payRes?.data || [];
-        const approvedOnly = allPayments
-          .filter(p => {
-            const approvalStatus = (p.approval_status || p.accounts_approval_status || '').toLowerCase();
-            return approvalStatus === 'approved';
-          })
-        
-        advancePayment = approvedOnly.reduce((sum, p) => {
-          const amount = Number(p.installment_amount || p.paid_amount || p.amount || 0);
-          return sum + (isNaN(amount) ? 0 : amount);
-        }, 0);
-        
-        approvedPayments = approvedOnly.map((payment) => {
-          const paymentDate = payment.payment_date || payment.created_at || '';
-          let formattedDate = '';
-          if (paymentDate) {
-            try {
-              formattedDate = new Date(paymentDate).toLocaleDateString('en-IN', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric'
-              });
-            } catch (e) {
-              formattedDate = paymentDate;
-            }
-          }
-          const amountRaw = Number(payment.installment_amount || payment.paid_amount || payment.amount || 0);
-          return {
-            date: formattedDate,
-            mode: payment.payment_method || 'N/A',
-            refNo: payment.payment_reference || payment.id || '',
-            amount: amountRaw.toFixed(2),
-            amountRaw
-          };
-        });
-        
-        if (advancePayment > 0 && quotationTotal > 0) {
-          originalQuotationTotal = quotationTotal;
-        }
-      } catch (e) {
-        if (piTotal > 0 && quotationTotal > 0 && piTotal < quotationTotal) {
-          advancePayment = quotationTotal - piTotal;
-          originalQuotationTotal = quotationTotal;
+      let amendmentDetail = null;
+      if (piData.parent_pi_id && piData.amendment_detail) {
+        try {
+          amendmentDetail = typeof piData.amendment_detail === 'string'
+            ? JSON.parse(piData.amendment_detail)
+            : piData.amendment_detail;
+        } catch (e) {
+          amendmentDetail = null;
         }
       }
+      let rawItems = quotationItems;
+      if (amendmentDetail) {
+        const removedIds = new Set((amendmentDetail.removed_item_ids || []).map((id) => String(id)));
+        const reducedMap = (amendmentDetail.reduced_items || []).reduce((acc, item) => {
+          const qid = item.quotation_item_id ?? item.quotationItemId;
+          if (qid != null) acc[String(qid)] = Number(item.quantity) || 0;
+          return acc;
+        }, {});
+        rawItems = quotationItems
+          .filter((item) => !removedIds.has(String(item.id ?? item.quotation_item_id ?? '')))
+          .map((item) => {
+            const id = String(item.id ?? item.quotation_item_id ?? '');
+            const origQty = Number(item.quantity) || 1;
+            const origAmount = Number(item.taxable_amount ?? item.amount ?? item.total_amount ?? item.total ?? 0);
+            const qty = reducedMap[id] !== undefined ? reducedMap[id] : origQty;
+            const amount = origQty > 0 ? (origAmount / origQty) * qty : 0;
+            return { ...item, quantity: qty, _effectiveAmount: amount };
+          });
+      }
+      const mappedItems = rawItems.map((item) => {
+        const amount = item._effectiveAmount != null ? item._effectiveAmount : Number(item.taxable_amount ?? item.amount ?? item.taxable ?? item.total_amount ?? item.total ?? 0);
+        return {
+          id: item.id || Math.random(),
+          productName: item.product_name || item.productName || item.description || 'Product',
+          description: item.product_name || item.productName || item.description || 'Product',
+          subDescription: item.description || '',
+          hsn: item.hsn_code || item.hsn || item.hsnCode || '85446090',
+          hsnCode: item.hsn_code || item.hsn || item.hsnCode || '85446090',
+          dueOn: new Date().toISOString().split('T')[0],
+          quantity: Number(item.quantity) || 1,
+          unit: item.unit || 'Nos',
+          rate: Number(item.buyer_rate || item.unit_price || item.unitPrice || item.buyerRate || 0),
+          buyerRate: Number(item.unit_price || item.buyer_rate || item.unitPrice || item.buyerRate || 0),
+          amount,
+          gstRate: Number(item.gst_rate ?? item.gstRate ?? 18),
+          gstMultiplier: 1 + Number(item.gst_rate ?? item.gstRate ?? 18) / 100
+        };
+      });
+
+      // Calculate totals; for revised PI use stored PI totals so approval view shows correct figures
+      const toInt = (v) => Math.round(Number(v) || 0);
+      const isRevised = !!(piData.parent_pi_id && (piData.subtotal != null || piData.total_amount > 0));
+      const taxRate = Number(completeQuotation.tax_rate ?? completeQuotation.taxRate ?? 18);
+      let subtotal;
+      let taxableAmount;
+      let taxAmount;
+      const piTotal = Number(piData.total_amount ?? piData.totalAmount ?? 0);
+      const quotationTotal = Number(completeQuotation.total_amount ?? completeQuotation.total ?? 0);
+      if (isRevised && (Number(piData.subtotal) >= 0 || piTotal > 0)) {
+        const subRaw = Number(piData.subtotal) >= 0 ? Number(piData.subtotal) : mappedItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+        subtotal = toInt(subRaw);
+        taxAmount = toInt(Number(piData.tax_amount) >= 0 ? Number(piData.tax_amount) : (subtotal * taxRate) / 100);
+        taxableAmount = toInt(subtotal);
+      } else {
+        subtotal = toInt(mappedItems.reduce((s, i) => s + (Number(i.amount) || 0), 0));
+        const discountRate = Number(completeQuotation.discount_rate ?? completeQuotation.discountRate ?? 0);
+        const discountAmount = toInt(Number(completeQuotation.discount_amount ?? completeQuotation.discountAmount ?? (subtotal * discountRate) / 100));
+        taxableAmount = toInt(Math.max(0, subtotal - discountAmount));
+        taxAmount = toInt(Number(completeQuotation.tax_amount ?? completeQuotation.taxAmount ?? (taxableAmount * taxRate) / 100));
+      }
+      const discountRate = Number(completeQuotation.discount_rate ?? completeQuotation.discountRate ?? 0);
+      const discountAmount = toInt(Number(completeQuotation.discount_amount ?? completeQuotation.discountAmount ?? (subtotal * discountRate) / 100));
+      const finalTotal = toInt(piTotal > 0 ? piTotal : (quotationTotal > 0 ? quotationTotal : (taxableAmount + taxAmount)));
+
+      // Use pre-fetched payments (no extra API call; original PI/quotation never mutated)
+      const allPayments = paymentsFromApi;
+      const approvedOnly = allPayments.filter((p) => {
+        const status = (p.approval_status || p.accounts_approval_status || '').toLowerCase();
+        return status === 'approved';
+      });
+      let advancePayment = approvedOnly.reduce((sum, p) => {
+        const amount = Number(p.installment_amount || p.paid_amount || p.amount || 0);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0);
+      let originalQuotationTotal = quotationTotal;
+      if (advancePayment > 0 && quotationTotal > 0) originalQuotationTotal = quotationTotal;
+      if (!allPayments.length && piTotal > 0 && quotationTotal > 0 && piTotal < quotationTotal) {
+        advancePayment = quotationTotal - piTotal;
+        originalQuotationTotal = quotationTotal;
+      }
+      const approvedPayments = approvedOnly.map((payment) => {
+        const paymentDate = payment.payment_date || payment.created_at || '';
+        let formattedDate = '';
+        if (paymentDate) {
+          try {
+            formattedDate = new Date(paymentDate).toLocaleDateString('en-IN', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric'
+            });
+          } catch (e) {
+            formattedDate = paymentDate;
+          }
+        }
+        const amountRaw = Number(payment.installment_amount || payment.paid_amount || payment.amount || 0);
+        return {
+          date: formattedDate,
+          mode: payment.payment_method || 'N/A',
+          refNo: payment.payment_reference || payment.id || '',
+          amount: amountRaw.toFixed(2),
+          amountRaw
+        };
+      });
 
       const totalAdvanceRaw = approvedPayments.reduce((sum, payment) => sum + (payment.amountRaw || 0), 0);
       const totalAdvanceValue = totalAdvanceRaw || advancePayment || 0;
@@ -369,6 +422,10 @@ export function useViewQuotationPI(companyBranches, user) {
         selectedBranch: completeQuotation.branch || piData.branch || 'ANODE',
         template: piData.template || piData.templateKey || completeQuotation.template,
         templateKey: piData.template || piData.templateKey || completeQuotation.template,
+        rfpId: completeQuotation.rfp_id || completeQuotation.rfpId || piData.rfp_id || piData.master_rfp_id || null,
+        masterRfpId: completeQuotation.master_rfp_id || completeQuotation.masterRfpId || piData.master_rfp_id || null,
+        rfp_id: completeQuotation.rfp_id || completeQuotation.rfpId || piData.rfp_id || null,
+        master_rfp_id: completeQuotation.master_rfp_id || completeQuotation.masterRfpId || piData.master_rfp_id || null,
         dispatchMode: piData.dispatch_mode,
         shippingDetails: {
           transportName: piData.transport_name,
@@ -384,7 +441,8 @@ export function useViewQuotationPI(companyBranches, user) {
         },
         // Bank details and terms from quotation - ALL FROM DB
         bankDetails: bankDetails,
-        termsSections: termsSections
+        termsSections: termsSections,
+        terms
       };
 
       setPiModalData(piPreviewData);

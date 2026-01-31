@@ -94,12 +94,13 @@ export function usePIFlow(viewingCustomer, viewingCustomerForQuotation, selected
         gstMultiplier: 1 + Number(item.gst_rate ?? item.gstRate ?? 18) / 100
       }))
       
-      const subtotal = mappedItems.reduce((s, i) => s + (Number(i.amount) || 0), 0)
+      const toInt = (v) => Math.round(Number(v) || 0)
+      const subtotal = toInt(mappedItems.reduce((s, i) => s + (Number(i.amount) || 0), 0))
       const discountRate = Number(completeQuotation.discount_rate ?? completeQuotation.discountRate ?? 0)
-      const discountAmount = Number(completeQuotation.discount_amount ?? completeQuotation.discountAmount ?? (subtotal * discountRate) / 100)
-      const taxableAmount = Math.max(0, subtotal - discountAmount)
+      const discountAmount = toInt(Number(completeQuotation.discount_amount ?? completeQuotation.discountAmount ?? (subtotal * discountRate) / 100))
+      const taxableAmount = toInt(Math.max(0, subtotal - discountAmount))
       const taxRate = Number(completeQuotation.tax_rate ?? completeQuotation.taxRate ?? 18)
-      const taxAmount = Number(completeQuotation.tax_amount ?? completeQuotation.taxAmount ?? (taxableAmount * taxRate) / 100)
+      const taxAmount = toInt(Number(completeQuotation.tax_amount ?? completeQuotation.taxAmount ?? (taxableAmount * taxRate) / 100))
       const piTotal = Number(pi.total_amount ?? pi.totalAmount ?? 0)
       const quotationTotal = Number(completeQuotation.total_amount ?? completeQuotation.total ?? 0)
       const total = piTotal > 0 ? piTotal : (quotationTotal > 0 ? quotationTotal : (taxableAmount + taxAmount))
@@ -281,7 +282,13 @@ export function usePIFlow(viewingCustomer, viewingCustomerForQuotation, selected
         
         // Bank details & terms & conditions (for template footer)
         bankDetails,
-        terms
+        terms,
+
+        // RFP ID from quotation (for PI template - Lead → RFP → Quotation → PI)
+        rfpId: completeQuotation.rfp_id || completeQuotation.rfpId || pi.master_rfp_id || null,
+        masterRfpId: completeQuotation.master_rfp_id || completeQuotation.masterRfpId || pi.master_rfp_id || null,
+        rfp_id: completeQuotation.rfp_id || completeQuotation.rfpId || null,
+        master_rfp_id: completeQuotation.master_rfp_id || completeQuotation.masterRfpId || pi.master_rfp_id || null
       }
       
       // PI must use its own template key

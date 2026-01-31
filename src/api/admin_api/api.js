@@ -97,6 +97,14 @@ export const API_ENDPOINTS = {
   PRICING_RFP_DECISION_RECORDS_BY_DATE: (query = '') => `${API_BASE_URL}/api/pricing-rfp-decisions/records/by-date${query ? `?${query}` : ''}`,
   PRICING_RFP_DECISION_RECORDS_ALL: (query = '') => `${API_BASE_URL}/api/pricing-rfp-decisions/records/all${query ? `?${query}` : ''}`,
 
+  // Order cancel requests (payment tracking: salesperson requests, DH approves)
+  ORDER_CANCEL_REQUEST: () => `${API_BASE_URL}/api/order-cancel-requests`,
+  ORDER_CANCEL_BY_QUOTATION: (quotationId) => `${API_BASE_URL}/api/order-cancel-requests/quotation/${encodeURIComponent(quotationId)}`,
+  ORDER_CANCEL_BY_CUSTOMER: (customerId) => `${API_BASE_URL}/api/order-cancel-requests/customer/${encodeURIComponent(customerId)}`,
+  ORDER_CANCEL_PENDING: () => `${API_BASE_URL}/api/order-cancel-requests/pending`,
+  ORDER_CANCEL_APPROVE: (id) => `${API_BASE_URL}/api/order-cancel-requests/${id}/approve`,
+  ORDER_CANCEL_REJECT: (id) => `${API_BASE_URL}/api/order-cancel-requests/${id}/reject`,
+
   // Stock
   STOCK_BASE: `${API_BASE_URL}/api/stock`,
   STOCK_GET_ALL: () => `${API_BASE_URL}/api/stock`,

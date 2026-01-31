@@ -46,6 +46,18 @@ export const addProduct = (productName, hsn, unit = 'Mtr') => {
 };
 
 const getDefaultProducts = () => [
+  { name: 'Multi Core XLPE Insulated Aluminium Armoured Cable 2 Core 4 sq mm', hsn: '8544', defaultUnit: 'Mtr' },
+  { name: 'Multi Core XLPE Insulated Aluminium Armoured Cable 2 Core 6 sq mm', hsn: '8544', defaultUnit: 'Mtr' },
+  { name: 'Multi Core XLPE Insulated Aluminium Armoured Cable 2 Core 10 sq mm', hsn: '8544', defaultUnit: 'Mtr' },
+  { name: 'Multi Core XLPE Insulated Aluminium Armoured Cable 2 Core 16 sq mm', hsn: '8544', defaultUnit: 'Mtr' },
+  { name: 'Multi Core XLPE Insulated Aluminium Armoured Cable 3 Core 4 sq mm', hsn: '8544', defaultUnit: 'Mtr' },
+  { name: 'Multi Core XLPE Insulated Aluminium Armoured Cable 3 Core 6 sq mm', hsn: '8544', defaultUnit: 'Mtr' },
+  { name: 'Multi Core XLPE Insulated Aluminium Armoured Cable 3 Core 10 sq mm', hsn: '8544', defaultUnit: 'Mtr' },
+  { name: 'Multi Core XLPE Insulated Aluminium Armoured Cable 3 Core 16 sq mm', hsn: '8544', defaultUnit: 'Mtr' },
+  { name: 'Multi Core XLPE Insulated Aluminium Armoured Cable 4 Core 4 sq mm', hsn: '8544', defaultUnit: 'Mtr' },
+  { name: 'Multi Core XLPE Insulated Aluminium Armoured Cable 4 Core 6 sq mm', hsn: '8544', defaultUnit: 'Mtr' },
+  { name: 'Multi Core XLPE Insulated Aluminium Armoured Cable 4 Core 10 sq mm', hsn: '8544', defaultUnit: 'Mtr' },
+  { name: 'Multi Core XLPE Insulated Aluminium Armoured Cable 4 Core 16 sq mm', hsn: '8544', defaultUnit: 'Mtr' },
   { name: 'AB CABLE 3CX16 SQMM', hsn: '8544', defaultUnit: 'Mtr' },
   { name: 'AB CABLE 3CX25 SQMM', hsn: '8544', defaultUnit: 'Mtr' },
   { name: 'AB CABLE 3CX35 SQMM', hsn: '8544', defaultUnit: 'Mtr' },
