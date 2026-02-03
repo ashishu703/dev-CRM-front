@@ -12,8 +12,16 @@ import CustomerTimeline from './CustomerTimeline';
  * - onClose: callback to close the sidebar
  * - onQuotationView: callback to view quotation (optional)
  * - onPIView: callback to view PI (optional)
+ * - onCancelOrder: callback to initiate order cancellation (optional)
  */
-const SalespersonCustomerTimeline = ({ lead, item, onClose, onQuotationView, onPIView }) => {
+const SalespersonCustomerTimeline = ({ 
+  lead, 
+  item, 
+  onClose, 
+  onQuotationView, 
+  onPIView,
+  onCancelOrder 
+}) => {
   // Support both direct lead prop and item.leadData structure
   const leadData = lead || item?.leadData || item;
   
@@ -24,6 +32,7 @@ const SalespersonCustomerTimeline = ({ lead, item, onClose, onQuotationView, onP
       onClose={onClose}
       onQuotationView={onQuotationView}
       onPIView={onPIView}
+      onCancelOrder={onCancelOrder}
     />
   );
 };

@@ -104,10 +104,17 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   const [showRfpIdValidationModal, setShowRfpIdValidationModal] = React.useState(false)
   const [validationError, setValidationError] = React.useState('')
   const [rfpValidationErrors, setRfpValidationErrors] = React.useState({
-    products: {}, // { index: { quantity: 'error', length: 'error', targetPrice: 'error' } }
+    products: {}, // { index: { quantity: 'error', targetPrice: 'error' } }
     deliveryTimeline: '',
     general: '' // General form-level errors
   })
+
+  // When Pricing modal opens, always load products list so dropdown has all products & types
+  React.useEffect(() => {
+    if (showPricingModal && pricingLead) {
+      setProducts(getProducts())
+    }
+  }, [showPricingModal, pricingLead])
 
   // Close dropdown when clicking outside
   React.useEffect(() => {
@@ -281,13 +288,13 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     setShowRfpIdValidationModal(true)
   }
 
-  // Filter products based on search
+  // Filter products based on search – when empty show first 150 so dropdown lists all products/types
   const filteredProducts = React.useMemo(() => {
     if (!productSearch.trim()) {
-      return products.slice(0, 10) // Show first 10 when no search
+      return products.slice(0, 150)
     }
     const searchLower = productSearch.toLowerCase()
-    return products.filter(p => p.name.toLowerCase().includes(searchLower)).slice(0, 10)
+    return products.filter(p => p.name.toLowerCase().includes(searchLower)).slice(0, 80)
   }, [productSearch, products])
 
   // Check stock for a product
@@ -316,8 +323,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     const newProduct = {
       productSpec: productToAdd,
       quantity: '',
-      length: '',
-      lengthUnit: 'Mtr',
+      quantityUnit: 'Mtr',
       targetPrice: '',
       stockStatus: null,
       stockLoading: true,
@@ -382,17 +388,10 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     }))
   }
 
-  const handleProductLengthChange = (index, length) => {
+  const handleProductQuantityUnitChange = (index, quantityUnit) => {
     setRfpForm(prev => ({
       ...prev,
-      products: prev.products.map((p, i) => i === index ? { ...p, length } : p)
-    }))
-  }
-
-  const handleProductLengthUnitChange = (index, lengthUnit) => {
-    setRfpForm(prev => ({
-      ...prev,
-      products: prev.products.map((p, i) => i === index ? { ...p, lengthUnit } : p)
+      products: prev.products.map((p, i) => i === index ? { ...p, quantityUnit } : p)
     }))
   }
 
@@ -414,8 +413,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
       products: productSpec ? [{
       productSpec,
       quantity: '',
-        length: '',
-        lengthUnit: 'Mtr',
+        quantityUnit: 'Mtr',
         targetPrice: '',
         stockStatus: null,
         stockLoading: true,
@@ -567,25 +565,9 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
         }
       }
 
-      // Validate Length (required)
-      const length = product.length?.toString().trim() || ''
-      if (!length) {
-        productErrors.length = 'Length is required'
-        hasErrors = true
-      } else {
-        const lengthNum = parseFloat(length)
-        if (isNaN(lengthNum) || lengthNum <= 0) {
-          productErrors.length = 'Length must be greater than 0'
-          hasErrors = true
-        }
-      }
-
-      // Validate Target Price (required)
+      // Validate Target Price (optional - if provided, must be > 0)
       const targetPrice = product.targetPrice?.toString().trim() || ''
-      if (!targetPrice) {
-        productErrors.targetPrice = 'Target Price is required'
-        hasErrors = true
-      } else {
+      if (targetPrice) {
         const priceNum = parseFloat(targetPrice)
         if (isNaN(priceNum) || priceNum <= 0) {
           productErrors.targetPrice = 'Target Price must be greater than 0'
@@ -661,8 +643,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
         products: productsToSave.map(p => ({
           productSpec: p.productSpec,
           quantity: p.quantity || '',
-          length: p.length || '',
-          lengthUnit: p.lengthUnit || 'Mtr',
+          quantityUnit: p.quantityUnit || 'Mtr',
           targetPrice: p.targetPrice || ''
         })),
         deliveryTimeline: rfpForm.deliveryTimeline,
@@ -690,27 +671,36 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     }
   }
 
-  // Validate RFP ID
+  // Validate RFP ID – only accept if RFP is linked to this lead (not any other lead)
   const handleValidateRfpId = async () => {
     if (!rfpIdInput.trim()) {
       setValidationError('Please enter RFP ID')
       return
     }
-    
+
+    const currentLeadId = viewingCustomerForQuotation?.id ?? viewingCustomerForQuotation?.lead_id ?? null
+    const leadIdParam = currentLeadId != null ? `?leadId=${encodeURIComponent(currentLeadId)}` : ''
+
     setValidationError('')
     setValidatingRfpId(true)
     try {
-      const response = await apiClient.get(API_ENDPOINTS.PRICING_RFP_DECISION_GET(rfpIdInput.trim()))
+      const response = await apiClient.get(API_ENDPOINTS.PRICING_RFP_DECISION_GET(rfpIdInput.trim()) + leadIdParam)
       if (response.success && response.data) {
         const decision = response.data
+        const decisionLeadId = decision.lead_id ?? decision.leadId ?? decision.rfp_request?.lead_id
+        if (currentLeadId != null && decisionLeadId != null && String(decisionLeadId) !== String(currentLeadId)) {
+          const leadName = viewingCustomerForQuotation?.name || viewingCustomerForQuotation?.business || 'this lead'
+          setValidationError(`This RFP ID is linked to a different lead. Please enter the RFP ID that belongs to ${leadName} only.`)
+          setValidatedRfpDecision(null)
+          setValidatingRfpId(false)
+          return
+        }
         setValidatedRfpDecision(decision)
         Toast.success('RFP ID validated successfully!')
-        
-        // Store validated RFP ID in sessionStorage for quotation form
+
         sessionStorage.setItem('pricingRfpDecisionId', rfpIdInput.trim())
         sessionStorage.setItem('pricingRfpDecisionData', JSON.stringify(decision))
-        
-        // Close validation modal and open create quotation modal
+
         setShowRfpIdValidationModal(false)
         setShowCreateQuotation(true)
       } else {
@@ -718,7 +708,14 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
         setValidatedRfpDecision(null)
       }
     } catch (error) {
-      setValidationError(error.message || 'Failed to validate RFP ID. Please check and try again.')
+      const data = error?.response?.data
+      const linkedToLeadName = data?.linkedToLeadName
+      const currentLeadName = viewingCustomerForQuotation?.name || viewingCustomerForQuotation?.business || 'this lead'
+      let msg = data?.message || error.message
+      if (linkedToLeadName && !msg.includes(linkedToLeadName)) {
+        msg = `This RFP ID is linked to ${linkedToLeadName}. Please enter the RFP ID that belongs to ${currentLeadName} only.`
+      }
+      setValidationError(msg || 'Failed to validate RFP ID. Please check and try again.')
       setValidatedRfpDecision(null)
     } finally {
       setValidatingRfpId(false)
@@ -2759,6 +2756,14 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
               <p className={`text-sm mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                 Please enter your RFP ID to proceed with creating quotation.
               </p>
+              {viewingCustomerForQuotation && (
+                <p className={`text-sm mt-1 font-medium ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                  Lead: <span className="font-semibold">{viewingCustomerForQuotation.name || viewingCustomerForQuotation.business || '—'}</span>
+                  {viewingCustomerForQuotation.business && viewingCustomerForQuotation.name !== viewingCustomerForQuotation.business && (
+                    <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}> ({viewingCustomerForQuotation.business})</span>
+                  )}
+                </p>
+              )}
             </div>
             
             <div className="p-6 space-y-4">
@@ -2879,12 +2884,12 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                         onFocus={() => setShowProductDropdown(true)}
                         onKeyDown={handleProductSearchKeyPress}
                         className={`w-full rounded-lg border px-3 py-2 text-sm ${isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200'}`}
-                        placeholder="Type to search or add custom product..."
+                        placeholder="Click to see all products or type to search..."
                       />
                       
-                      {/* Dropdown List */}
+                      {/* Dropdown List – all products & types when focused */}
                       {showProductDropdown && (
-                        <div className={`absolute z-50 w-full mt-1 rounded-lg shadow-xl max-h-60 overflow-y-auto ${isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
+                        <div className={`absolute z-50 w-full mt-1 rounded-lg shadow-xl max-h-80 overflow-y-auto ${isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
                           {filteredProducts.length > 0 ? (
                             <div className="py-1">
                               {filteredProducts.map((product, index) => (
@@ -2977,13 +2982,13 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                           </button>
                         </div>
                         <div className="mt-3 space-y-2">
-                          {/* Quantity Field (only for products that do NOT need RFP) */}
-                          {!needsRfpForProduct && (
-                            <div>
+                          {/* Quantity Field (mandatory for all products) */}
+                          <div>
+                            <div className="flex gap-2">
                               <input
                                 type="number"
                                 step="0.01"
-                                className={`w-full rounded-lg border px-3 py-2 text-sm ${
+                                className={`flex-1 rounded-lg border px-3 py-2 text-sm ${
                                   rfpValidationErrors.products[index]?.quantity
                                     ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
                                     : isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-200'
@@ -2992,52 +2997,12 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                                 value={product.quantity}
                                 onChange={(e) => {
                                   handleProductQuantityChange(index, e.target.value)
-                                  // Clear error when user starts typing
                                   if (rfpValidationErrors.products[index]?.quantity) {
                                     setRfpValidationErrors(prev => ({
                                       ...prev,
                                       products: {
                                         ...prev.products,
-                                        [index]: {
-                                          ...prev.products[index],
-                                          quantity: ''
-                                        }
-                                      }
-                                    }))
-                                  }
-                                }}
-                              />
-                              {rfpValidationErrors.products[index]?.quantity && (
-                                <p className="mt-1 text-xs text-red-600">{rfpValidationErrors.products[index].quantity}</p>
-                              )}
-                            </div>
-                          )}
-                          
-                          {/* Length Field */}
-                          <div>
-                            <div className="flex gap-2">
-                              <input
-                                type="number"
-                                step="0.01"
-                                className={`flex-1 rounded-lg border px-3 py-2 text-sm ${
-                                  rfpValidationErrors.products[index]?.length
-                                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
-                                    : isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-200'
-                                }`}
-                                placeholder="Length *"
-                                value={product.length}
-                                onChange={(e) => {
-                                  handleProductLengthChange(index, e.target.value)
-                                  // Clear error when user starts typing
-                                  if (rfpValidationErrors.products[index]?.length) {
-                                    setRfpValidationErrors(prev => ({
-                                      ...prev,
-                                      products: {
-                                        ...prev.products,
-                                        [index]: {
-                                          ...prev.products[index],
-                                          length: ''
-                                        }
+                                        [index]: { ...prev.products[index], quantity: '' }
                                       }
                                     }))
                                   }
@@ -3045,8 +3010,8 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                               />
                               <select
                                 className={`w-32 rounded-lg border px-3 py-2 text-sm ${isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-200'}`}
-                                value={product.lengthUnit}
-                                onChange={(e) => handleProductLengthUnitChange(index, e.target.value)}
+                                value={product.quantityUnit || 'Mtr'}
+                                onChange={(e) => handleProductQuantityUnitChange(index, e.target.value)}
                               >
                                 <option value="Mtr">Meters</option>
                                 <option value="Ft">Feet</option>
@@ -3056,10 +3021,12 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                                 <option value="Cm">Centimeters</option>
                                 <option value="Mm">Millimeters</option>
                                 <option value="Miles">Miles</option>
+                                <option value="Kg">Kg</option>
+                                <option value="Nos">Nos</option>
                               </select>
                             </div>
-                            {rfpValidationErrors.products[index]?.length && (
-                              <p className="mt-1 text-xs text-red-600">{rfpValidationErrors.products[index].length}</p>
+                            {rfpValidationErrors.products[index]?.quantity && (
+                              <p className="mt-1 text-xs text-red-600">{rfpValidationErrors.products[index].quantity}</p>
                             )}
                           </div>
                           
@@ -3074,7 +3041,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                                   ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
                                   : isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-200'
                               }`}
-                              placeholder="Target Price (₹) *"
+                              placeholder="Target Price (₹) (optional)"
                               value={product.targetPrice}
                               onChange={(e) => {
                                 const value = e.target.value

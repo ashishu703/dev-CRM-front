@@ -143,20 +143,28 @@ export class QuotationDataMapper {
 
   static normalizeBankDetails(bankDetails, branchName) {
     if (!bankDetails) return null;
-    
+
     const details = typeof bankDetails === 'string' ? JSON.parse(bankDetails) : bankDetails;
     const branchVal = details.branch || details.branchName || '';
-    
+    let accountHolder =
+      details.accountHolderName ||
+      details.account_holder_name ||
+      branchName ||
+      '';
+    const strVal = String(accountHolder).trim();
+    if (!strVal || /^\d+$/.test(strVal) || strVal.length < 2) {
+      accountHolder = branchName || 'ANODE ELECTRIC PVT. LTD.';
+    }
+
     return {
       ...details,
-      // Ensure all fields are strings to avoid rendering issues
       branch: String(branchVal),
       branchName: String(branchVal),
       bankName: String(details.bankName || ''),
       accountNumber: String(details.accountNumber || ''),
       ifscCode: String(details.ifscCode || ''),
-      // Fallback to branch name if account holder name is empty
-      accountHolderName: String(details.accountHolderName || branchName || '')
+      accountHolderName: String(accountHolder),
+      account_holder_name: String(accountHolder)
     };
   }
 
@@ -164,15 +172,20 @@ export class QuotationDataMapper {
     if (!Array.isArray(items)) return [];
 
     return items.map(item => {
-      // Explicitly handle HSN and Rate
+      // Explicitly handle HSN, Quantity, and Rate - ensure correct column mapping for Live Preview
       const hsnValue = item.hsnCode || item.hsn || '';
+      const qtyValue = item.quantity ?? item.qty ?? item.length ?? '';
       const rateValue = item.rate || item.buyerRate || item.unitPrice || '';
       
       return {
         ...item,
-        // Ensure these specific fields are populated for the template
+        // HSN/SAC column - must show HSN code, NOT quantity
         hsnCode: String(hsnValue),
-        hsn: String(hsnValue), 
+        hsn: String(hsnValue),
+        // QUANTITY column - quantity, qty, length (legacy) for template compatibility
+        quantity: String(qtyValue),
+        qty: String(qtyValue),
+        length: String(qtyValue), // Legacy: some templates use {{this.length}} for quantity
         rate: String(rateValue),
         buyerRate: String(rateValue),
         productName: item.productName || item.name || '',

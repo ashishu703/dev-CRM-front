@@ -372,10 +372,44 @@ export default function AaacCalculator({ setActiveView, prices: externalPrices, 
 
     if (rfpContext.rfpRequestId && rfpContext.productSpec != null) {
       try {
+        // Full row specification - all column data for RFP approval display
+        const productSpecification = selectedProductId === CUSTOM_PRODUCT_ID && customCalculations
+          ? {
+              name: 'Custom Product',
+              nominal_area: customCalculations.nominal_area,
+              no_of_strands: customNoOfStrands,
+              diameter: customDiameter,
+              aluminium_weight: customCalculations.aluminium_weight,
+              aluminium_cg_grade: prices.alu_price_per_kg,
+              aluminium_alloy_grade_t4: prices.alloy_price_per_kg,
+              cost_alu_per_mtr: customCalculations.cost_alu_per_mtr,
+              cost_alloy_per_mtr: customCalculations.cost_alloy_per_mtr,
+              cost_alu_per_kg: customCalculations.cost_alu_per_kg,
+              cost_alloy_per_kg: customCalculations.cost_alloy_per_kg
+            }
+          : selectedProduct
+          ? {
+              name: selectedProduct.name,
+              nominal_area: selectedProduct.calculated_nominal_area ?? selectedProduct.nominal_area,
+              no_of_strands: selectedProduct.no_of_strands,
+              diameter: selectedProduct.diameter,
+              aluminium_weight: selectedProduct.aluminium_weight,
+              aluminium_cg_grade: prices.alu_price_per_kg,
+              aluminium_alloy_grade_t4: prices.alloy_price_per_kg,
+              cost_alu_per_mtr: selectedProduct.cost_alu_per_mtr,
+              cost_alloy_per_mtr: selectedProduct.cost_alloy_per_mtr,
+              cost_alu_per_kg: selectedProduct.cost_alu_per_kg,
+              cost_alloy_per_kg: selectedProduct.cost_alloy_per_kg
+            }
+          : null
+
         const calculatorDetail = {
           family: 'AAAC',
           productSpec: rfpContext.productSpec,
+          productSpecification,
+          quantity: lengthValue,
           length: lengthValue,
+          quantityUnit: rfpContext.lengthUnit || rfpContext.quantityUnit || (rateType?.includes('per_kg') ? 'Kg' : 'Km'),
           rateType,
           basePerUnit,
           baseTotal,

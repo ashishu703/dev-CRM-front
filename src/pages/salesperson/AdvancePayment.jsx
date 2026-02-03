@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Package, Eye, X, Edit, Clock, CheckCircle, MessageCircle, Mail, DollarSign, CreditCard, XCircle, AlertCircle, MoreHorizontal, User, Building2, MapPin, FileText, Calendar } from 'lucide-react';
+import { Package, Eye, X, Edit, Clock, CheckCircle, MessageCircle, Mail, DollarSign, CreditCard, XCircle, AlertCircle, MoreHorizontal, User, Building2, MapPin, FileText, Calendar, Ban } from 'lucide-react';
 import Toolbar, { ProductPagination } from './PaymentTracking';
 import apiClient from '../../utils/apiClient';
 import quotationService from '../../api/admin_api/quotationService';
@@ -16,6 +16,8 @@ import { useViewQuotationPI } from '../../hooks/useViewQuotationPI';
 import QuotationPreview from '../../components/QuotationPreview';
 import PIPreview from '../../components/PIPreview';
 import CompanyBranchService from '../../services/CompanyBranchService';
+import CancelOrderModal from '../../components/salesperson/CancelOrderModal';
+import AmendPIModal from '../../components/salesperson/AmendPIModal';
 
 class DataExtractor {
   static extractArray(response) {
@@ -343,7 +345,8 @@ class PaymentTrackingService {
       this.fetchBulkQuotationsByCustomers(leadIds)
     ]);
 
-    const quotationIds = allQuotations.map(q => q.id).filter(Boolean);
+    const allQuotationsFiltered = (allQuotations || []).filter(q => (q.status || '').toLowerCase() !== 'cancelled');
+    const quotationIds = allQuotationsFiltered.map(q => q.id).filter(Boolean);
     
     // OPTIMIZED: Fetch quotation payments in parallel (no need to wait)
     const quotationPaymentsPromise = quotationIds.length > 0 
@@ -354,7 +357,7 @@ class PaymentTrackingService {
     const quotationPayments = await quotationPaymentsPromise;
     const mergedPayments = this.mergePayments(allPayments, quotationPayments);
 
-    const paymentMap = this.buildPaymentMap(allQuotations, mergedPayments, leadsMap);
+    const paymentMap = this.buildPaymentMap(allQuotationsFiltered, mergedPayments, leadsMap);
     return await this.buildAdvancePaymentData(paymentMap);
   }
 }
@@ -1066,7 +1069,9 @@ const PaymentModal = ({ item, onClose, onPaymentAdded }) => {
                       <option value="">-- Select PI (Required) --</option>
                       {proformaInvoices.map((pi) => (
                         <option key={pi.id} value={pi.id}>
-                          {pi.pi_number} - ₹{Number(pi.total_amount || 0).toLocaleString()} 
+                          {pi.pi_number}
+                          {pi.parent_pi_id ? ` (Rev. from ${pi.parent_pi_number || 'Original'})` : ''}
+                          {' - ₹' + Number(pi.total_amount || 0).toLocaleString()}
                           {pi.status && ` (${pi.status})`}
                         </option>
                       ))}
@@ -1324,6 +1329,10 @@ export default function AdvancePaymentPage({ isDarkMode = false }) {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPaymentItem, setSelectedPaymentItem] = useState(null);
+  const [showCancelOrderModal, setShowCancelOrderModal] = useState(false);
+  const [selectedCancelOrderItem, setSelectedCancelOrderItem] = useState(null);
+  const [showAmendPIModal, setShowAmendPIModal] = useState(false);
+  const [selectedAmendPIItem, setSelectedAmendPIItem] = useState(null);
   const [companyBranches, setCompanyBranches] = useState({});
   const [actionMenuOpen, setActionMenuOpen] = useState(null);
 
@@ -1792,6 +1801,34 @@ export default function AdvancePaymentPage({ isDarkMode = false }) {
                                 </div>
                                 Add Payment
                               </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedCancelOrderItem(item);
+                                  setShowCancelOrderModal(true);
+                                  setActionMenuOpen(null);
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                              >
+                                <div className="p-1 bg-gradient-to-r from-amber-500 to-orange-500 rounded-md">
+                                  <Ban className="h-3.5 w-3.5 text-white" />
+                                </div>
+                                Cancel Order
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedAmendPIItem(item);
+                                  setShowAmendPIModal(true);
+                                  setActionMenuOpen(null);
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                              >
+                                <div className="p-1 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-md">
+                                  <FileText className="h-3.5 w-3.5 text-white" />
+                                </div>
+                                Amend PI (Cancel products)
+                              </button>
                             </div>
                           )}
                         </div>
@@ -1839,6 +1876,14 @@ export default function AdvancePaymentPage({ isDarkMode = false }) {
               handleViewPI(piId);
             }
           }}
+          onCancelOrder={(quotation) => {
+            const cancelItem = {
+              ...selectedProduct,
+              quotationData: quotation
+            };
+            setSelectedCancelOrderItem(cancelItem);
+            setShowCancelOrderModal(true);
+          }}
         />
       )}
       
@@ -1860,6 +1905,52 @@ export default function AdvancePaymentPage({ isDarkMode = false }) {
               setFilteredPaymentTracking(advancePayments);
             } catch (error) {
               console.error('Error refreshing payment tracking data:', error);
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+      )}
+
+      {/* Cancel Order Modal */}
+      {showCancelOrderModal && selectedCancelOrderItem && (
+        <CancelOrderModal
+          item={selectedCancelOrderItem}
+          onClose={() => {
+            setShowCancelOrderModal(false);
+            setSelectedCancelOrderItem(null);
+          }}
+          onCancelRequested={async () => {
+            try {
+              setLoading(true);
+              const advancePayments = await paymentTrackingService.fetchAdvancePaymentData();
+              setPaymentTracking(advancePayments);
+              setFilteredPaymentTracking(advancePayments);
+            } catch (err) {
+              console.error('Error refreshing payment tracking data:', err);
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+      )}
+
+      {/* Amend PI Modal */}
+      {showAmendPIModal && selectedAmendPIItem && (
+        <AmendPIModal
+          item={selectedAmendPIItem}
+          onClose={() => {
+            setShowAmendPIModal(false);
+            setSelectedAmendPIItem(null);
+          }}
+          onRevisedCreated={async () => {
+            try {
+              setLoading(true);
+              const advancePayments = await paymentTrackingService.fetchAdvancePaymentData();
+              setPaymentTracking(advancePayments);
+              setFilteredPaymentTracking(advancePayments);
+            } catch (err) {
+              console.error('Error refreshing payment tracking data:', err);
             } finally {
               setLoading(false);
             }

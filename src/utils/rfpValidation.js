@@ -25,7 +25,7 @@ export const RFP_VALIDATION_RULES = {
       type: 'number'
     },
     TARGET_PRICE: {
-      required: true,
+      required: false,
       min: 0.01,
       max: 999999999,
       type: 'number'
@@ -193,18 +193,7 @@ export const validateProduct = (product, index = 0, needsRfp = true) => {
   }
 
   if (needsRfp) {
-    // For RFP products: length is mandatory, quantity & target price optional
-    const lengthValidation = validateProductField(
-      'Length',
-      product.length,
-      RFP_VALIDATION_RULES.PRODUCT.LENGTH
-    )
-    if (!lengthValidation.isValid) {
-      errors.length = lengthValidation.error
-      isValid = false
-    }
-  } else {
-    // For non-RFP save-decision products: original strict rules
+    // For RFP products: quantity is mandatory, target price optional
     const quantityValidation = validateProductField(
       'Quantity',
       product.quantity,
@@ -215,13 +204,24 @@ export const validateProduct = (product, index = 0, needsRfp = true) => {
       isValid = false
     }
 
-    const lengthValidation = validateProductField(
-      'Length',
-      product.length,
-      RFP_VALIDATION_RULES.PRODUCT.LENGTH
+    const targetPriceValidation = validateProductField(
+      'Target Price',
+      product.targetPrice,
+      RFP_VALIDATION_RULES.PRODUCT.TARGET_PRICE
     )
-    if (!lengthValidation.isValid) {
-      errors.length = lengthValidation.error
+    if (!targetPriceValidation.isValid) {
+      errors.targetPrice = targetPriceValidation.error
+      isValid = false
+    }
+  } else {
+    // For non-RFP save-decision products: quantity mandatory, target price optional
+    const quantityValidation = validateProductField(
+      'Quantity',
+      product.quantity,
+      RFP_VALIDATION_RULES.PRODUCT.QUANTITY
+    )
+    if (!quantityValidation.isValid) {
+      errors.quantity = quantityValidation.error
       isValid = false
     }
 

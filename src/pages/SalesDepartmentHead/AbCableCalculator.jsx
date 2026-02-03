@@ -333,10 +333,33 @@ export default function AbCableCalculator({ setActiveView, onBack, rfpContext })
     const specForApi = rfpContext.productSpec || productSpec;
     if (rfpContext.rfpRequestId && specForApi != null) {
       try {
+        const row = selectedRowData.row;
+        // Puri row ki data - saare columns (SIZE, TYPE, PHASE SIZE, COST, PROFIT, FINAL RATE, etc.)
+        const fullRowData = {};
+        Object.entries(row || {}).forEach(([k, v]) => {
+          if (k && v != null && v !== "") {
+            fullRowData[k] = typeof v === "number" ? v : (Number.isFinite(parseFloat(v)) ? parseFloat(v) : v);
+          }
+        });
+        const productSpecification = {
+          ...fullRowData,
+          quantity: lengthValue,
+          quantityUnit: rfpContext.lengthUnit || rfpContext.quantityUnit || "Km",
+          basePerUnit,
+          baseTotal,
+          selectedSpec: productSpec,
+          family: "AB_CABLE"
+        };
         const calculatorDetail = {
           family: "AB_CABLE",
           productSpec: specForApi,
+          productSpecification,
+          selectedSpec: productSpec,
+          selectedSize: row["SIZE"] || selectedSize,
+          selectedType: row["TYPE"] || rateType,
+          quantity: lengthValue,
           length: lengthValue,
+          quantityUnit: rfpContext.lengthUnit || rfpContext.quantityUnit || "Km",
           rateType,
           basePerUnit,
           baseTotal,

@@ -145,6 +145,15 @@ class CustomerTimelineService {
         }
       }
 
+      // Fetch order cancel requests for this lead/customer
+      let cancelRequests = [];
+      try {
+        const cancelRes = await apiClient.get(API_ENDPOINTS.ORDER_CANCEL_BY_CUSTOMER(leadId));
+        cancelRequests = cancelRes?.data || [];
+      } catch (error) {
+        console.warn('Failed to fetch cancel requests:', error);
+      }
+
       return {
         history,
         quotations,
@@ -153,7 +162,8 @@ class CustomerTimelineService {
           new Date(b.payment_date || 0) - new Date(a.payment_date || 0)
         ),
         paymentSummary,
-        transferInfo
+        transferInfo,
+        cancelRequests
       };
     } catch (error) {
       console.error('Error fetching timeline data:', error);

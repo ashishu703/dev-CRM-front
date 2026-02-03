@@ -13,12 +13,21 @@ const FilterBadges = ({
   onClearFilter,
   showQuotationPending = true,
   /** When false, hide entire Quotation filter block (e.g. Department Head – quotation approval not used) */
-  showQuotationSection = true
+  showQuotationSection = true,
+  /** DH: Pending order cancel requests count (notification pill) */
+  orderCancelPendingCount,
+  /** DH: Pending PI amendments count (notification pill) */
+  piAmendmentPendingCount,
+  /** DH: Loading state for order cancel / PI amendment counts */
+  loadingApprovalCounts
 }) => {
   const showQuotationInFilterText = showQuotationSection && statusFilter.type && statusFilter.status;
   const quotationFilterActive = showQuotationSection && statusFilter.type === 'quotation' && statusFilter.status;
   const piFilterActive = statusFilter.type === 'pi' && statusFilter.status;
-  const hasActiveFilter = quotationFilterActive || piFilterActive || assignmentFilter;
+  const orderCancelFilterActive = statusFilter.type === 'order_cancel' && statusFilter.status;
+  const piAmendmentFilterActive = statusFilter.type === 'pi_amendment' && statusFilter.status;
+  const hasActiveFilter = quotationFilterActive || piFilterActive || orderCancelFilterActive || piAmendmentFilterActive || assignmentFilter;
+  const showApprovalNotifications = orderCancelPendingCount !== undefined || piAmendmentPendingCount !== undefined;
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
@@ -99,6 +108,38 @@ const FilterBadges = ({
           </div>
         </div>
 
+        {showApprovalNotifications && (
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-semibold text-gray-700">Pending approvals:</span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onBadgeClick('order_cancel', 'pending')}
+                className={`px-3 py-1 text-xs font-medium rounded-full border transition-all cursor-pointer ${
+                  statusFilter.type === 'order_cancel' && statusFilter.status === 'pending'
+                    ? 'bg-amber-200 text-amber-900 border-amber-300 ring-2 ring-amber-400'
+                    : 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200'
+                }`}
+                title="Order cancel requests awaiting your approval"
+              >
+                Order Cancel Request ({loadingApprovalCounts ? '...' : (orderCancelPendingCount ?? 0)})
+              </button>
+              <button
+                type="button"
+                onClick={() => onBadgeClick('pi_amendment', 'pending')}
+                className={`px-3 py-1 text-xs font-medium rounded-full border transition-all cursor-pointer ${
+                  statusFilter.type === 'pi_amendment' && statusFilter.status === 'pending'
+                    ? 'bg-amber-200 text-amber-900 border-amber-300 ring-2 ring-amber-400'
+                    : 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200'
+                }`}
+                title="Revised PIs (amendments) awaiting your approval"
+              >
+                PI Amendment ({loadingApprovalCounts ? '...' : (piAmendmentPendingCount ?? 0)})
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col gap-2">
           <span className="text-xs font-semibold text-gray-700">Assignment:</span>
           <div className="flex flex-wrap gap-2">
@@ -128,8 +169,11 @@ const FilterBadges = ({
       {hasActiveFilter && (
         <div className="mt-2 flex items-center gap-2">
           <span className="text-xs text-gray-600">
-            Filtering by: {showQuotationInFilterText && `${statusFilter.type === 'quotation' ? 'Quotation' : 'PI'} - ${statusFilter.status}`}
-            {showQuotationInFilterText && assignmentFilter && ' | '}
+            Filtering by: {quotationFilterActive && `Quotation - ${statusFilter.status}`}
+            {piFilterActive && `PI - ${statusFilter.status}`}
+            {orderCancelFilterActive && 'Order Cancel Request - pending'}
+            {piAmendmentFilterActive && 'PI Amendment - pending'}
+            {(quotationFilterActive || piFilterActive || orderCancelFilterActive || piAmendmentFilterActive) && assignmentFilter && ' | '}
             {assignmentFilter && `Assignment - ${assignmentFilter === 'assigned' ? 'Assigned' : 'Unassigned'}`}
           </span>
           <button

@@ -315,12 +315,49 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
 
     const totalPrice = baseTotal + extraTotal
 
+    const qtyUnit = rfpContext.lengthUnit || rfpContext.quantityUnit || (rateType?.includes('per_kg') ? 'Kg' : 'Km')
+    const fullRowData = selectedIndex === CUSTOM_INDEX && customCalculations
+      ? {
+          name: 'Custom',
+          no_of_wires_aluminium: customNoOfWiresAluminium,
+          no_of_wires_steel: customNoOfWiresSteel,
+          size_aluminium: customSizeAluminium,
+          size_steel: customSizeSteel,
+          size_specs: `${customNoOfWiresAluminium}/${customSizeAluminium} (Aluminium) / ${customNoOfWiresSteel}/${customSizeSteel} (Steel)`,
+          weight_aluminium: customCalculations.weight_aluminium,
+          weight_steel: customCalculations.weight_steel,
+          total_weight: customCalculations.total_weight,
+          aluminium_cg_grade: rates.aluminium_cg_grade,
+          aluminium_ec_grade: rates.aluminium_ec_grade,
+          steel_rate: rates.steel_rate,
+          cost_conductor_isi_per_mtr: customCalculations.cost_conductor_isi_per_mtr,
+          cost_conductor_commercial_per_mtr: customCalculations.cost_conductor_commercial_per_mtr,
+          cost_conductor_isi_per_kg: customCalculations.cost_conductor_isi_per_kg,
+          cost_conductor_commercial_per_kg: customCalculations.cost_conductor_commercial_per_kg
+        }
+      : selectedProduct
+      ? { ...selectedProduct }
+      : {}
+    const productSpecification = {
+      ...fullRowData,
+      quantity: lengthMtr,
+      quantityUnit: qtyUnit,
+      rateType,
+      basePerUnit,
+      baseTotal,
+      totalPrice,
+      family: 'ACSR'
+    }
     const calculatorDetail = {
       family: 'ACSR',
       rfpId: rfpContext.rfpId,
       rfpRequestId: rfpContext.rfpRequestId,
       productSpec: rfpContext.productSpec,
+      productSpecification,
+      selectedSpec: rfpContext.productSpec,
+      quantity: lengthMtr,
       length: lengthMtr,
+      quantityUnit: rfpContext.lengthUnit || rfpContext.quantityUnit || (rateType?.includes('per_kg') ? 'Kg' : 'Km'),
       rateType,
       basePerUnit,
       baseTotal,

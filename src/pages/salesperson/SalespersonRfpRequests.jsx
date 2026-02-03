@@ -19,41 +19,15 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
   const [requestsPage, setRequestsPage] = useState(1)
   const [requestsItemsPerPage, setRequestsItemsPerPage] = useState(50)
 
-  useEffect(() => {
-    fetchRfps()
-  }, [])
-
   const fetchRfps = async () => {
     setLoading(true)
     try {
-      // Algorithm-based filtering: Build query parameters
       const queryParams = {
         status: filterStatus !== 'all' ? filterStatus : undefined,
         search: searchQuery || undefined
       }
-      
-      console.log('[SalespersonRfpRequests] Fetching RFPs with filters:', queryParams)
-      
       const response = await rfpService.list(queryParams)
-      
-      console.log('[SalespersonRfpRequests] RFP list response:', {
-        success: response.success,
-        dataLength: Array.isArray(response.data) ? response.data.length : 0,
-        responseKeys: Object.keys(response),
-        fullResponse: response,
-        queryParams
-      })
-      
-      // Additional debugging - check if data exists but in different format
-      if (response.success && (!response.data || response.data.length === 0)) {
-        console.warn('[SalespersonRfpRequests] Empty response - checking structure:', {
-          hasData: 'data' in response,
-          dataType: typeof response.data,
-          isArray: Array.isArray(response.data),
-          responseStructure: JSON.stringify(response).substring(0, 500)
-        })
-      }
-      
+
       if (response.success) {
         let rfps = Array.isArray(response.data) ? response.data : []
         
@@ -93,8 +67,6 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
   // Listen for RFP creation/update events to refresh the list
   useEffect(() => {
     const handleRfpUpdate = () => {
-      // Refresh RFP requests when an RFP is raised/updated
-      console.log('[SalespersonRfpRequests] RFP update event received, refreshing list...')
       fetchRfps()
     }
 
@@ -308,27 +280,33 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
   }
 
   function getProductsForDetails(rfp) {
-    const snapshot = rfp?.source_payload?.form?.allProducts
-    if (Array.isArray(snapshot) && snapshot.length > 0) {
-      return snapshot.map((p) => ({
-        productSpec: p?.productSpec || '',
-        quantity: p?.quantity,
-        length: p?.length,
-        lengthUnit: p?.lengthUnit || '',
-        targetPrice: p?.targetPrice
-      }))
-    }
     const products = rfp?.products
     if (Array.isArray(products) && products.length > 0) {
       return products.map((p) => ({
         productSpec: p?.product_spec || '',
-        quantity: p?.quantity,
-        length: p?.length,
-        lengthUnit: p?.length_unit || '',
-        targetPrice: p?.target_price
+        quantity: p?.quantity ?? p?.length,
+        quantityUnit: p?.length_unit || p?.quantityUnit || 'Mtr',
+        targetPrice: p?.target_price,
+        calculator_log: p?.calculator_log
+      }))
+    }
+    const snapshot = rfp?.source_payload?.form?.allProducts
+    if (Array.isArray(snapshot) && snapshot.length > 0) {
+      return snapshot.map((p) => ({
+        productSpec: p?.productSpec || '',
+        quantity: p?.quantity ?? p?.length,
+        quantityUnit: p?.quantityUnit || p?.lengthUnit || 'Mtr',
+        targetPrice: p?.targetPrice,
+        calculator_log: null
       }))
     }
     return []
+  }
+
+  function getUnitFromRateType(rateType) {
+    if (!rateType) return 'Mtr'
+    if (typeof rateType === 'string' && rateType.includes('per_kg')) return 'Kg'
+    return 'Mtr'
   }
 
   return (
@@ -764,8 +742,7 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
                           <thead className={isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}>
                             <tr>
                               <th className={`px-4 py-3 text-left text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Product</th>
-                              <th className={`px-4 py-3 text-left text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Qty</th>
-                              <th className={`px-4 py-3 text-left text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Length</th>
+                              <th className={`px-4 py-3 text-left text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Quantity</th>
                               <th className={`px-4 py-3 text-left text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Target Price</th>
                             </tr>
                           </thead>
@@ -776,10 +753,7 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
                                   <div className="font-medium">{p.productSpec || 'N/A'}</div>
                                 </td>
                                 <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                  {formatQty(p.quantity)}
-                                </td>
-                                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                                  {p.length ? `${formatQty(p.length)} ${p.lengthUnit || ''}`.trim() : '—'}
+                                  {p.quantity != null && p.quantity !== '' ? `${formatQty(p.quantity)} ${(p.quantityUnit || 'Mtr').trim()}` : '—'}
                                 </td>
                                 <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
                                   {p.targetPrice ? formatMoneyINR(p.targetPrice) : '—'}
@@ -803,82 +777,88 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
                       {selectedRfp.special_requirements || selectedRfp.source_payload?.form?.specialRequirements || '—'}
                     </div>
                   </div>
-                  {selectedRfp.calculator_pricing_log && (
-                    <div>
-                      <div className={`text-sm font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>Pricing Log (Calculator)</div>
-                      {(() => {
-                        const log = selectedRfp.calculator_pricing_log || {};
-                        const rateTypeLabelMap = {
-                          alu_per_mtr: 'Aluminium / Mtr',
-                          alloy_per_mtr: 'Alloy / Mtr',
-                          alu_per_kg: 'Aluminium / Kg',
-                          alloy_per_kg: 'Alloy / Kg'
-                        };
-                        const lengthUsed =
-                          log.length !== undefined && log.length !== null
-                            ? log.length
-                            : (log.quantity !== undefined && log.quantity !== null ? log.quantity : '—');
-                        return (
-                          <div className={`mt-2 rounded-xl border p-4 ${isDarkMode ? 'border-gray-700 bg-gray-800/60 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-900'}`}>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                              <div>
-                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Selected Product</div>
-                                <div>{log.productSpec || '—'}</div>
-                              </div>
-                              <div>
-                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Family</div>
-                                <div>{log.family || 'AAAC'}</div>
-                              </div>
-                              <div>
-                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Length / Qty Used</div>
-                                <div>{lengthUsed}</div>
-                              </div>
-                              <div>
-                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Rate Type</div>
-                                <div>{log.rateType ? rateTypeLabelMap[log.rateType] || log.rateType : '—'}</div>
-                              </div>
-                              <div>
-                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Base Rate</div>
-                                <div>
-                                  {typeof log.basePerUnit === 'number'
-                                    ? `₹${log.basePerUnit.toFixed(2)}`
-                                    : (log.basePerUnit || '—')}
+                  {(() => {
+                    const productsWithLog = getProductsForDetails(selectedRfp).filter((p) => p.calculator_log && typeof p.calculator_log === 'object')
+                    const fallbackLog = selectedRfp.calculator_pricing_log && typeof selectedRfp.calculator_pricing_log === 'object' ? selectedRfp.calculator_pricing_log : null
+                    const hasAnyPricing = productsWithLog.length > 0 || fallbackLog
+                    if (!hasAnyPricing) return null
+                    const rateTypeLabelMap = {
+                      alu_per_mtr: 'Aluminium / Mtr',
+                      alloy_per_mtr: 'Alloy / Mtr',
+                      alu_per_kg: 'Aluminium / Kg',
+                      alloy_per_kg: 'Alloy / Kg',
+                      isi_per_mtr: 'ISI / Mtr',
+                      comm_per_mtr: 'COMM / Mtr',
+                      isi_per_kg: 'ISI / Kg',
+                      comm_per_kg: 'COMM / Kg'
+                    }
+                    const itemsToShow = productsWithLog.length > 0 ? productsWithLog : (fallbackLog ? [{ productSpec: fallbackLog.productSpec, quantity: fallbackLog.length ?? fallbackLog.quantity, quantityUnit: getUnitFromRateType(fallbackLog.rateType), calculator_log: fallbackLog }] : [])
+                    let overallTotal = 0
+                    return (
+                      <div>
+                        <div className={`text-sm font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>Pricing Log (Calculator)</div>
+                        <div className="mt-2 space-y-4">
+                          {itemsToShow.map((item, idx) => {
+                            const log = item.calculator_log || {}
+                            const lengthUsed = log.length !== undefined && log.length !== null ? log.length : (log.quantity !== undefined && log.quantity !== null ? log.quantity : (item.quantity ?? '—'))
+                            const unit = item.quantityUnit || getUnitFromRateType(log.rateType)
+                            const totalPrice = typeof log.totalPrice === 'number' ? log.totalPrice : (item.targetPrice != null ? Number(item.targetPrice) : 0)
+                            if (Number.isFinite(totalPrice)) overallTotal += totalPrice
+                            return (
+                              <div key={idx} className={`rounded-xl border p-4 ${isDarkMode ? 'border-gray-700 bg-gray-800/60 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-900'}`}>
+                                <div className="flex justify-between items-start mb-3">
+                                  <div className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{log.productSpec || item.productSpec || '—'}</div>
+                                  <div className="font-semibold text-emerald-500">
+                                    {typeof log.totalPrice === 'number' ? `₹${log.totalPrice.toFixed(2)}` : (item.targetPrice ? formatMoneyINR(item.targetPrice) : '—')}
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                  <div>
+                                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Family</div>
+                                    <div>{log.family || 'AAAC'}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Length / Qty Used</div>
+                                    <div>{lengthUsed !== '—' ? `${lengthUsed} ${unit}` : '—'}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Rate Type</div>
+                                    <div>{log.rateType ? (rateTypeLabelMap[log.rateType] || log.rateType) : '—'}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Base Rate</div>
+                                    <div>{typeof log.basePerUnit === 'number' ? `₹${log.basePerUnit.toFixed(2)}` : (log.basePerUnit || '—')}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Base Amount</div>
+                                    <div>{typeof log.baseTotal === 'number' ? `₹${log.baseTotal.toFixed(2)}` : (log.baseTotal || '—')}</div>
+                                  </div>
+                                  {Array.isArray(log.extraCharges) && log.extraCharges.length > 0 && (
+                                    <div className="md:col-span-2">
+                                      <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Additional Charges</div>
+                                      <ul className="text-sm list-disc list-inside space-y-1">
+                                        {log.extraCharges.map((row, i) => (
+                                          <li key={i}>{(row.label || 'Charge')} – {row.amount ? `₹${row.amount}` : '₹0'}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
-                              <div>
-                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Base Amount</div>
-                                <div>
-                                  {typeof log.baseTotal === 'number'
-                                    ? `₹${log.baseTotal.toFixed(2)}`
-                                    : (log.baseTotal || '—')}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Total After Charges</div>
-                                <div className="font-semibold text-emerald-400">
-                                  {typeof log.totalPrice === 'number'
-                                    ? `₹${log.totalPrice.toFixed(2)}`
-                                    : (log.totalPrice || '—')}
-                                </div>
+                            )
+                          })}
+                          {itemsToShow.length > 1 && overallTotal > 0 && (
+                            <div className={`rounded-xl border p-4 ${isDarkMode ? 'border-emerald-700 bg-emerald-900/30' : 'border-emerald-200 bg-emerald-50'}`}>
+                              <div className="flex justify-between items-center">
+                                <span className={`font-semibold ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>Overall Total</span>
+                                <span className="text-xl font-bold text-emerald-600">₹{overallTotal.toFixed(2)}</span>
                               </div>
                             </div>
-                            {Array.isArray(log.extraCharges) && log.extraCharges.length > 0 && (
-                              <div className="mt-3">
-                                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Additional Charges</div>
-                                <ul className="text-sm list-disc list-inside space-y-1">
-                                  {log.extraCharges.map((row, idx) => (
-                                    <li key={idx}>
-                                      {(row.label || 'Charge')} – {row.amount ? `₹${row.amount}` : '₹0'}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
             </div>

@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { X, CheckCircle, FileText, Receipt, CreditCard, UserPlus, Calendar, Clock, MessageSquare } from 'lucide-react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { X, CheckCircle, FileText, Receipt, CreditCard, UserPlus, Calendar, Clock, MessageSquare, Ban, AlertTriangle } from 'lucide-react';
 import customerTimelineService from '../services/CustomerTimelineService';
 import DateFormatter from '../utils/DateFormatter';
 
@@ -10,7 +10,10 @@ const CustomerTimeline = ({
   onQuotationView,
   onPIView,
   onApprovePI,
-  onRejectPI
+  onRejectPI,
+  onCancelOrder,
+  onApproveCancelRequest,
+  onRejectCancelRequest
 }) => {
   if (!lead) return null;
 
@@ -19,7 +22,9 @@ const CustomerTimeline = ({
   const [pisByQuotationId, setPisByQuotationId] = useState({});
   const [payments, setPayments] = useState([]);
   const [transferInfo, setTransferInfo] = useState(null);
+  const [cancelRequests, setCancelRequests] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [processingCancel, setProcessingCancel] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,6 +40,7 @@ const CustomerTimeline = ({
         setPisByQuotationId(data.pisByQuotationId || {});
         setPayments(data.payments || []);
         setTransferInfo(data.transferInfo || null);
+        setCancelRequests(data.cancelRequests || []);
       } catch (e) {
         console.warn('Failed to load customer timeline', e);
       }
@@ -72,10 +78,63 @@ const CustomerTimeline = ({
 
   const createdDateLabel = DateFormatter.formatDate(lead.created_at || lead.createdAt);
 
+  // Check if quotation has pending cancel request
+  const hasPendingCancelRequest = useCallback((quotationId) => {
+    return cancelRequests.some(
+      (req) => req.quotation_id === quotationId && req.status?.toLowerCase() === 'pending'
+    );
+  }, [cancelRequests]);
+
+  // Get cancel request for quotation
+  const getCancelRequest = useCallback((quotationId) => {
+    return cancelRequests.find((req) => req.quotation_id === quotationId);
+  }, [cancelRequests]);
+
+  // Check if quotation has any approved PI (eligible for cancel order)
+  const hasApprovedPI = useCallback((quotationId) => {
+    const pis = pisByQuotationId[quotationId] || [];
+    return pis.some((pi) => pi.status?.toLowerCase() === 'approved');
+  }, [pisByQuotationId]);
+
+  // Handle cancel order action
+  const handleCancelOrder = useCallback(async (quotation) => {
+    if (onCancelOrder) {
+      await onCancelOrder(quotation);
+      setRefreshKey((k) => k + 1);
+    }
+  }, [onCancelOrder]);
+
+  // Handle approve cancel request
+  const handleApproveCancelRequest = useCallback(async (request) => {
+    if (!onApproveCancelRequest) return;
+    setProcessingCancel(request.id);
+    try {
+      await onApproveCancelRequest(request);
+      setRefreshKey((k) => k + 1);
+    } finally {
+      setProcessingCancel(null);
+    }
+  }, [onApproveCancelRequest]);
+
+  // Handle reject cancel request
+  const handleRejectCancelRequest = useCallback(async (request) => {
+    if (!onRejectCancelRequest) return;
+    setProcessingCancel(request.id);
+    try {
+      await onRejectCancelRequest(request);
+      setRefreshKey((k) => k + 1);
+    } finally {
+      setProcessingCancel(null);
+    }
+  }, [onRejectCancelRequest]);
+
+  // Pending cancel requests count
+  const pendingCancelCount = cancelRequests.filter((r) => r.status?.toLowerCase() === 'pending').length;
+
   return (
     <div
       className="fixed top-16 right-0 h-[calc(100vh-4rem)] sm:h-[calc(100vh-4rem)] z-[90]"
-      style={{ width: 'fit-content', maxWidth: 349, minWidth: 244 }}
+      style={{ width: '100%', maxWidth: 380, minWidth: 300 }}
     >
       <div className="bg-white h-full flex flex-col shadow-2xl border-l border-gray-200">
         <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 pt-8 sm:pt-10 pb-4 px-4 sticky top-0 z-10 shadow-lg">
@@ -160,8 +219,8 @@ const CustomerTimeline = ({
               </span>
             </div>
 
-            <div className="flex justify-start mb-3">
-              <div className="max-w-[85%] rounded-lg rounded-tl-none bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-300 p-3 shadow-md">
+            <div className="mb-3">
+              <div className="rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-300 p-3 shadow-md">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="p-1 bg-green-500 rounded-full">
                     <CheckCircle className="h-3 w-3 text-white" />
@@ -186,8 +245,8 @@ const CustomerTimeline = ({
                     {DateFormatter.formatDate(transferInfo.transferredAt)}
                   </span>
                 </div>
-                <div className="flex justify-start mb-3">
-                  <div className="max-w-[85%] rounded-lg rounded-tl-none bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-300 p-3 shadow-md">
+                <div className="mb-3">
+                  <div className="rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-300 p-3 shadow-md">
                     <div className="flex items-center gap-2 mb-1">
                       <div className="p-1 bg-purple-500 rounded-full">
                         <UserPlus className="h-3 w-3 text-white" />
@@ -232,11 +291,6 @@ const CustomerTimeline = ({
                   </div>
                   <div className="space-y-2">
                     {groupedHistory[dateKey].map((h, idx) => {
-                      const isRightAligned =
-                        h.sales_status &&
-                        ['win', 'converted'].includes(
-                          String(h.sales_status).toLowerCase()
-                        );
                       const statusColor = String(h.sales_status || '').toLowerCase();
                       const statusBg = statusColor === 'running' 
                         ? 'from-yellow-400 to-orange-400' 
@@ -246,23 +300,20 @@ const CustomerTimeline = ({
                         ? 'from-green-500 to-emerald-500'
                         : 'from-blue-500 to-cyan-500';
                       
+                      const cardBg = statusColor === 'win' || statusColor === 'converted'
+                        ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-300'
+                        : statusColor === 'running'
+                        ? 'bg-gradient-to-br from-yellow-50 to-amber-50 border-yellow-300'
+                        : 'bg-gradient-to-br from-white to-gray-50 border-gray-300';
+                      
                       return (
-                        <div
-                          key={`${h.id || idx}`}
-                          className={isRightAligned ? 'flex justify-end' : 'flex justify-start'}
-                        >
-                          <div
-                            className={
-                              isRightAligned
-                                ? 'max-w-[85%] rounded-lg rounded-tr-none bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-300 p-3 shadow-md'
-                                : 'max-w-[85%] rounded-lg rounded-tl-none bg-gradient-to-br from-white to-gray-50 border-2 border-gray-300 p-3 shadow-sm'
-                            }
-                          >
+                        <div key={`${h.id || idx}`}>
+                          <div className={`rounded-lg border-2 p-3 shadow-sm ${cardBg}`}>
                             <div className="flex items-center gap-2 mb-1.5">
                               <div className="p-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full">
                                 <MessageSquare className="h-3 w-3 text-white" />
                               </div>
-                              <span className="text-[10px] font-bold text-gray-900">
+                              <span className="text-[11px] font-bold text-gray-900">
                                 Follow Up
                               </span>
                               {h.sales_status && (
@@ -283,7 +334,7 @@ const CustomerTimeline = ({
                                 </div>
                               )}
                               {(h.follow_up_date || h.follow_up_time || h.created_at) && (
-                                <div className="flex items-center gap-1 text-[9px] text-gray-600">
+                                <div className="flex items-center gap-1 text-[9px] text-gray-600 mt-1">
                                   <Clock className="h-2.5 w-2.5 text-pink-600" />
                                   {customerTimelineService.formatIndianDateTime(
                                     h.follow_up_date,
@@ -308,25 +359,35 @@ const CustomerTimeline = ({
                     Quotations &amp; PIs
                   </span>
                 </div>
-                <div className="flex justify-start">
-                  <div className="max-w-[85%] rounded-lg rounded-tl-none bg-gradient-to-br from-yellow-50 to-amber-50 border-2 border-yellow-300 p-3 shadow-md">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="p-1 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full">
-                        <FileText className="h-3 w-3 text-white" />
-                      </div>
-                      <span className="text-[11px] font-bold text-gray-900">
-                        Quotation History
-                      </span>
+                <div className="rounded-lg bg-gradient-to-br from-yellow-50 to-amber-50 border-2 border-yellow-300 p-3 shadow-md">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full">
+                      <FileText className="h-3 w-3 text-white" />
                     </div>
-                    <div className="space-y-1 text-[10px] text-gray-800">
+                    <span className="text-[11px] font-bold text-gray-900">
+                      Quotation History
+                    </span>
+                    <span className="text-[9px] text-gray-500 ml-auto">
+                      {allQuotations.length} quotation{allQuotations.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                    <div className="space-y-3 text-[10px] text-gray-800">
                         {allQuotations.map((q) => {
                         const pis = pisByQuotationId[q.id] || [];
+                        // Sort PIs: original first, then revised
+                        const sortedPIs = [...pis].sort((a, b) => {
+                          if (!a.parent_pi_id && b.parent_pi_id) return -1;
+                          if (a.parent_pi_id && !b.parent_pi_id) return 1;
+                          return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+                        });
                         const status = String(q.status || 'PENDING').toLowerCase();
                         const statusClass =
                           status === 'approved'
                             ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white'
                             : status === 'rejected'
                             ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white'
+                            : status === 'cancelled'
+                            ? 'bg-gradient-to-r from-gray-500 to-slate-500 text-white'
                             : q.status
                             ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-white'
                             : 'bg-gradient-to-r from-gray-400 to-gray-500 text-white';
@@ -334,104 +395,145 @@ const CustomerTimeline = ({
                         return (
                           <div
                             key={q.id}
-                            className="border-2 border-yellow-200 rounded-lg px-3 py-2 bg-white shadow-sm mb-1.5"
+                            className="border-2 border-yellow-200 rounded-lg overflow-hidden bg-white shadow-sm"
                           >
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-blue-700">
-                                {q.quotation_number || `QT-${String(q.id).slice(-4)}`}
-                              </span>
-                              <span className="flex items-center gap-0.5 text-[9px] text-gray-600">
-                                <Calendar className="h-2.5 w-2.5 text-pink-600" />
-                                {q.quotation_date ? DateFormatter.formatDate(q.quotation_date) : ''}
-                              </span>
-                              <span
-                                className={`ml-auto px-2 py-0.5 text-[9px] font-semibold rounded-full shadow-sm ${statusClass}`}
-                              >
-                                {(q.status || 'PENDING').toUpperCase()}
-                              </span>
-                            </div>
-
-                            <div className="mt-1.5 flex flex-wrap gap-1">
-                              {onQuotationView && (
-                                <button
-                                  type="button"
-                                  onClick={() => onQuotationView(q)}
-                                  className="px-2 py-0.5 text-[9px] rounded-md font-semibold bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 shadow-sm transition-all"
+                            {/* Quotation Header */}
+                            <div className="px-3 py-2.5 bg-gradient-to-r from-yellow-50 to-amber-50 border-b border-yellow-200">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-[11px] text-blue-700">
+                                  {q.quotation_number || `QT-${String(q.id).slice(-4)}`}
+                                </span>
+                                <span className="flex items-center gap-0.5 text-[9px] text-gray-600">
+                                  <Calendar className="h-2.5 w-2.5 text-pink-600" />
+                                  {q.quotation_date ? DateFormatter.formatDate(q.quotation_date) : ''}
+                                </span>
+                                <span
+                                  className={`ml-auto px-2 py-0.5 text-[9px] font-semibold rounded-full shadow-sm ${statusClass}`}
                                 >
-                                  View
-                                </button>
-                              )}
+                                  {(q.status || 'PENDING').toUpperCase()}
+                                </span>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {onQuotationView && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onQuotationView(q)}
+                                    className="px-2.5 py-1 text-[9px] rounded-md font-semibold bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 shadow-sm transition-all"
+                                  >
+                                    View
+                                  </button>
+                                )}
+                                {/* Cancel Order Button - Only show if has approved PI and no pending cancel request */}
+                                {onCancelOrder && hasApprovedPI(q.id) && !hasPendingCancelRequest(q.id) && status === 'approved' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCancelOrder(q)}
+                                    className="px-2.5 py-1 text-[9px] rounded-md font-semibold bg-gradient-to-r from-red-500 to-rose-500 text-white hover:from-red-600 hover:to-rose-600 shadow-sm transition-all flex items-center gap-1"
+                                  >
+                                    <Ban className="h-3 w-3" />
+                                    Cancel Order
+                                  </button>
+                                )}
+                                {/* Show pending cancel badge */}
+                                {hasPendingCancelRequest(q.id) && (
+                                  <span className="px-2 py-1 text-[9px] rounded-md font-semibold bg-gradient-to-r from-orange-400 to-amber-400 text-white flex items-center gap-1">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    Cancel Pending
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
-                            {pis.length > 0 && (
-                              <div className="mt-1.5 text-[9px] flex flex-wrap gap-1.5">
-                                {pis.map((pi) => {
+                            {/* PI Section */}
+                            {sortedPIs.length > 0 && (
+                              <div className="px-3 py-2 space-y-2">
+                                <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                  Proforma Invoices ({sortedPIs.length})
+                                </div>
+                                {sortedPIs.map((pi, piIndex) => {
                                   const piStatus = String(pi.status || 'PENDING').toLowerCase();
                                   const piClass =
                                     piStatus === 'approved'
                                       ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white'
                                       : piStatus === 'pending_approval'
                                       ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-white'
+                                      : piStatus === 'superseded'
+                                      ? 'bg-gradient-to-r from-gray-500 to-slate-500 text-white'
                                       : pi.status
                                       ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white'
                                       : 'bg-gradient-to-r from-gray-400 to-gray-500 text-white';
+                                  
+                                  const isRevised = !!pi.parent_pi_id;
+                                  const isPending = piStatus === 'pending' || piStatus === 'pending_approval' || piStatus === 'sent_for_approval';
+                                  
                                   return (
-                                    <span
+                                    <div
                                       key={pi.id}
-                                      className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-orange-300 shadow-sm"
+                                      className={`rounded-lg p-2.5 border-2 shadow-sm ${
+                                        isRevised 
+                                          ? 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-300 ml-3' 
+                                          : 'bg-gradient-to-br from-orange-50 to-amber-50 border-orange-300'
+                                      }`}
                                     >
-                                      <div className="p-0.5 bg-gradient-to-r from-orange-500 to-amber-500 rounded">
-                                        <Receipt className="h-2.5 w-2.5 text-white" />
+                                      {/* PI Header Row */}
+                                      <div className="flex items-center gap-2 mb-1.5">
+                                        <div className={`p-1 rounded ${isRevised ? 'bg-gradient-to-r from-indigo-500 to-purple-500' : 'bg-gradient-to-r from-orange-500 to-amber-500'}`}>
+                                          <Receipt className="h-3 w-3 text-white" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className={`font-bold text-[11px] ${isRevised ? 'text-indigo-700' : 'text-orange-700'}`}>
+                                              {pi.pi_number || `PI-${String(pi.id).slice(-4)}`}
+                                            </span>
+                                            {isRevised && (
+                                              <span className="text-[8px] text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded-full font-medium">
+                                                Rev. of {pi.parent_pi_number || 'Original'}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-semibold shadow-sm whitespace-nowrap ${piClass}`}>
+                                          {(pi.status || 'PENDING').toUpperCase().replace('_', ' ')}
+                                        </span>
                                       </div>
-                                      <span className="font-bold text-orange-700">
-                                        {pi.pi_number || `PI-${String(pi.id).slice(-4)}`}
-                                      </span>
-                                      <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-semibold shadow-sm ${piClass}`}>
-                                        {(pi.status || 'PENDING').toUpperCase()}
-                                      </span>
-
-                                      <span className="inline-flex gap-1 ml-1">
+                                      
+                                      {/* PI Actions Row */}
+                                      <div className="flex items-center gap-1.5 ml-7">
                                         {onPIView && (
                                           <button
                                             type="button"
                                             onClick={() => onPIView(pi)}
-                                            className="px-1.5 py-0.5 text-[8px] rounded-md font-semibold bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 shadow-sm transition-all"
+                                            className="px-2 py-1 text-[9px] rounded-md font-semibold bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 shadow-sm transition-all"
                                           >
                                             View
                                           </button>
                                         )}
-                                        {onApprovePI &&
-                                          (piStatus === 'pending' ||
-                                            piStatus === 'pending_approval' ||
-                                            piStatus === 'sent_for_approval') && (
-                                            <button
-                                              type="button"
-                                              onClick={async () => {
-                                                await onApprovePI(pi);
-                                                setRefreshKey((k) => k + 1);
-                                              }}
-                                              className="px-1.5 py-0.5 text-[8px] rounded-md font-semibold bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600 shadow-sm transition-all"
-                                            >
-                                              Approve
-                                            </button>
-                                          )}
-                                        {onRejectPI &&
-                                          (piStatus === 'pending' ||
-                                            piStatus === 'pending_approval' ||
-                                            piStatus === 'sent_for_approval') && (
-                                            <button
-                                              type="button"
-                                              onClick={async () => {
-                                                await onRejectPI(pi);
-                                                setRefreshKey((k) => k + 1);
-                                              }}
-                                              className="px-1.5 py-0.5 text-[8px] rounded-md font-semibold bg-gradient-to-r from-red-500 to-rose-500 text-white hover:from-red-600 hover:to-rose-600 shadow-sm transition-all"
-                                            >
-                                              Reject
-                                            </button>
-                                          )}
-                                      </span>
-                                    </span>
+                                        {onApprovePI && isPending && (
+                                          <button
+                                            type="button"
+                                            onClick={async () => {
+                                              await onApprovePI(pi);
+                                              setRefreshKey((k) => k + 1);
+                                            }}
+                                            className="px-2 py-1 text-[9px] rounded-md font-semibold bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600 shadow-sm transition-all"
+                                          >
+                                            Approve
+                                          </button>
+                                        )}
+                                        {onRejectPI && isPending && (
+                                          <button
+                                            type="button"
+                                            onClick={async () => {
+                                              await onRejectPI(pi);
+                                              setRefreshKey((k) => k + 1);
+                                            }}
+                                            className="px-2 py-1 text-[9px] rounded-md font-semibold bg-gradient-to-r from-red-500 to-rose-500 text-white hover:from-red-600 hover:to-rose-600 shadow-sm transition-all"
+                                          >
+                                            Reject
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
                                   );
                                 })}
                               </div>
@@ -440,6 +542,120 @@ const CustomerTimeline = ({
                         );
                       })}
                     </div>
+                </div>
+              </div>
+            )}
+
+            {/* Order Cancel Requests Section */}
+            {cancelRequests.length > 0 && (
+              <div className="mb-3">
+                <div className="flex justify-center mb-2">
+                  <span className="text-[10px] font-semibold bg-gradient-to-r from-red-500 to-rose-500 text-white px-3 py-1 rounded-full shadow-md flex items-center gap-1">
+                    <Ban className="h-3 w-3" />
+                    Cancel Requests
+                    {pendingCancelCount > 0 && (
+                      <span className="bg-white text-red-600 px-1.5 py-0.5 rounded-full text-[8px] font-bold ml-1">
+                        {pendingCancelCount}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="rounded-lg bg-gradient-to-br from-red-50 to-rose-50 border-2 border-red-300 p-3 shadow-md">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1 bg-gradient-to-r from-red-500 to-rose-500 rounded-full">
+                      <Ban className="h-3 w-3 text-white" />
+                    </div>
+                    <span className="text-[11px] font-bold text-gray-900">
+                      Order Cancellations
+                    </span>
+                    <span className="text-[9px] text-gray-500 ml-auto">
+                      {cancelRequests.length} request{cancelRequests.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {cancelRequests.map((request) => {
+                      const reqStatus = (request.status || 'pending').toLowerCase();
+                      const isPending = reqStatus === 'pending';
+                      const isApproved = reqStatus === 'approved';
+                      const isRejected = reqStatus === 'rejected';
+                      
+                      const statusClass = isApproved
+                        ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white'
+                        : isRejected
+                        ? 'bg-gradient-to-r from-gray-500 to-slate-500 text-white'
+                        : 'bg-gradient-to-r from-yellow-500 to-amber-500 text-white';
+                      
+                      const quotation = allQuotations.find((q) => q.id === request.quotation_id);
+                      
+                      return (
+                        <div
+                          key={request.id}
+                          className={`rounded-lg p-2.5 border-2 shadow-sm ${
+                            isPending 
+                              ? 'bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-300' 
+                              : isApproved
+                              ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-300'
+                              : 'bg-gradient-to-br from-gray-50 to-slate-50 border-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <div className={`p-1 rounded ${isPending ? 'bg-gradient-to-r from-amber-500 to-yellow-500' : isApproved ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gradient-to-r from-gray-500 to-slate-500'}`}>
+                              <Ban className="h-3 w-3 text-white" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <span className="font-bold text-[11px] text-gray-800">
+                                {quotation?.quotation_number || `QT-${String(request.quotation_id).slice(-4)}`}
+                              </span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[8px] font-semibold shadow-sm whitespace-nowrap ${statusClass}`}>
+                              {reqStatus.toUpperCase()}
+                            </span>
+                          </div>
+                          
+                          {/* Cancel Request Details */}
+                          <div className="text-[10px] text-gray-700 ml-7 space-y-1">
+                            {request.reason && (
+                              <div>
+                                <span className="font-semibold text-red-700">Reason:</span>{' '}
+                                <span className="text-gray-700 italic">{request.reason}</span>
+                              </div>
+                            )}
+                            {request.created_at && (
+                              <div className="flex items-center gap-1 text-[9px] text-gray-600">
+                                <Calendar className="h-2.5 w-2.5 text-pink-600" />
+                                {DateFormatter.formatDate(request.created_at)}
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Actions for Pending Requests */}
+                          {isPending && (onApproveCancelRequest || onRejectCancelRequest) && (
+                            <div className="flex items-center gap-1.5 ml-7 mt-2">
+                              {onApproveCancelRequest && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleApproveCancelRequest(request)}
+                                  disabled={processingCancel === request.id}
+                                  className="px-2 py-1 text-[9px] rounded-md font-semibold bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600 shadow-sm transition-all disabled:opacity-50"
+                                >
+                                  {processingCancel === request.id ? 'Processing...' : 'Approve'}
+                                </button>
+                              )}
+                              {onRejectCancelRequest && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRejectCancelRequest(request)}
+                                  disabled={processingCancel === request.id}
+                                  className="px-2 py-1 text-[9px] rounded-md font-semibold bg-gradient-to-r from-gray-500 to-slate-500 text-white hover:from-gray-600 hover:to-slate-600 shadow-sm transition-all disabled:opacity-50"
+                                >
+                                  Reject
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -452,16 +668,18 @@ const CustomerTimeline = ({
                     Payment History
                   </span>
                 </div>
-                <div className="flex justify-start">
-                  <div className="max-w-[85%] rounded-lg rounded-tl-none bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-300 p-3 shadow-md">
-                            <div className="flex items-center gap-2 mb-2">
-                      <div className="p-1 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full">
-                        <CreditCard className="h-3 w-3 text-white" />
-                      </div>
-                      <span className="text-[11px] font-bold text-gray-900">
-                        Payments by PI
-                      </span>
+                <div className="rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-300 p-3 shadow-md">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full">
+                      <CreditCard className="h-3 w-3 text-white" />
                     </div>
+                    <span className="text-[11px] font-bold text-gray-900">
+                      Payments
+                    </span>
+                    <span className="text-[9px] text-gray-500 ml-auto">
+                      {payments.length} payment{payments.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
                     <div className="space-y-1.5 text-[10px] text-gray-800">
                       {payments
                         .sort((a, b) => 
@@ -635,7 +853,6 @@ const CustomerTimeline = ({
                           );
                         })}
                     </div>
-                  </div>
                 </div>
               </div>
             )}

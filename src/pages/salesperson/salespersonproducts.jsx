@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Package, Eye, X, Clock, CheckCircle, MessageCircle, Mail, CreditCard, Receipt, XCircle, AlertCircle, MoreHorizontal, User, Building2, MapPin, FileText, Calendar } from 'lucide-react';
+import { Package, Eye, X, Clock, CheckCircle, MessageCircle, Mail, CreditCard, Receipt, XCircle, AlertCircle, MoreHorizontal, User, Building2, MapPin, FileText, Calendar, Ban } from 'lucide-react';
 import Toolbar, { ProductPagination } from './PaymentTracking';
 import apiClient from '../../utils/apiClient';
 import quotationService from '../../api/admin_api/quotationService';
@@ -16,6 +16,8 @@ import { useViewQuotationPI } from '../../hooks/useViewQuotationPI';
 import CompanyBranchService from '../../services/CompanyBranchService';
 import QuotationPreview from '../../components/QuotationPreview';
 import PIPreview from '../../components/PIPreview';
+import CancelOrderModal from '../../components/salesperson/CancelOrderModal';
+import AmendPIModal from '../../components/salesperson/AmendPIModal';
 import { toDateOnly } from '../../utils/dateOnly';
 
 class DataExtractor {
@@ -365,11 +367,12 @@ class PaymentTrackingService {
       this.fetchBulkQuotationsByCustomers(leadIds)
     ]);
 
-    const quotationIds = allQuotations.map(q => q.id).filter(Boolean);
+    const allQuotationsFiltered = (allQuotations || []).filter(q => (q.status || '').toLowerCase() !== 'cancelled');
+    const quotationIds = allQuotationsFiltered.map(q => q.id).filter(Boolean);
     const quotationPayments = await this.fetchBulkPaymentsByQuotations(quotationIds);
     const mergedPayments = this.mergePayments(allPayments, quotationPayments);
 
-    const paymentMap = this.buildPaymentMap(allQuotations, mergedPayments, leadsMap);
+    const paymentMap = this.buildPaymentMap(allQuotationsFiltered, mergedPayments, leadsMap);
     return await this.buildPaymentTrackingData(paymentMap);
   }
 }
@@ -1474,7 +1477,9 @@ const PaymentModal = ({ item, onClose, onPaymentAdded }) => {
                     <option value="">-- Select PI (Required) --</option>
                     {proformaInvoices.map((pi) => (
                       <option key={pi.id} value={pi.id}>
-                        {pi.pi_number} - ₹{Number(pi.total_amount || 0).toLocaleString()} 
+                        {pi.pi_number}
+                        {pi.parent_pi_id ? ` (Rev. from ${pi.parent_pi_number || 'Original'})` : ''}
+                        {' - ₹' + Number(pi.total_amount || 0).toLocaleString()}
                         {pi.status && ` (${pi.status})`}
                       </option>
                     ))}
@@ -1729,6 +1734,10 @@ export default function ProductsPage() {
   // Payment modal state
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPaymentItem, setSelectedPaymentItem] = useState(null);
+  const [showCancelOrderModal, setShowCancelOrderModal] = useState(false);
+  const [selectedCancelOrderItem, setSelectedCancelOrderItem] = useState(null);
+  const [showAmendPIModal, setShowAmendPIModal] = useState(false);
+  const [selectedAmendPIItem, setSelectedAmendPIItem] = useState(null);
   const [actionMenuOpen, setActionMenuOpen] = useState(null);
 
   // Get current user for role-based filtering
@@ -2275,6 +2284,34 @@ export default function ProductsPage() {
                                 </div>
                                 Add Payment
                               </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedCancelOrderItem(item);
+                                  setShowCancelOrderModal(true);
+                                  setActionMenuOpen(null);
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                              >
+                                <div className="p-1 bg-gradient-to-r from-amber-500 to-orange-500 rounded-md">
+                                  <Ban className="h-3.5 w-3.5 text-white" />
+                                </div>
+                                Cancel Order
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedAmendPIItem(item);
+                                  setShowAmendPIModal(true);
+                                  setActionMenuOpen(null);
+                                }}
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                              >
+                                <div className="p-1 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-md">
+                                  <FileText className="h-3.5 w-3.5 text-white" />
+                                </div>
+                                Amend PI (Cancel products)
+                              </button>
                             </div>
                           )}
                         </div>
@@ -2323,6 +2360,15 @@ export default function ProductsPage() {
               handleViewPI(piId, quotation);
             }
           }}
+          onCancelOrder={(quotation) => {
+            // Open cancel order modal with the quotation's lead data
+            const cancelItem = {
+              ...selectedProduct,
+              quotationData: quotation
+            };
+            setSelectedCancelOrderItem(cancelItem);
+            setShowCancelOrderModal(true);
+          }}
         />
       )}
       
@@ -2362,6 +2408,52 @@ export default function ProductsPage() {
               setTimelineRefreshKey((k) => k + 1);
             } catch (e) {
               console.error('Failed to refresh timeline after payment', e);
+            }
+          }}
+        />
+      )}
+
+      {/* Cancel Order Modal */}
+      {showCancelOrderModal && selectedCancelOrderItem && (
+        <CancelOrderModal
+          item={selectedCancelOrderItem}
+          onClose={() => {
+            setShowCancelOrderModal(false);
+            setSelectedCancelOrderItem(null);
+          }}
+          onCancelRequested={async () => {
+            try {
+              setLoading(true);
+              const paymentTrackingData = await paymentTrackingService.fetchAllPaymentTrackingData();
+              setPaymentTracking(paymentTrackingData);
+              setFilteredPaymentTracking(paymentTrackingData);
+            } catch (err) {
+              console.error('Error refreshing payment tracking data:', err);
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+      )}
+
+      {/* Amend PI Modal */}
+      {showAmendPIModal && selectedAmendPIItem && (
+        <AmendPIModal
+          item={selectedAmendPIItem}
+          onClose={() => {
+            setShowAmendPIModal(false);
+            setSelectedAmendPIItem(null);
+          }}
+          onRevisedCreated={async () => {
+            try {
+              setLoading(true);
+              const paymentTrackingData = await paymentTrackingService.fetchAllPaymentTrackingData();
+              setPaymentTracking(paymentTrackingData);
+              setFilteredPaymentTracking(paymentTrackingData);
+            } catch (err) {
+              console.error('Error refreshing payment tracking data:', err);
+            } finally {
+              setLoading(false);
             }
           }}
         />

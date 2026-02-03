@@ -95,17 +95,18 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
 
   useEffect(() => {
     const buildInitialPiData = (quotation, customerLike) => {
+      const toInt = (v) => Math.round(Number(v) || 0)
       const quotationItems = quotation.items || []
-      const subtotal = quotationItems.reduce((sum, item) => {
+      const subtotal = toInt(quotationItems.reduce((sum, item) => {
         const amount = Number(item.taxable_amount || item.amount || (item.unit_price * item.quantity) || 0)
         return sum + amount
-      }, 0)
+      }, 0))
       const discountRate = Number(quotation.discount_rate || quotation.discountRate || 0)
-      const discountAmount = Number(quotation.discount_amount || quotation.discountAmount || (subtotal * discountRate / 100))
-      const taxableAmount = Math.max(0, subtotal - discountAmount)
+      const discountAmount = toInt(Number(quotation.discount_amount || quotation.discountAmount || (subtotal * discountRate / 100)))
+      const taxableAmount = toInt(Math.max(0, subtotal - discountAmount))
       const taxRate = Number(quotation.tax_rate || quotation.taxRate || 18)
-      const taxAmount = Number(quotation.tax_amount || quotation.taxAmount || (taxableAmount * taxRate / 100))
-      const total = Number(quotation.total_amount || quotation.total || (taxableAmount + taxAmount))
+      const taxAmount = toInt(Number(quotation.tax_amount || quotation.taxAmount || (taxableAmount * taxRate / 100)))
+      const total = toInt(Number(quotation.total_amount || quotation.total || (taxableAmount + taxAmount)))
 
       // Normalise invoice date to YYYY-MM-DD for <input type="date">
       const rawDate = quotation.quotation_date || quotation.quotationDate
@@ -643,26 +644,24 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
       
       updatedItems[index] = item
       
-      // Recalculate totals
-      const subtotal = updatedItems.reduce((sum, itm) => {
-        return sum + (parseFloat(itm.amount || 0))
-      }, 0)
-      
+      // Recalculate totals (integer to avoid float precision like 65020.280000000006)
+      const toInt = (v) => Math.round(Number(v) || 0)
+      const subtotal = toInt(updatedItems.reduce((sum, itm) => sum + (parseFloat(itm.amount || 0)), 0))
       const discountRate = prev.discountRate || 0
-      const discountAmount = subtotal * (discountRate / 100)
-      const taxableAmount = Math.max(0, subtotal - discountAmount)
+      const discountAmount = toInt(subtotal * (discountRate / 100))
+      const taxableAmount = toInt(Math.max(0, subtotal - discountAmount))
       const taxRate = prev.taxRate || 18
-      const taxAmount = taxableAmount * (taxRate / 100)
-      const total = taxableAmount + taxAmount
-      
+      const taxAmount = toInt(taxableAmount * (taxRate / 100))
+      const total = toInt(taxableAmount + taxAmount)
+
       return {
         ...prev,
         items: updatedItems,
-        subtotal: subtotal,
-        discountAmount: discountAmount,
-        taxableAmount: taxableAmount,
-        taxAmount: taxAmount,
-        total: total
+        subtotal,
+        discountAmount,
+        taxableAmount,
+        taxAmount,
+        total
       }
     })
   }

@@ -12,7 +12,7 @@ class ProformaInvoiceService {
     }
   }
 
-  // Get PI by ID
+  // Get PI by ID (full row)
   async getPI(id) {
     try {
       const response = await apiClient.get(`/api/proforma-invoices/${id}`);
@@ -23,7 +23,40 @@ class ProformaInvoiceService {
     }
   }
 
-  // Get PI with payments
+  /** Lightweight PI summary for fast View open. No products/payments. */
+  async getSummary(id) {
+    try {
+      const response = await apiClient.get(`/api/proforma-invoices/${id}/summary`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching PI summary:', error);
+      throw error;
+    }
+  }
+
+  /** PI products (quotation items with amendment applied). Lazy-load. */
+  async getProducts(id) {
+    try {
+      const response = await apiClient.get(`/api/proforma-invoices/${id}/products`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching PI products:', error);
+      throw error;
+    }
+  }
+
+  /** PI payments only (by quotation_id). Lazy-load. */
+  async getPaymentsOnly(id) {
+    try {
+      const response = await apiClient.get(`/api/proforma-invoices/${id}/payments-only`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching PI payments:', error);
+      throw error;
+    }
+  }
+
+  // Get PI with payments (full; for backward compat)
   async getPIWithPayments(id) {
     try {
       const response = await apiClient.get(`/api/proforma-invoices/${id}/payments`);
@@ -41,6 +74,72 @@ class ProformaInvoiceService {
       return response;
     } catch (error) {
       console.error('Error fetching PIs by quotation:', error);
+      throw error;
+    }
+  }
+
+  // Get active PI for quotation (for payment tracking: latest approved, not superseded)
+  async getActivePI(quotationId) {
+    try {
+      const response = await apiClient.get(`/api/proforma-invoices/quotation/${quotationId}/active`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching active PI:', error);
+      throw error;
+    }
+  }
+
+  // Create revised PI (amendment) from approved parent PI
+  async createRevisedPI(parentPiId, payload) {
+    try {
+      const response = await apiClient.post(`/api/proforma-invoices/${parentPiId}/revised`, payload);
+      return response;
+    } catch (error) {
+      console.error('Error creating revised PI:', error);
+      throw error;
+    }
+  }
+
+  // Submit revised PI for DH approval
+  async submitRevisedPI(id) {
+    try {
+      const response = await apiClient.post(`/api/proforma-invoices/${id}/submit-revised`);
+      return response;
+    } catch (error) {
+      console.error('Error submitting revised PI:', error);
+      throw error;
+    }
+  }
+
+  // Get pending revised PIs (DH)
+  async getPendingRevisedPIs() {
+    try {
+      const response = await apiClient.get('/api/proforma-invoices/pending-revised');
+      return response;
+    } catch (error) {
+      console.error('Error fetching pending revised PIs:', error);
+      throw error;
+    }
+  }
+
+  // DH: Approve revised PI
+  async approveRevisedPI(id) {
+    try {
+      const response = await apiClient.post(`/api/proforma-invoices/${id}/approve-revised`);
+      return response;
+    } catch (error) {
+      console.error('Error approving revised PI:', error);
+      throw error;
+    }
+  }
+
+  // DH: Reject revised PI
+  async rejectRevisedPI(id, reason) {
+    try {
+      const response = await apiClient.post(`/api/proforma-invoices/${id}/reject-revised`, { reason });
+      return response;
+    } catch (error) {
+      console.error('Error rejecting revised PI:', error);
       throw error;
     }
   }

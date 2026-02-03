@@ -32,7 +32,9 @@ const includes = (val, q) => String(val || '').toLowerCase().includes(String(q |
 export const filterLeads = (activeLeadPool, searchTerm, assignmentFilter, statusFilter, filteredCustomerIds, isLeadAssigned, assignedSalespersonFilter, assignedTelecallerFilter, columnFilters = {}) => {
   const searchLower = searchTerm?.toLowerCase() || '';
   const hasStatusFilter = Boolean(statusFilter.type && statusFilter.status);
-  const hasCustomerIdFilter = hasStatusFilter && filteredCustomerIds.size > 0;
+  // For order_cancel and pi_amendment: always filter by customer IDs (empty set = 0 results)
+  const isApprovalFilter = statusFilter.type === 'order_cancel' || statusFilter.type === 'pi_amendment';
+  const hasCustomerIdFilter = hasStatusFilter && (filteredCustomerIds.size > 0 || isApprovalFilter);
   
   // For very large arrays, use chunk processing helper
   if (activeLeadPool.length > 1000) {

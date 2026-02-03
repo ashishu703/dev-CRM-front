@@ -71,8 +71,7 @@ export const transformProductForRfp = (product, isCustomProduct) => {
   return {
     productSpec: product.productSpec || '',
     quantity: product.quantity || '',
-    length: product.length || '',
-    lengthUnit: product.lengthUnit || 'Mtr',
+    quantityUnit: product.quantityUnit || 'Mtr',
     targetPrice: product.targetPrice || '',
     availabilityStatus: availabilityStatus
   }

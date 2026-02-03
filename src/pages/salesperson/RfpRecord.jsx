@@ -434,7 +434,11 @@ const RfpRecord = ({ isDarkMode = false }) => {
                             </div>
                             <div>
                               <div className={`text-xs font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Length / Qty Used</div>
-                              <div className={isDarkMode ? 'text-gray-100' : 'text-gray-900'}>{lengthUsed}</div>
+                              <div className={isDarkMode ? 'text-gray-100' : 'text-gray-900'}>
+                                {lengthUsed !== '—' && lengthUsed != null
+                                  ? `${lengthUsed} ${(log.rateType && String(log.rateType).includes('per_kg')) ? 'Kg' : 'Mtr'}`
+                                  : lengthUsed}
+                              </div>
                             </div>
                             <div>
                               <div className={`text-xs font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Rate Type</div>

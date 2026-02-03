@@ -34,6 +34,8 @@ import CSVImportValidationService from '../../services/CSVImportValidationServic
 import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton';
 import EnquiryTable from '../../components/EnquiryTable';
 import departmentHeadService from '../../api/admin_api/departmentHeadService';
+import proformaInvoiceService from '../../api/admin_api/proformaInvoiceService';
+import { Users, Activity } from 'lucide-react';
 
 const LeadsSimplified = () => {
   const [activeTab, setActiveTab] = useState('leads');
@@ -116,6 +118,10 @@ const LeadsSimplified = () => {
   const [quotationCounts, setQuotationCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
   const [piCounts, setPiCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
   const [loadingCounts, setLoadingCounts] = useState(false);
+  /** DH: Pending order cancel & PI amendment counts (notification pills) */
+  const [orderCancelPendingCount, setOrderCancelPendingCount] = useState(0);
+  const [piAmendmentPendingCount, setPiAmendmentPendingCount] = useState(0);
+  const [loadingApprovalCounts, setLoadingApprovalCounts] = useState(false);
   const [statusFilter, setStatusFilter] = useState({ type: null, status: null });
   const [assignmentFilter, setAssignmentFilter] = useState(null);
   const [filteredCustomerIds, setFilteredCustomerIds] = useState(new Set());
@@ -214,6 +220,12 @@ const LeadsSimplified = () => {
   const allLeadsDataRef = useRef([]);
   const [showPIPreview, setShowPIPreview] = useState(false);
   const [piPreviewData, setPiPreviewData] = useState(null);
+
+  // DH: Order Cancel & PI Amendment approvals (inside lead drawer)
+  const [pendingOrderCancels, setPendingOrderCancels] = useState([]);
+  const [pendingRevisedPIs, setPendingRevisedPIs] = useState([]);
+  const [loadingOrderCancels, setLoadingOrderCancels] = useState(false);
+  const [loadingRevisedPIs, setLoadingRevisedPIs] = useState(false);
   
   // Last Call pagination state
   const [lastCallPage, setLastCallPage] = useState(1);
@@ -231,6 +243,7 @@ const LeadsSimplified = () => {
   const LAST_CALL_CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
   const fetchEnquiriesAbortControllerRef = useRef(null);
   const fetchLastCallAbortControllerRef = useRef(null);
+  const statusFilterLeadsRef = useRef([]);
 
   const importFileInputRef = useRef(null);
 
@@ -1128,6 +1141,26 @@ const LeadsSimplified = () => {
     }
   };
 
+  /** DH: Fetch pending order cancel and PI amendment counts for notification pills */
+  const fetchApprovalCounts = async () => {
+    try {
+      setLoadingApprovalCounts(true);
+      const [cancelRes, revisedRes] = await Promise.all([
+        apiClient.get(API_ENDPOINTS.ORDER_CANCEL_PENDING()).catch(() => ({ data: { data: [] } })),
+        proformaInvoiceService.getPendingRevisedPIs().catch(() => ({ data: { data: [] } }))
+      ]);
+      const cancelList = cancelRes?.data?.data ?? cancelRes?.data ?? [];
+      const revisedList = revisedRes?.data?.data ?? revisedRes?.data ?? [];
+      setOrderCancelPendingCount(Array.isArray(cancelList) ? cancelList.length : 0);
+      setPiAmendmentPendingCount(Array.isArray(revisedList) ? revisedList.length : 0);
+    } catch (e) {
+      setOrderCancelPendingCount(0);
+      setPiAmendmentPendingCount(0);
+    } finally {
+      setLoadingApprovalCounts(false);
+    }
+  };
+
   useEffect(() => {
     // Sync showAll state with limit value
     if (limit >= 50000) {
@@ -1160,6 +1193,7 @@ const LeadsSimplified = () => {
       try {
         // Kick off counts in background so it doesn't block first paint
         fetchQuotationAndPICounts().catch(() => {});
+        fetchApprovalCounts().catch(() => {});
         // Fetch paginated leads for display (only 10 initially)
         await fetchLeads();
       } catch (error) {
@@ -1214,6 +1248,39 @@ const LeadsSimplified = () => {
       fetchQuotations(previewLead.id);
     }
   }, [showPreviewModal, previewLead]);
+
+  // DH: Fetch pending order cancels and revised PIs for this lead (when drawer open)
+  const fetchPendingApprovalsForLead = useCallback(async () => {
+    if (!previewLead?.id) return;
+    const leadId = String(previewLead.id);
+    setLoadingOrderCancels(true);
+    setLoadingRevisedPIs(true);
+    try {
+      const [cancelRes, revisedRes] = await Promise.all([
+        apiClient.get(API_ENDPOINTS.ORDER_CANCEL_PENDING()).catch(() => ({ data: { data: [] } })),
+        proformaInvoiceService.getPendingRevisedPIs().catch(() => ({ data: { data: [] } }))
+      ]);
+      const allCancels = cancelRes?.data?.data ?? cancelRes?.data ?? [];
+      const allRevised = revisedRes?.data?.data ?? revisedRes?.data ?? [];
+      setPendingOrderCancels(Array.isArray(allCancels) ? allCancels.filter(r => String(r.customer_id || r.customerId) === leadId) : []);
+      setPendingRevisedPIs(Array.isArray(allRevised) ? allRevised.filter(pi => String(pi.customer_id || pi.customerId) === leadId) : []);
+    } catch (e) {
+      setPendingOrderCancels([]);
+      setPendingRevisedPIs([]);
+    } finally {
+      setLoadingOrderCancels(false);
+      setLoadingRevisedPIs(false);
+    }
+  }, [previewLead?.id]);
+
+  useEffect(() => {
+    if (showPreviewModal && previewLead?.id) {
+      fetchPendingApprovalsForLead();
+    } else {
+      setPendingOrderCancels([]);
+      setPendingRevisedPIs([]);
+    }
+  }, [showPreviewModal, previewLead?.id]);
 
   const openAssignModal = (lead) => {
     setAssigningLead(lead);
@@ -1278,8 +1345,9 @@ const LeadsSimplified = () => {
   const hasStatusFilter = Boolean(statusFilter.type && statusFilter.status);
   const hasAssignmentFilter = Boolean(assignmentFilter);
   // OPTIMIZED: Use all leads when filters are active (quotation, PI, or assignment)
+  // Use statusFilterLeadsRef when available (avoids timing issue - leads loaded in same click as filter)
   const activeLeadPool = (hasStatusFilter || hasAssignmentFilter)
-    ? (allLeadsDataRef.current.length > 0 ? allLeadsDataRef.current : allLeadsData.length > 0 ? allLeadsData : []) 
+    ? (statusFilterLeadsRef.current?.length > 0 ? statusFilterLeadsRef.current : allLeadsDataRef.current?.length > 0 ? allLeadsDataRef.current : allLeadsData?.length > 0 ? allLeadsData : []) 
     : leadsData;
 
   // Get unique filter options for global filter panel
@@ -1539,6 +1607,7 @@ const LeadsSimplified = () => {
     if (statusFilter.type === type && statusFilter.status === status) {
       setStatusFilter({ type: null, status: null });
       setFilteredCustomerIds(new Set());
+      statusFilterLeadsRef.current = [];
       return;
     }
     
@@ -1549,36 +1618,65 @@ const LeadsSimplified = () => {
       // Show loading state immediately
       setLoadingAllLeads(true);
       
-      const [loadedLeads, countsResult] = await Promise.all([
-        loadAllLeadsForFilters(true).catch(err => {
-          console.error('Error loading all leads:', err);
-          return [];
-        }),
-        fetchQuotationAndPICounts().catch(err => {
+      // Load all leads first (required for PI/Quotation/approval filter to show correct leads)
+      const loadedLeads = await loadAllLeadsForFilters(true).catch(err => {
+        console.error('Error loading all leads:', err);
+        return [];
+      });
+      statusFilterLeadsRef.current = Array.isArray(loadedLeads) ? loadedLeads : [];
+
+      let customerIds = new Set();
+
+      if (type === 'order_cancel') {
+        const cancelRes = await apiClient.get(API_ENDPOINTS.ORDER_CANCEL_PENDING()).catch(() => ({ data: { data: [] } }));
+        const cancelList = cancelRes?.data?.data ?? cancelRes?.data ?? [];
+        if (Array.isArray(cancelList) && cancelList.length > 0) {
+          customerIds = IDMatcher.buildCustomerIdSet(cancelList);
+        }
+        if (customerIds.size === 0 && cancelList.length > 0) {
+          toastManager.warning('Could not match order cancel requests to leads. Please try again.');
+        }
+      } else if (type === 'pi_amendment') {
+        const revisedRes = await proformaInvoiceService.getPendingRevisedPIs().catch(() => ({ data: { data: [] } }));
+        const revisedList = revisedRes?.data?.data ?? revisedRes?.data ?? [];
+        if (Array.isArray(revisedList) && revisedList.length > 0) {
+          customerIds = await leadsFilterService.extractCustomerIdsFromPIs(revisedList);
+        }
+        if (customerIds.size === 0 && revisedList.length > 0) {
+          toastManager.warning('Could not match PI amendments to leads. Please try again.');
+        }
+      } else {
+        // Fetch counts + extract customer IDs for PI/Quotation filter
+        const countsResult = await fetchQuotationAndPICounts().catch(err => {
           console.error('Error loading counts:', err);
           return null;
-        })
-      ]);
-      
-      let customerIds = new Set();
-      if (type === 'pi') {
-        const relevantPIs = countsResult?.filteredPIs[status] || [];
-        if (relevantPIs.length > 0) {
-          customerIds = await leadsFilterService.extractCustomerIdsFromPIs(relevantPIs);
-        }
-      } else if (type === 'quotation') {
-        const relevantQuotations = countsResult?.filteredQuotations[status] || [];
-        if (relevantQuotations.length > 0) {
-          customerIds = await leadsFilterService.extractCustomerIdsFromQuotations(relevantQuotations);
+        });
+        if (type === 'pi') {
+          const relevantPIs = countsResult?.filteredPIs?.[status] || [];
+          if (relevantPIs.length > 0) {
+            customerIds = await leadsFilterService.extractCustomerIdsFromPIs(relevantPIs);
+          }
+        } else if (type === 'quotation') {
+          const relevantQuotations = countsResult?.filteredQuotations?.[status] || [];
+          if (relevantQuotations.length > 0) {
+            customerIds = await leadsFilterService.extractCustomerIdsFromQuotations(relevantQuotations);
+          }
         }
       }
       
       setFilteredCustomerIds(customerIds);
+      if (type === 'pi' && status === 'pending' && customerIds.size === 0) {
+        const countsResult = await fetchQuotationAndPICounts().catch(() => null);
+        if ((countsResult?.piCounts?.pending || 0) > 0) {
+          toastManager.warning('Could not match pending PIs to leads. Please try again.');
+        }
+      }
     } catch (err) {
       console.error('Error in handleBadgeClick:', err);
       toastManager.error('Failed to load leads for filtering');
       setStatusFilter({ type: null, status: null });
       setFilteredCustomerIds(new Set());
+      statusFilterLeadsRef.current = [];
     } finally {
       setLoadingAllLeads(false);
     }
@@ -1647,58 +1745,119 @@ const LeadsSimplified = () => {
     }
   };
 
+  // DH: Order Cancel approval (inside lead drawer)
+  const handleApproveOrderCancel = async (id) => {
+    try {
+      const res = await apiClient.post(API_ENDPOINTS.ORDER_CANCEL_APPROVE(id));
+      if (res?.data?.success) {
+        toastManager.success(res.data.message || 'Order cancel approved.');
+        await fetchPendingApprovalsForLead();
+        fetchApprovalCounts().catch(() => {});
+        if (previewLead?.id) await fetchQuotations(previewLead.id);
+      } else {
+        toastManager.error(res?.data?.message || 'Failed to approve');
+      }
+    } catch (err) {
+      apiErrorHandler.handleError(err, 'approve order cancel');
+    }
+  };
+
+  const handleRejectOrderCancel = async (id, rejectionReason) => {
+    try {
+      const res = await apiClient.post(API_ENDPOINTS.ORDER_CANCEL_REJECT(id), {
+        rejectionReason: rejectionReason || undefined
+      });
+      if (res?.data?.success) {
+        toastManager.success(res.data.message || 'Request rejected.');
+        await fetchPendingApprovalsForLead();
+        fetchApprovalCounts().catch(() => {});
+      } else {
+        toastManager.error(res?.data?.message || 'Failed to reject');
+      }
+    } catch (err) {
+      apiErrorHandler.handleError(err, 'reject order cancel');
+    }
+  };
+
+  // DH: Revised PI (PI Amendment) approval (inside lead drawer)
+  const handleApproveRevisedPI = async (id) => {
+    try {
+      const res = await proformaInvoiceService.approveRevisedPI(id);
+      if (res?.data?.success) {
+        toastManager.success(res.data.message || 'Revised PI approved.');
+        await fetchPendingApprovalsForLead();
+        fetchApprovalCounts().catch(() => {});
+        if (previewLead) await fetchPIsForLead();
+      } else {
+        toastManager.error(res?.data?.message || 'Failed to approve');
+      }
+    } catch (err) {
+      apiErrorHandler.handleError(err, 'approve revised PI');
+    }
+  };
+
+  const handleRejectRevisedPI = async (id, reason) => {
+    try {
+      const res = await proformaInvoiceService.rejectRevisedPI(id, reason);
+      if (res?.data?.success) {
+        toastManager.success(res.data.message || 'Revised PI rejected.');
+        await fetchPendingApprovalsForLead();
+        fetchApprovalCounts().catch(() => {});
+        if (previewLead) await fetchPIsForLead();
+      } else {
+        toastManager.error(res?.data?.message || 'Failed to reject');
+      }
+    } catch (err) {
+      apiErrorHandler.handleError(err, 'reject revised PI');
+    }
+  };
+
   const handleViewPI = async (piId) => {
     try {
       const result = await piService.fetchPIWithQuotation(piId);
       if (!result) return;
 
-      const { pi, completeQuotation, quotationItems } = result;
-      const mappedItems = piService.buildPIItems(quotationItems);
+      const { pi, completeQuotation, quotationItems, payments = [] } = result;
+      // quotationItems from fetchPIWithQuotation are already amendment-aware (from /products API)
+      const mappedItems = quotationItems;
       const totals = piService.calculatePITotals(mappedItems, completeQuotation, pi);
-      const { advancePayment, originalQuotationTotal } = await piService.calculateAdvancePayment(
-        pi.quotation_id, 
-        totals.piTotal, 
-        totals.quotationTotal
-      );
+
+      const approvedOnly = (payments || []).filter((p) => {
+        const status = (p.approval_status || p.accounts_approval_status || '').toLowerCase();
+        return status === 'approved';
+      });
+      const advancePayment = approvedOnly.reduce((sum, p) => sum + (Number(p.installment_amount ?? p.paid_amount ?? p.amount ?? 0) || 0), 0);
+      const originalQuotationTotal = totals.quotationTotal;
       const finalTotal = piService.calculateFinalTotal(
-        totals.piTotal, 
-        totals.quotationTotal, 
-        advancePayment, 
+        totals.piTotal,
+        totals.quotationTotal,
+        advancePayment,
         originalQuotationTotal
       );
 
-      const paymentHistoryResponse = await paymentService
-        .getPaymentsByQuotation(pi.quotation_id)
-        .catch(() => ({ data: [] }));
-      const approvedPayments = (paymentHistoryResponse?.data || [])
-        .filter((payment) => {
-          const approvalStatus = (payment.approval_status || payment.accounts_approval_status || '').toLowerCase();
-          return approvalStatus === 'approved';
-        })
-        .map((payment) => {
-          const paymentDate = payment.payment_date || payment.created_at || '';
-          let formattedDate = '';
-          if (paymentDate) {
-            try {
-              formattedDate = new Date(paymentDate).toLocaleDateString('en-IN', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric'
-              });
-            } catch (e) {
-              formattedDate = paymentDate;
-            }
+      const approvedPayments = approvedOnly.map((payment) => {
+        const paymentDate = payment.payment_date || payment.created_at || '';
+        let formattedDate = '';
+        if (paymentDate) {
+          try {
+            formattedDate = new Date(paymentDate).toLocaleDateString('en-IN', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric'
+            });
+          } catch (e) {
+            formattedDate = paymentDate;
           }
-
-          const amountRaw = Number(payment.installment_amount || payment.paid_amount || payment.amount || 0);
-          return {
-            date: formattedDate,
-            mode: payment.payment_method || 'N/A',
-            refNo: payment.payment_reference || payment.id || '',
-            amount: amountRaw.toFixed(2),
-            amountRaw
-          };
-        });
+        }
+        const amountRaw = Number(payment.installment_amount || payment.paid_amount || payment.amount || 0);
+        return {
+          date: formattedDate,
+          mode: payment.payment_method || 'N/A',
+          refNo: payment.payment_reference || payment.id || '',
+          amount: amountRaw.toFixed(2),
+          amountRaw
+        };
+      });
 
       const totalAdvanceRaw = approvedPayments.reduce((sum, payment) => sum + (payment.amountRaw || 0), 0);
       const totalAdvanceValue = totalAdvanceRaw || advancePayment || 0;
@@ -1800,6 +1959,12 @@ const LeadsSimplified = () => {
 
         bankDetails,
         terms,
+
+        // RFP ID from quotation (for PI template - Lead → RFP → Quotation → PI)
+        rfpId: completeQuotation.rfp_id || completeQuotation.rfpId || pi.master_rfp_id || null,
+        masterRfpId: completeQuotation.master_rfp_id || completeQuotation.masterRfpId || pi.master_rfp_id || null,
+        rfp_id: completeQuotation.rfp_id || completeQuotation.rfpId || null,
+        master_rfp_id: completeQuotation.master_rfp_id || completeQuotation.masterRfpId || pi.master_rfp_id || null,
 
         // Meta
         template: templateKey,
@@ -1990,6 +2155,9 @@ const LeadsSimplified = () => {
         unassignedCount={unassignedCount}
         showQuotationPending={false}
         showQuotationSection={false}
+        orderCancelPendingCount={orderCancelPendingCount}
+        piAmendmentPendingCount={piAmendmentPendingCount}
+        loadingApprovalCounts={loadingApprovalCounts}
         onBadgeClick={handleBadgeClick}
         onAssignmentFilter={async (filter) => {
           // OPTIMIZED: Load all leads before applying assignment filter
@@ -2011,8 +2179,9 @@ const LeadsSimplified = () => {
           setStatusFilter({ type: null, status: null });
           setAssignmentFilter(null);
           setFilteredCustomerIds(new Set());
-          // Clear global filters
-          clearAdvancedFilters();
+          statusFilterLeadsRef.current = [];
+          setAssignedSalespersonFilter('');
+          setAssignedTelecallerFilter('');
           setColumnFilters({
             customerId: '',
             customer: '',
@@ -2629,6 +2798,14 @@ const LeadsSimplified = () => {
         onViewPI={handleViewPI}
         onApprovePI={handleApprovePI}
         onRejectPI={handleRejectPI}
+        pendingOrderCancels={pendingOrderCancels}
+        pendingRevisedPIs={pendingRevisedPIs}
+        loadingOrderCancels={loadingOrderCancels}
+        loadingRevisedPIs={loadingRevisedPIs}
+        onApproveOrderCancel={handleApproveOrderCancel}
+        onRejectOrderCancel={handleRejectOrderCancel}
+        onApproveRevisedPI={handleApproveRevisedPI}
+        onRejectRevisedPI={handleRejectRevisedPI}
       />
 
       <ImportPreviewModal
@@ -2940,7 +3117,7 @@ const LeadsSimplified = () => {
       )}
 
       {showCustomerTimeline && timelineLead && (
-        <div style={{ position: 'fixed', top: 0, right: 0, width: 'fit-content', maxWidth: '349px', minWidth: '244px', height: '100vh', zIndex: 50, marginLeft: 0, marginRight: 0, paddingLeft: 0, paddingRight: 0, borderLeft: '1px solid #e5e7eb' }}>
+        <div style={{ position: 'fixed', top: 0, right: 0, width: 'fit-content', maxWidth: '380px', minWidth: '300px', height: '100vh', zIndex: 50, marginLeft: 0, marginRight: 0, paddingLeft: 0, paddingRight: 0, borderLeft: '1px solid #e5e7eb' }}>
           <CustomerTimeline
             lead={timelineLead}
             onClose={() => {
@@ -2970,6 +3147,16 @@ const LeadsSimplified = () => {
             onRejectPI={(pi) => {
               if (pi?.id) {
                 handleRejectPI(pi.id);
+              }
+            }}
+            onApproveCancelRequest={async (request) => {
+              if (request?.id) {
+                await handleApproveOrderCancel(request.id);
+              }
+            }}
+            onRejectCancelRequest={async (request) => {
+              if (request?.id) {
+                await handleRejectOrderCancel(request.id);
               }
             }}
           />

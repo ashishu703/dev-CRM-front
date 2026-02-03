@@ -990,8 +990,16 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
             <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-t-xl">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold mb-1">RFP Approval</h2>
-                  <p className="text-blue-100 text-sm">Review all products and approve or reject this RFP</p>
+                  <h2 className="text-2xl font-bold mb-1">
+                    {['approved', 'rejected', 'pricing_ready', 'quotation_created', 'accounts_approved', 'accounts_pending', 'credit_case', 'senior_approved', 'senior_rejected', 'sent_to_operations'].includes((selectedRfp?.status || '').toLowerCase())
+                      ? 'RFP Details'
+                      : 'RFP Approval'}
+                  </h2>
+                  <p className="text-blue-100 text-sm">
+                    {['approved', 'rejected', 'pricing_ready', 'quotation_created', 'accounts_approved', 'accounts_pending', 'credit_case', 'senior_approved', 'senior_rejected', 'sent_to_operations'].includes((selectedRfp?.status || '').toLowerCase())
+                      ? 'View RFP details (already processed)'
+                      : 'Review all products and approve or reject this RFP'}
+                  </p>
                 </div>
                 <button
                   onClick={closeModals}
@@ -1099,22 +1107,22 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">#</th>
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Product Specification</th>
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Quantity</th>
-                          <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Length</th>
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Price</th>
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Status</th>
                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
-                        {selectedRfp.products.map((product, index) => (
+                        {selectedRfp.products.map((product, index) => {
+                          const qty = product.quantity ?? product.length;
+                          const unit = product.length_unit || product.quantityUnit || 'Mtr';
+                          const qtyDisplay = qty != null && qty !== '' ? `${qty} ${unit}` : '—';
+                          return (
                           <tr key={product.id || index} className="hover:bg-slate-50">
                             <td className="px-4 py-3 text-sm text-slate-700 font-medium">{index + 1}</td>
                             <td className="px-4 py-3 text-sm font-semibold text-slate-900">{product.product_spec || 'N/A'}</td>
                             <td className="px-4 py-3 text-sm text-slate-700">
-                              {product.quantity ? product.quantity : '—'}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-slate-700">
-                              {product.length ? `${product.length} ${product.length_unit || 'Mtr'}` : 'N/A'}
+                              {qtyDisplay}
                             </td>
                             <td className="px-4 py-3 text-sm">
                               {product.target_price != null && Number.isFinite(Number(product.target_price))
@@ -1163,7 +1171,8 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                               </div>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1220,9 +1229,12 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                       {itemsWithLog.map(({ product, log }, idx) => {
                         const detail = log || {};
                         const lengthUsed =
-                          detail.length !== undefined && detail.length !== null
-                            ? detail.length
-                            : (detail.quantity !== undefined && detail.quantity !== null ? detail.quantity : (product.length ?? '—'));
+                          detail.quantity !== undefined && detail.quantity !== null
+                            ? detail.quantity
+                            : (detail.length !== undefined && detail.length !== null ? detail.length : (product.quantity ?? product.length ?? '—'));
+                        const unitFromRateType = (rt) => (rt && String(rt).includes('per_kg')) ? 'Kg' : 'Km';
+                        const qtyUnit = detail.quantityUnit || product.length_unit || product.quantityUnit || unitFromRateType(detail.rateType) || 'Km';
+                        const lengthWithUnit = lengthUsed !== '—' && lengthUsed != null ? `${lengthUsed} ${qtyUnit}` : lengthUsed;
                         const totalDisplay = detail.totalPrice != null || detail.totalPrice === 0
                           ? formatCurrency(detail.totalPrice)
                           : (product.target_price != null ? formatCurrency(product.target_price) : '—');
@@ -1244,55 +1256,110 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                               </div>
                               <span className="text-lg font-bold text-emerald-700">{totalDisplay}</span>
                             </div>
-                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Inputs used</div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-800 mb-4">
-                              <div>
-                                <span className="text-slate-500">Length / Qty used:</span>{' '}
-                                <span className="font-medium">{lengthUsed}</span>
-                              </div>
-                              {detail.family === 'MC_XLPE_ARMOURED' ? (
-                                <div>
-                                  <span className="text-slate-500">Selected specification:</span>{' '}
-                                  <span className="font-medium">{detail.selectedSpec || '—'}</span>
+                            {/* Product Specification - compact key:value, clean visual */}
+                            {(detail && Object.keys(detail).length > 0) ? (
+                              <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                                <div className="bg-slate-800 px-3 py-2">
+                                  <span className="text-xs font-bold text-white uppercase tracking-wider">Product Specification</span>
                                 </div>
-                              ) : (
-                                <div>
-                                  <span className="text-slate-500">Rate type:</span>{' '}
-                                  <span className="font-medium">{detail.rateType ? (rateTypeLabelMap[detail.rateType] || detail.rateType) : '—'}</span>
+                                <div className="p-3">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1 text-[13px]">
+                                    {(() => {
+                                      const keyToLabel = {
+                                        name: 'Name', nominal_area: 'NominalArea', no_of_strands: 'NoOfStrands', diameter: 'Diameter',
+                                        aluminium_weight: 'AluminiumWeight', aluminium_cg_grade: 'AluminiumCGGrade', aluminium_alloy_grade_t4: 'AluminiumAlloyGradeT4',
+                                        cost_alu_per_mtr: 'CostAluPerMtr', cost_alloy_per_mtr: 'CostAlloyPerMtr', cost_alu_per_kg: 'CostAluPerKg', cost_alloy_per_kg: 'CostAlloyPerKg',
+                                        quantity: 'Quantity', length: 'Length', quantityUnit: 'Unit', rateType: 'RateType', basePerUnit: 'BaseRate', baseTotal: 'BaseAmount', totalPrice: 'Total',
+                                        family: 'Family', selectedSpec: 'SelectedSpec', wireStripCovering: 'WireStripCovering', conductorType: 'ConductorType', cores: 'Cores', size: 'Size',
+                                        selectedSize: 'SelectedSize', selectedType: 'SelectedType', type: 'Type', final_rate: 'FinalRate',
+                                        'PHASE SIZE': 'PhaseSize', 'STL SIZE': 'STLSize', 'MESSENGER SIZE': 'MessengerSize',
+                                        'INSULATION THICKNESS (PHASE)': 'InsulationThicknessPhase', 'INSULATION THICKNESS (STL)': 'InsulationThicknessSTL', 'INSULATION THICKNESS (MESSENGER)': 'InsulationThicknessMessenger',
+                                        'FINAL RATE': 'FinalRate', COST: 'Cost', PROFIT: 'Profit',
+                                        no_of_wires_aluminium: 'NoOfWiresAluminium', no_of_wires_steel: 'NoOfWiresSteel',
+                                        size_aluminium: 'SizeAluminium', size_steel: 'SizeSteel', size_specs: 'SizeSpecs',
+                                        weight_aluminium: 'WeightAluminium', weight_steel: 'WeightSteel', total_weight: 'TotalWeight',
+                                        aluminium_cg_grade: 'AluminiumCGGrade', aluminium_ec_grade: 'AluminiumECGrade', steel_rate: 'SteelRate',
+                                        cost_conductor_isi_per_mtr: 'CostConductorISIPerMtr', cost_conductor_commercial_per_mtr: 'CostConductorCommPerMtr',
+                                        cost_conductor_isi_per_kg: 'CostConductorISIPerKg', cost_conductor_commercial_per_kg: 'CostConductorCommPerKg',
+                                        'NO OF CORES': 'NoOfCores', 'CROSS-SECTIONAL AREA (SQ MM)': 'CrossSectionalAreaSqMm',
+                                        'FINAL RATE': 'FinalRate', SIZE: 'Size', TYPE: 'Type'
+                                    }
+                                      const fmtVal = (k, v) => {
+                                        if (v == null || v === '') return '—'
+                                        if (k && (k.includes('cost') || k.includes('price') || k.includes('amount') || k.includes('grade') || k.includes('_per_') || k.includes('RATE') || k === 'COST' || k === 'PROFIT')) {
+                                          const n = Number(v)
+                                          return Number.isFinite(n) ? formatCurrency(n) : String(v)
+                                        }
+                                        if (k === 'rateType') return rateTypeLabelMap[v] || String(v)
+                                        if (k === 'quantity' || k === 'length') return lengthWithUnit
+                                        return String(v)
+                                      }
+                                      const specSource = detail.productSpecification && typeof detail.productSpecification === 'object'
+                                        ? { ...detail.productSpecification, quantity: lengthWithUnit, rateType: detail.rateType, basePerUnit: detail.basePerUnit, baseTotal: detail.baseTotal }
+                                        : { family: detail.family, name: detail.selectedSpec || product.product_spec, quantity: lengthWithUnit, rateType: detail.rateType, basePerUnit: detail.basePerUnit, baseTotal: detail.baseTotal }
+                                      const skipKeys = new Set(['extraCharges', 'productSpecification', 'productSpec', 'rfpId', 'rfpRequestId'])
+                                      return Object.entries(specSource)
+                                        .filter(([k]) => !skipKeys.has(k) && specSource[k] != null && specSource[k] !== '')
+                                        .map(([key, val]) => (
+                                          <div key={key} className="flex items-center gap-2 py-1 border-b border-slate-100 last:border-0 min-w-0">
+                                            <span className="text-slate-500 font-medium shrink-0 text-xs">{keyToLabel[key] || key.replace(/\s+/g, '')}:</span>
+                                            <span className="text-slate-900 font-semibold truncate">{fmtVal(key, val)}</span>
+                                          </div>
+                                        ))
+                                    })()}
+                                  </div>
+                                  {Array.isArray(detail.extraCharges) && detail.extraCharges.length > 0 && (
+                                    <div className="mt-3 pt-3 border-t border-slate-200">
+                                      <div className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-1.5">AdditionalCharges</div>
+                                      <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+                                        {detail.extraCharges.map((row, i) => (
+                                          <span key={i} className="text-sm">
+                                            <span className="text-slate-500">{row.label || `Charge${i + 1}`}:</span>
+                                            <span className="font-semibold text-amber-700 ml-0.5">{row.amount != null ? formatCurrency(row.amount) : '₹0.00'}</span>
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                              <div>
-                                <span className="text-slate-500">Family:</span>{' '}
-                                <span className="font-medium">{detail.family ? (familyLabelMap[detail.family] || detail.family) : '—'}</span>
                               </div>
-                              <div>
-                                <span className="text-slate-500">Base (per unit):</span>{' '}
-                                <span className="font-medium">
-                                  {detail.basePerUnit != null ? formatCurrency(detail.basePerUnit) : (detail.basePerMtr != null ? formatCurrency(detail.basePerMtr) : '—')}
-                                </span>
+                            ) : (
+                              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4 text-center">
+                                <p className="text-sm text-slate-500 italic">
+                                  Price set manually — No calculator data available
+                                </p>
+                                {product.quantity && (
+                                  <p className="text-sm text-slate-700 mt-2">
+                                    <span className="font-medium">Quantity:</span> {product.quantity} {product.length_unit || 'Mtr'}
+                                  </p>
+                                )}
                               </div>
-                              <div>
-                                <span className="text-slate-500">Base amount:</span>{' '}
-                                <span className="font-medium">{detail.baseTotal != null ? formatCurrency(detail.baseTotal) : '—'}</span>
+                            )}
+                            <div className="pt-3 border-t border-slate-200 bg-emerald-50 -mx-5 -mb-5 px-5 py-4 rounded-b-xl">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wide">Calculated Total</span>
+                                <span className="text-xl font-bold text-emerald-700">{totalDisplay}</span>
                               </div>
-                              {Array.isArray(detail.extraCharges) && detail.extraCharges.length > 0 && (
-                                <div className="sm:col-span-2">
-                                  <span className="text-slate-500">Additional charges:</span>
-                                  <ul className="mt-1 text-slate-700 list-disc list-inside space-y-0.5">
-                                    {detail.extraCharges.map((row, i) => (
-                                      <li key={i}>{(row.label || 'Charge')} – {row.amount != null ? formatCurrency(row.amount) : '₹0.00'}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-                            </div>
-                            <div className="pt-2 border-t border-slate-100">
-                              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Result</span>
-                              <p className="text-base font-bold text-emerald-700 mt-1">Total: {totalDisplay}</p>
                             </div>
                           </div>
                         );
                       })}
+                      {itemsWithLog.length > 1 && (() => {
+                        const sum = itemsWithLog.reduce((acc, { product, log }) => {
+                          const d = log || {};
+                          const t = d.totalPrice != null || d.totalPrice === 0 ? Number(d.totalPrice) : (product.target_price != null ? Number(product.target_price) : 0);
+                          return acc + (Number.isFinite(t) ? t : 0);
+                        }, 0);
+                        if (sum <= 0) return null;
+                        return (
+                          <div key="overall" className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                            <div className="flex justify-between items-center">
+                              <span className="font-semibold text-slate-800">Overall Total</span>
+                              <span className="text-xl font-bold text-emerald-700">{formatCurrency(sum)}</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
@@ -1308,7 +1375,8 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                 </div>
               )}
 
-              {/* Rejection Reason Input (shown when rejecting) */}
+              {/* Rejection Reason Input (shown only when RFP is pending) */}
+              {!['approved', 'rejected', 'pricing_ready', 'quotation_created', 'accounts_approved', 'accounts_pending', 'credit_case', 'senior_approved', 'senior_rejected', 'sent_to_operations'].includes((selectedRfp?.status || '').toLowerCase()) && (
               <div className="border-t border-slate-200 pt-4">
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   Rejection Reason (Required if rejecting)
@@ -1321,6 +1389,7 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                   onChange={(e) => setRejectionReason(e.target.value)}
                 />
               </div>
+              )}
 
               {/* Error Message */}
               {error && (
@@ -1335,31 +1404,44 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                 </div>
               )}
 
-              {/* Action Buttons */}
+              {/* Action Buttons - Disabled when RFP is already approved/rejected */}
+              {(() => {
+                const statusNorm = (selectedRfp?.status || '').toLowerCase();
+                const isAlreadyProcessed = ['approved', 'rejected', 'pricing_ready', 'quotation_created', 'accounts_approved', 'accounts_pending', 'credit_case', 'senior_approved', 'senior_rejected', 'sent_to_operations'].includes(statusNorm);
+                return (
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
                 <button
                   onClick={closeModals}
                   className="px-6 py-2.5 text-sm font-semibold border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
                 >
-                  Cancel
+                  {isAlreadyProcessed ? 'Close' : 'Cancel'}
                 </button>
-                <button
-                  onClick={() => handleReject(selectedRfp.id)}
-                  disabled={!rejectionReason.trim()}
-                  className="px-6 py-2.5 text-sm font-semibold bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Reject RFP
-                </button>
-                <button
-                  onClick={() => handleApprove(selectedRfp.id)}
-                  disabled={!allProductsPriced}
-                  className="px-6 py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  Approve RFP
-                </button>
+                {!isAlreadyProcessed && (
+                  <>
+                    <button
+                      onClick={() => handleReject(selectedRfp.id)}
+                      disabled={!rejectionReason.trim()}
+                      className="px-6 py-2.5 text-sm font-semibold bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Reject RFP
+                    </button>
+                    <button
+                      onClick={() => handleApprove(selectedRfp.id)}
+                      disabled={!allProductsPriced}
+                      className="px-6 py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Approve RFP
+                    </button>
+                  </>
+                )}
+                {isAlreadyProcessed && (
+                  <span className="text-sm text-slate-600 italic">This RFP has already been {statusNorm === 'rejected' ? 'rejected' : 'approved'}.</span>
+                )}
               </div>
+                );
+              })()}
             </div>
           </div>
         </div>

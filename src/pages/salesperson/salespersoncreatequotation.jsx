@@ -135,6 +135,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
     },
     // Bank Details
     bankDetails: {
+      accountHolderName: "",
       bankName: "ICICI Bank",
       branchName: "WRIGHT TOWN JABALPUR",
       accountNumber: "657605601783",
@@ -184,6 +185,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
       const bankDetails = typeof dbQuotation.bank_details === 'string'
         ? JSON.parse(dbQuotation.bank_details)
         : (dbQuotation.bank_details || {
+            accountHolderName: "",
             bankName: "ICICI Bank",
             branchName: "WRIGHT TOWN JABALPUR",
             accountNumber: "657605601783",
@@ -318,25 +320,36 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Validate RFP ID and auto-populate quotation
+  // Validate RFP ID – only accept if RFP is linked to this lead (customer)
   const handleValidateRfpId = async (rfpId = null) => {
     const idToValidate = rfpId || rfpIdInput.trim();
     if (!idToValidate) {
       Toast.error('Please enter RFP ID');
       return;
     }
-    
+
+    const currentLeadId = customer?.id ?? customer?.lead_id ?? null;
+    const leadIdParam = currentLeadId != null ? `?leadId=${encodeURIComponent(currentLeadId)}` : '';
+
     setValidatingRfpId(true);
     try {
-      const response = await apiClient.get(API_ENDPOINTS.PRICING_RFP_DECISION_GET(idToValidate));
+      const response = await apiClient.get(API_ENDPOINTS.PRICING_RFP_DECISION_GET(idToValidate) + leadIdParam);
       if (response.success && response.data) {
         const decision = response.data;
+        const decisionLeadId = decision.lead_id ?? decision.leadId ?? decision.rfp_request?.lead_id;
+        if (currentLeadId != null && decisionLeadId != null && String(decisionLeadId) !== String(currentLeadId)) {
+          const leadName = customer?.name || customer?.business || 'this lead';
+          Toast.error(`This RFP ID is linked to a different lead. Please enter the RFP ID that belongs to ${leadName} only.`);
+          setValidatedRfpDecision(null);
+          setRfpIdValidated(false);
+          setValidatingRfpId(false);
+          return;
+        }
         setValidatedRfpDecision(decision);
         setRfpIdValidated(true);
-        
-        // Auto-populate quotation with RFP decision data
+
         await populateQuotationFromRfpDecision(decision);
-        
+
         Toast.success(`RFP ID validated successfully! Quotation populated with ${decision.products?.length || 0} product(s).`);
       } else {
         Toast.error('Invalid RFP ID. Please check and try again.');
@@ -344,7 +357,14 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
         setRfpIdValidated(false);
       }
     } catch (error) {
-      Toast.error(error.message || 'Failed to validate RFP ID. Please check and try again.');
+      const data = error?.response?.data;
+      const linkedToLeadName = data?.linkedToLeadName;
+      const currentLeadName = customer?.name || customer?.business || 'this lead';
+      let msg = data?.message || error.message;
+      if (linkedToLeadName && !msg.includes(linkedToLeadName)) {
+        msg = `This RFP ID is linked to ${linkedToLeadName}. Please enter the RFP ID that belongs to ${currentLeadName} only.`;
+      }
+      Toast.error(msg || 'Failed to validate RFP ID. Please check and try again.');
       setValidatedRfpDecision(null);
       setRfpIdValidated(false);
     } finally {
@@ -369,7 +389,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
 
       const hasCalculator = calculatorLog && typeof calculatorLog === 'object';
       
-      // Fetch pricing for all products
+      // Fetch pricing for all products - Rate must be per-unit (base), never total price
       const itemsWithPricing = await Promise.all(
         rfpProducts.map(async (product, index) => {
           // Default values
@@ -377,33 +397,28 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
           let quantityForForm = '';
           let buyerRateForForm = '';
           let amount = 0;
-          let remark = product.length ? `Length: ${product.length} ${product.lengthUnit || 'Mtr'}` : '';
+          // Don't set remark to "Quantity: X" - quantity is already in the table column; avoids redundant line under each product in template
+          let remark = '';
 
-          // When calculator data is present, use it for the first product
-          if (index === 0 && hasCalculator) {
-            const lengthUsedRaw =
-              calculatorLog.length ??
-              calculatorLog.quantity ??
-              product.length ??
-              product.quantity ??
-              '';
+          // Prefer per-product calculator_log; fallback to legacy single decision.calculator_pricing_log for first product
+          const log = (product.calculator_log && typeof product.calculator_log === 'object' ? product.calculator_log : null)
+            || (index === 0 && hasCalculator ? calculatorLog : null);
+
+          if (log && (log.totalPrice != null || log.calculatorTotalPrice != null)) {
+            // Calculator: totalPrice is TOTAL, we need per-unit rate for buyerRate
+            const lengthUsedRaw = log.quantity ?? log.length ?? product.quantity ?? product.length ?? '';
             const lengthNum = lengthUsedRaw === '' ? 0 : Number.parseFloat(lengthUsedRaw);
             const safeLength = Number.isFinite(lengthNum) ? lengthNum : 0;
-
-            const totalFromCalculator =
-              Number.parseFloat(calculatorLog.totalPrice ?? calculatorLog.calculatorTotalPrice ?? decision.calculator_total_price ?? 0) || 0;
+            const totalFromCalculator = Number.parseFloat(log.totalPrice ?? log.calculatorTotalPrice ?? 0) || 0;
 
             unitPrice = safeLength > 0 ? round2(totalFromCalculator / safeLength) : 0;
             buyerRateForForm = unitPrice > 0 ? unitPrice.toFixed(2) : '0';
             quantityForForm = safeLength ? String(safeLength) : '';
             amount = round2(totalFromCalculator || (safeLength * unitPrice));
 
-            // Prefer length from calculator in remark if available
-            if (calculatorLog.length) {
-              remark = `Length: ${calculatorLog.length} ${calculatorLog.lengthUnit || product.lengthUnit || 'Mtr'}`;
-            }
+            // remark left empty - quantity shown in table column, no redundant line under product
           } else {
-            // Fallback: use approved price list for non-calculator products
+            // No calculator: use approved price list for per-unit rate
             try {
               const priceRes = await productPriceService.getApprovedPrice(product.productSpec);
               if (priceRes?.data) {
@@ -413,23 +428,32 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
               console.error(`Failed to fetch price for ${product.productSpec}:`, error);
             }
 
-            // Quantity should be an integer in quotation (strip any decimals like "11.00")
             const rawQty = product.quantity ?? '';
             const qtyNum = rawQty === '' ? 0 : Number.parseFloat(rawQty);
             const qtyInt = Number.isFinite(qtyNum) ? Math.trunc(qtyNum) : 0;
             quantityForForm = rawQty === '' ? '' : String(qtyInt);
-            amount = round2((qtyInt || 0) * unitPrice);
-            buyerRateForForm = product.targetPrice || unitPrice.toString();
+
+            // target_price from RFP is TOTAL (from calculator), not per-unit - never use as rate directly
+            const targetTotal = product.targetPrice != null && product.targetPrice !== '' ? Number.parseFloat(product.targetPrice) : NaN;
+            if (Number.isFinite(targetTotal) && qtyInt > 0) {
+              unitPrice = round2(targetTotal / qtyInt);
+              buyerRateForForm = unitPrice.toFixed(2);
+              amount = round2(targetTotal);
+            } else {
+              amount = round2((qtyInt || 0) * unitPrice);
+              buyerRateForForm = unitPrice > 0 ? unitPrice.toString() : '';
+            }
           }
           
           // Find product in products list for HSN
           const productInfo = products.find(p => p.name.toLowerCase() === product.productSpec.toLowerCase());
           
+          const prodLog = product.calculator_log && typeof product.calculator_log === 'object' ? product.calculator_log : (index === 0 && hasCalculator ? calculatorLog : null);
           return {
             id: index + 1,
             productName: product.productSpec,
             quantity: quantityForForm,
-            unit: product.lengthUnit || calculatorLog?.lengthUnit || 'Mtr',
+            unit: product.lengthUnit || product.quantityUnit || prodLog?.lengthUnit || prodLog?.quantityUnit || 'Mtr',
             companyRate: unitPrice,
             buyerRate: buyerRateForForm,
             amount: amount,
@@ -1089,6 +1113,14 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
             {/* RFP ID Validation Box - Already validated before opening this modal */}
             {!existingQuotation && (
               <div className={`p-4 border-2 rounded-lg ${rfpIdValidated ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
+                {customer && (
+                  <p className="text-sm font-medium text-blue-700 mb-2">
+                    Quotation for lead: <span className="font-semibold">{customer.name || customer.business || '—'}</span>
+                    {customer.business && customer.name !== customer.business && (
+                      <span className="text-gray-600"> ({customer.business})</span>
+                    )}
+                  </p>
+                )}
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   RFP ID <span className="text-red-600">*</span> (Required)
                 </label>

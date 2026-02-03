@@ -1,5 +1,5 @@
 import React from 'react'
-import { X, Eye, Package, Trash2, FileText, Receipt, Pencil, User, Phone, Mail, Building2, MapPin, Globe, Hash, Tag, Clock, CheckCircle, MessageSquare, Calendar } from 'lucide-react'
+import { X, Eye, Package, Trash2, FileText, Receipt, Pencil, User, Phone, Mail, Building2, MapPin, Globe, Hash, Tag, Clock, CheckCircle, MessageSquare, Calendar, Ban } from 'lucide-react'
 import { QuotationHelper } from '../../utils/QuotationHelper'
 import Toast from '../../utils/Toast'
 import apiClient from '../../utils/apiClient'
@@ -19,6 +19,9 @@ export default function CustomerDetailSidebar({
   // State for follow up history
   const [followUpHistory, setFollowUpHistory] = React.useState([])
   const [loadingHistory, setLoadingHistory] = React.useState(false)
+  // State for order cancel requests (lead details)
+  const [orderCancelRequests, setOrderCancelRequests] = React.useState([])
+  const [loadingOrderCancel, setLoadingOrderCancel] = React.useState(false)
 
   // Fetch PIs for quotations when component mounts or quotations change
   React.useEffect(() => {
@@ -60,6 +63,23 @@ export default function CustomerDetailSidebar({
     }
 
     fetchFollowUpHistory()
+  }, [customer?.id, customer?._id])
+
+  // Fetch order cancel requests for this lead
+  React.useEffect(() => {
+    const customerId = customer?.id || customer?._id
+    if (!customerId) {
+      setOrderCancelRequests([])
+      return
+    }
+    setLoadingOrderCancel(true)
+    apiClient.get(API_ENDPOINTS.ORDER_CANCEL_BY_CUSTOMER(customerId))
+      .then((res) => {
+        const data = res?.data?.data || res?.data || []
+        setOrderCancelRequests(Array.isArray(data) ? data : [])
+      })
+      .catch(() => setOrderCancelRequests([]))
+      .finally(() => setLoadingOrderCancel(false))
   }, [customer?.id, customer?._id])
 
   const getPIsForQuotation = (quotationId) => {
@@ -216,6 +236,50 @@ export default function CustomerDetailSidebar({
               </div>
             </div>
           </div>
+
+          {/* Order Cancel Details Section */}
+          {(orderCancelRequests?.length > 0 || loadingOrderCancel) && (
+            <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-red-50 rounded-lg p-4 mb-4 border border-amber-200 shadow-sm mt-4">
+              <h3 className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-orange-600 mb-3 flex items-center gap-2">
+                <Ban className="h-4 w-4 text-amber-600" />
+                Order Cancel Details
+              </h3>
+              {loadingOrderCancel ? (
+                <div className="text-center py-3 text-xs text-gray-600">Loading...</div>
+              ) : (
+                <div className="space-y-2">
+                  {orderCancelRequests.map((req, idx) => (
+                    <div
+                      key={req.id || idx}
+                      className="p-3 rounded-lg bg-white border border-amber-100 shadow-sm"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="font-semibold text-gray-800 text-xs">
+                          Quotation: {req.quotation_id ? String(req.quotation_id).slice(0, 8) + '...' : 'N/A'}
+                        </span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                          req.status === 'approved' ? 'bg-green-100 text-green-800' :
+                          req.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                          'bg-amber-100 text-amber-800'
+                        }`}>
+                          {req.status === 'approved' ? 'Cancelled' : req.status === 'rejected' ? 'Rejected' : 'Pending'}
+                        </span>
+                      </div>
+                      {req.reason && (
+                        <p className="text-[11px] text-gray-600 mb-1"><span className="font-medium">Reason:</span> {req.reason}</p>
+                      )}
+                      <p className="text-[10px] text-gray-500">
+                        Requested: {req.created_at ? DateFormatter.formatDateTime(req.created_at) : 'N/A'}
+                        {req.approved_at && req.status === 'approved' && ` • Approved: ${DateFormatter.formatDateTime(req.approved_at)}`}
+                        {req.rejected_at && req.status === 'rejected' && ` • Rejected: ${DateFormatter.formatDateTime(req.rejected_at)}`}
+                        {req.rejection_reason && <span className="block mt-0.5 text-red-600">Rejection: {req.rejection_reason}</span>}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Follow Up Information Section - All Follow Ups */}
           {Object.keys(groupedFollowUps).length > 0 && (
@@ -402,6 +466,9 @@ export default function CustomerDetailSidebar({
                                     <Receipt className="h-3 w-3 text-white" />
                                   </div>
                                   <span className="font-bold text-gray-800">{pi.pi_number || pi.piNumber || `PI-${piIndex + 1}`}</span>
+                                  {pi.parent_pi_id && (
+                                    <span className="text-xs text-indigo-600 font-medium">↳ from {pi.parent_pi_number || 'Original'}</span>
+                                  )}
                                   <span className="flex items-center gap-0.5 text-xs text-gray-600">
                                     <Clock className="h-3 w-3 text-pink-600" />
                                     {pi.pi_date || pi.piDate || pi.created_at ? (() => {
