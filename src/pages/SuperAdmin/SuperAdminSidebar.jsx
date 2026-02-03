@@ -10,7 +10,6 @@ import {
   TrendingUp,
   Menu,
   X,
-  LogOut,
   Calendar,
   HelpCircle,
   PlusCircle,
@@ -301,17 +300,6 @@ const Sidebar = ({ onLogout, activeView, setActiveView }) => {
         >
           <HelpCircle className="w-5 h-5" />
           {isExpanded && <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Support</span>}
-        </button>
-      </div>
-
-      {/* Logout Button */}
-      <div className="p-3 border-t border-slate-700/50 bg-slate-800/30">
-        <button 
-          onClick={onLogout}
-          className="w-full flex items-center space-x-3 px-3 py-2.5 text-red-400 hover:bg-red-500/20 hover:text-red-300 rounded-xl transition-all duration-200"
-        >
-          <LogOut className="w-5 h-5" />
-          {isExpanded && <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Logout</span>}
         </button>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Activity, LogOut, HelpCircle, Ticket, Users, Shield, Server, ChevronRight, X, CheckSquare } from 'lucide-react';
+import { Activity, HelpCircle, Ticket, Users, Shield, Server, ChevronRight, X, CheckSquare } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 const ANOCAB_LOGO = "https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png";
@@ -77,7 +77,7 @@ const ItSidebar = ({ activeView, setActiveView, onLogout }) => {
         })}
       </nav>
       
-      {/* Support & Logout */}
+      {/* Support */}
       <div className="px-3 py-4 border-t border-slate-200 space-y-1">
         <button
           onClick={() => window.location.href = '/support'}
@@ -85,13 +85,6 @@ const ItSidebar = ({ activeView, setActiveView, onLogout }) => {
         >
           <HelpCircle className="w-5 h-5 text-gray-500" />
           {isExpanded && <span className="text-sm font-medium">Support</span>}
-        </button>
-        <button
-          onClick={onLogout}
-          className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-        >
-          <LogOut className="w-5 h-5" />
-          {isExpanded && <span className="text-sm font-medium">Logout</span>}
         </button>
       </div>
     </aside>

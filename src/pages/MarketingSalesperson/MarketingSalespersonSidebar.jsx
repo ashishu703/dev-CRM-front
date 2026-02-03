@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { LayoutDashboard, Users, LogOut, Menu, X, FileText, CheckSquare, MapPin, DollarSign } from "lucide-react"
+import { LayoutDashboard, Users, Menu, X, FileText, CheckSquare, MapPin, DollarSign } from "lucide-react"
 
 function cx(...classes) {
   return classes.filter(Boolean).join(" ")
@@ -160,16 +160,6 @@ export default function MarketingSalespersonSidebar({
             ))}
           </ul>
         </nav>
-
-        <div className="p-3 border-t border-slate-700/50 bg-slate-800/30">
-          <button 
-            onClick={onLogout}
-            className="w-full flex items-center space-x-3 px-3 py-2.5 text-red-400 hover:bg-red-500/20 hover:text-red-300 rounded-xl transition-all duration-200"
-          >
-            <LogOut className="w-5 h-5" />
-            {sidebarOpen && <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Logout</span>}
-          </button>
-        </div>
       </div>
     </>
   );

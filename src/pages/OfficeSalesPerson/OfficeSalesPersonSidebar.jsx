@@ -6,7 +6,6 @@ import {
   FileText,
   Menu,
   X,
-  LogOut,
   UserCheck,
   FileSignature,
   Monitor,
@@ -118,20 +117,6 @@ const OfficeSalesPersonSidebar = ({ activeView, setActiveView }) => {
         >
           <HelpCircle className="w-5 h-5" />
           {isExpanded && <span className="text-sm font-medium">Support</span>}
-        </button>
-      </div>
-
-      {/* Logout Button */}
-      <div className="absolute bottom-4 left-4 right-4">
-        <button
-          onClick={() => {
-            // Handle logout logic here
-            window.close();
-          }}
-          className="w-full flex items-center space-x-3 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-        >
-          <LogOut className="w-5 h-5" />
-          {isExpanded && <span className="text-sm font-medium">Logout</span>}
         </button>
       </div>
     </div>

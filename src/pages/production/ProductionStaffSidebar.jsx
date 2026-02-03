@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Play, ClipboardList, Boxes, LogOut, HelpCircle } from 'lucide-react'
+import { Play, ClipboardList, Boxes, HelpCircle } from 'lucide-react'
 
 export default function ProductionStaffSidebar({ currentPage, onNavigate, onLogout }) {
   const [isExpanded, setIsExpanded] = useState(true)
@@ -43,13 +43,6 @@ export default function ProductionStaffSidebar({ currentPage, onNavigate, onLogo
         >
           <HelpCircle className="w-5 h-5" />
           {isExpanded && <span className="text-sm font-medium">Support</span>}
-        </button>
-      </div>
-      
-      <div className="p-4 border-t border-gray-200">
-        <button onClick={onLogout} className="w-full flex items-center space-x-3 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-          <LogOut className="w-5 h-5" />
-          {isExpanded && <span className="text-sm font-medium">Logout</span>}
         </button>
       </div>
     </div>

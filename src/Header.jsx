@@ -6,7 +6,7 @@ import ProfileUpdateModal from './components/ProfileUpdateModal';
 
 const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMobileView = false, isDarkMode = false, onToggleDarkMode, onProfileClick, onToggleSidebar, sidebarOpen, onToggleView }) => {
   const { user, refreshUser } = useAuth();
-  const { notifications, unreadCount, isConnected, markAsRead, markAsUnread, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, isConnected, markAsRead, markAsUnread } = useNotifications();
   
   const [showNotifications, setShowNotifications] = useState(false);
   const [expandedNotificationId, setExpandedNotificationId] = useState(null);
@@ -96,8 +96,8 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
       case 'dashboard':
         return {
           icon: <TrendingUp className="w-6 h-6 text-white" />,
-          title: "Sales Overview",
-          subtitle: "Monitor sales performance and metrics"
+          title: "Dashboard",
+          subtitle: "Monitor sales and metrics"
         };
       case 'profile':
         return {
@@ -274,24 +274,10 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
       
       // Sales Department Head pages
       case 'sales-dashboard':
-        // Check if userType is salesdepartmenthead to show Sales Overview like salesperson
-        if (userType === 'salesdepartmenthead') {
-          return {
-            icon: <TrendingUp className="w-6 h-6 text-white" />,
-            title: "Sales Overview",
-            subtitle: "Monitor sales performance and metrics"
-          };
-        }
         return {
           icon: <TrendingUp className="w-6 h-6 text-white" />,
           title: "Sales Dashboard",
-          subtitle: "Sales department performance overview"
-        };
-      case 'user-performance':
-        return {
-          icon: <Award className="w-6 h-6 text-white" />,
-          title: "User Performance",
-          subtitle: "Monitor and analyze user performance metrics"
+          subtitle: "Sales department overview"
         };
       case 'payment-info':
         return {
@@ -517,27 +503,35 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
 
   const pageContent = getPageHeaderContent();
 
+  // Match sidebar theme for Sales Department Head (dark slate/blue gradient)
+  const isSalesHeadTheme = userType === 'salesdepartmenthead';
+  const headerIsDark = isDarkMode || isSalesHeadTheme;
+
   return (
     <header className={`sticky top-0 z-[30] border-b shadow-lg transition-all duration-300 backdrop-blur-md ${
-      isDarkMode 
-        ? 'bg-gray-900/95 border-gray-700' 
+      headerIsDark 
+        ? 'border-slate-700/50' 
         : 'bg-white/95 border-gray-200'
-    }`} style={{
-      background: isDarkMode 
-        ? 'linear-gradient(135deg, rgba(17, 24, 39, 0.95) 0%, rgba(31, 41, 55, 0.95) 100%)'
-        : 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%)',
+    }`} style={headerIsDark ? {
+      background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)',
+      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1)'
+    } : {
+      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%)',
       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
     }}>
-      <div className="flex items-center justify-between px-3 sm:px-4 lg:px-6 py-2 sm:py-2.5 lg:py-3 flex-wrap gap-2 sm:gap-3">
+      <div 
+        className={`flex items-center justify-between flex-wrap gap-2 sm:gap-3 ${!isSalesHeadTheme ? 'px-3 sm:px-4 lg:px-6 py-2 sm:py-2.5 lg:py-3' : ''}`}
+        style={isSalesHeadTheme ? { padding: '14px 24px' } : undefined}
+      >
         {/* Left Section - Dynamic Page Header */}
-        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+        <div className={`flex items-center min-w-0 flex-1 ${!isSalesHeadTheme ? 'space-x-2 sm:space-x-3' : ''}`} style={isSalesHeadTheme ? { gap: '12px' } : undefined}>
           {/* Hamburger Menu for Mobile and when sidebar is closed */}
           {onToggleSidebar && (isMobileView || userType === 'salesdepartmenthead' || !sidebarOpen) && (
             <button
               onClick={onToggleSidebar}
               className={`p-1.5 sm:p-2 rounded-lg transition-colors flex-shrink-0 ${
-                isDarkMode 
-                  ? 'hover:bg-gray-700 text-gray-300' 
+                headerIsDark 
+                  ? 'hover:bg-slate-700 text-slate-200' 
                   : 'hover:bg-gray-100 text-gray-600'
               }`}
               title="Toggle Menu"
@@ -552,12 +546,21 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
               {pageContent.icon}
             </div>
           </div>
-          <div className="min-w-0">
-            <h1 className={`text-base sm:text-lg lg:text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'} truncate`} style={{ fontFamily: 'Poppins, sans-serif' }}>
+          <div 
+            className="min-w-0 flex flex-col justify-center"
+            style={isSalesHeadTheme ? { borderLeft: '3px solid #6366F1', paddingLeft: 14 } : undefined}
+          >
+            <h1 
+              className={`truncate ${!isSalesHeadTheme ? (headerIsDark ? 'text-white' : 'text-gray-900') + ' text-base sm:text-lg lg:text-xl font-bold' : ''}`}
+              style={isSalesHeadTheme ? { fontFamily: 'Poppins, sans-serif', fontSize: 22, fontWeight: 600, letterSpacing: '0.3px', color: '#F8FAFC', margin: 0 } : { fontFamily: 'Poppins, sans-serif' }}
+            >
               {pageContent.title}
             </h1>
             {pageContent.subtitle && (
-              <p className={`text-xs sm:text-sm mt-0 sm:mt-0.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'} truncate hidden sm:block`} style={{ fontFamily: 'Inter, sans-serif' }}>
+              <p 
+                className={`truncate hidden sm:block ${!isSalesHeadTheme ? (headerIsDark ? 'text-slate-300' : 'text-gray-600') + ' text-xs sm:text-sm mt-0 sm:mt-0.5' : ''}`}
+                style={isSalesHeadTheme ? { fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 400, color: '#94A3B8', margin: '2px 0 0' } : { fontFamily: 'Inter, sans-serif' }}
+              >
                 {pageContent.subtitle}
               </p>
             )}
@@ -599,8 +602,8 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
             <button
               onClick={onToggleDarkMode}
               className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${
-                isDarkMode 
-                  ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600' 
+                headerIsDark 
+                  ? 'bg-slate-700 text-yellow-400 hover:bg-slate-600' 
                   : 'hover:bg-gray-100 text-gray-600'
               }`}
               title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
@@ -613,12 +616,12 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
             <button 
               onClick={() => setShowNotifications(!showNotifications)}
               className={`relative p-1 sm:p-1.5 rounded-lg transition-colors ${
-                isDarkMode 
-                  ? 'hover:bg-gray-700' 
+                headerIsDark 
+                  ? 'hover:bg-slate-700' 
                   : 'hover:bg-gray-100'
               }`}
             >
-              <Bell className={`w-4 h-4 sm:w-5 sm:h-5 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} />
+              <Bell className={`w-4 h-4 sm:w-5 sm:h-5 ${headerIsDark ? 'text-slate-200' : 'text-gray-600'}`} />
               {unreadCount > 0 && (
                 <div className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] sm:min-w-[16px] sm:h-[16px] px-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] leading-[14px] sm:leading-[16px] rounded-full text-center">
                   {Math.min(99, unreadCount)}
@@ -636,144 +639,99 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
                   className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[999] sm:hidden"
                   onClick={() => setShowNotifications(false)}
                 />
-                <div className={`fixed sm:absolute right-2 sm:right-0 top-14 sm:top-full mt-0 sm:mt-2 w-[calc(100vw-1rem)] sm:w-[500px] max-w-lg rounded-xl shadow-2xl border z-[1000] max-h-[70vh] sm:max-h-[450px] ${
+                <div className={`fixed sm:absolute right-2 sm:right-0 top-14 sm:top-full mt-0 sm:mt-2 w-[calc(100vw-1rem)] sm:w-[380px] max-w-lg rounded-xl shadow-2xl border z-[1000] max-h-[70vh] sm:max-h-[420px] overflow-hidden flex flex-col ${
                   isDarkMode 
                     ? 'bg-gray-800 border-gray-700' 
                     : 'bg-white border-gray-200'
                 }`} style={{
                   boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05)'
                 }}>
-                {/* Header */}
-                <div className={`p-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} flex-shrink-0 ${isDarkMode ? 'bg-gray-800' : 'bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50'}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 shadow-md">
-                        <Bell className="w-4 h-4 text-white" />
-                      </div>
-                      <div>
-                        <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Notifications</h3>
-                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{notifications.length} total</p>
-                      </div>
+                {/* Header - Live style (second screenshot) */}
+                <div className={`p-3 flex items-center justify-between flex-shrink-0 ${isDarkMode ? 'bg-gray-700/50' : 'bg-sky-50'}`}>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isDarkMode ? 'bg-blue-600' : 'bg-blue-500'}`}>
+                      <Bell className="w-4 h-4 text-white" />
                     </div>
-                    <button 
-                      onClick={() => setShowNotifications(false)}
-                      className={`p-1.5 rounded-lg flex-shrink-0 transition-colors ${isDarkMode ? 'hover:bg-gray-700/50 text-gray-300' : 'hover:bg-gray-100 text-gray-500'}`}
-                    >
-                      <X className={`w-4 h-4`} />
-                    </button>
+                    <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Notifications</h3>
+                    {isConnected && (
+                      <span className="flex items-center gap-1 text-xs font-medium text-green-600">
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                        Live
+                      </span>
+                    )}
                   </div>
-                  
-                  {/* Statistics */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-blue-50'} border ${isDarkMode ? 'border-gray-600' : 'border-blue-200'}`}>
-                      <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-blue-600'} font-medium`}>Total</p>
-                      <p className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-blue-700'}`}>{notifications.length}</p>
-                    </div>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-orange-50'} border ${isDarkMode ? 'border-gray-600' : 'border-orange-200'}`}>
-                      <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-orange-600'} font-medium`}>Unread</p>
-                      <p className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-orange-700'}`}>{unreadCount}</p>
-                    </div>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-green-50'} border ${isDarkMode ? 'border-gray-600' : 'border-green-200'}`}>
-                      <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-green-600'} font-medium`}>Read</p>
-                      <p className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-green-700'}`}>{notifications.length - unreadCount}</p>
-                    </div>
-                  </div>
+                  <button 
+                    onClick={() => setShowNotifications(false)}
+                    className={`p-1.5 rounded-lg flex-shrink-0 transition-colors ${isDarkMode ? 'hover:bg-gray-600 text-gray-300' : 'hover:bg-sky-100 text-gray-500'}`}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
                 
-                {/* Notifications List */}
-                <div className="overflow-y-auto overflow-x-hidden flex-1 min-h-0" style={{ maxHeight: 'calc(450px - 180px)' }}>
+                {/* Notifications List - Live only */}
+                <div className="overflow-y-auto overflow-x-hidden flex-1 min-h-0">
                   {notifications.length === 0 ? (
-                    <div className="p-12 text-center">
-                      <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center">
-                        <Bell className="w-8 h-8 text-gray-400" />
+                    <div className="p-8 sm:p-12 text-center">
+                      <div className={`w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                        <Bell className={`w-7 h-7 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} />
                       </div>
-                      <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No notifications</p>
-                      <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>You're all caught up!</p>
+                      <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No notifications yet</p>
+                      <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>You'll see updates here</p>
                     </div>
                   ) : (
                     notifications.map((notification) => (
                       <div 
                         key={notification.id}
-                        className={`p-3 sm:p-4 border-b transition-all duration-200 ${isDarkMode ? 'border-gray-700' : 'border-gray-100'} ${
-                          isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gradient-to-r hover:from-blue-50 hover:via-purple-50 hover:to-pink-50'
-                        } ${notification.unread ? (isDarkMode ? 'bg-gray-700' : 'bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50') : (isDarkMode ? 'bg-gray-800' : 'bg-white')} flex-shrink-0`}
+                        className={`p-3 border-b transition-all duration-200 ${isDarkMode ? 'border-gray-700' : 'border-gray-100'} ${
+                          isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-sky-50/50'
+                        } ${notification.unread ? (isDarkMode ? 'bg-gray-700/50' : 'bg-sky-50/50') : ''} flex-shrink-0`}
                       >
                         <div className="flex items-start space-x-3 min-w-0">
                           <div className="flex-shrink-0 mt-0.5">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shadow-sm ${
-                              notification.unread 
-                                ? 'bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500' 
-                                : (isDarkMode ? 'bg-gray-700' : 'bg-gray-100')
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shadow-sm ${
+                              notification.unread ? 'bg-blue-500' : (isDarkMode ? 'bg-gray-700' : 'bg-gray-100')
                             }`}>
                               {getNotificationIcon(notification.type)}
                             </div>
                           </div>
                           <div className="flex-1 min-w-0 overflow-hidden">
-                            <div className="flex items-center justify-between gap-2 mb-1">
-                              <p className={`text-xs sm:text-sm font-semibold truncate min-w-0 ${
-                                notification.unread 
-                                  ? (isDarkMode ? 'text-white' : 'text-gray-900')
-                                  : (isDarkMode ? 'text-gray-300' : 'text-gray-700')
-                              }`}>
+                            <div className="flex items-center justify-between gap-2 mb-0.5">
+                              <p className={`text-xs font-semibold truncate min-w-0 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                                 {notification.title}
                               </p>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  notification.unread ? markAsRead(notification.id) : markAsUnread(notification.id);
+                                  notification.unread && markAsRead(notification.id);
                                 }}
-                                className={`p-1.5 rounded-lg hover:bg-gray-200/50 flex-shrink-0 transition-colors ${isDarkMode ? 'hover:bg-gray-600/50' : ''}`}
-                                title={notification.unread ? 'Mark as read' : 'Mark as unread'}
+                                className={`p-1 rounded flex-shrink-0 transition-colors ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-200'}`}
+                                title="Mark as read"
                               >
-                                {notification.unread ? (
-                                  <Circle className="w-3 h-3 text-blue-500 fill-blue-500" />
-                                ) : (
-                                  <CheckCheck className="w-3 h-3 text-gray-400" />
-                                )}
+                                {notification.unread ? <Circle className="w-2.5 h-2.5 text-blue-500 fill-blue-500" /> : <CheckCheck className="w-2.5 h-2.5 text-gray-400" />}
                               </button>
                             </div>
-                            <p className={`text-xs sm:text-sm mt-1 break-words line-clamp-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <p className={`text-xs break-words line-clamp-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                               {notification.message}
                             </p>
                             {notification.details && (
-                              <div className="mt-2">
+                              <div className="mt-1.5">
                                 <button
                                   onClick={() => setExpandedNotificationId(expandedNotificationId === notification.id ? null : notification.id)}
-                                  className="text-xs bg-gradient-to-r from-blue-500 to-purple-500 text-white px-2 py-1 rounded-md hover:from-blue-600 hover:to-purple-600 font-medium transition-all"
+                                  className="text-[10px] bg-blue-500 text-white px-2 py-0.5 rounded hover:bg-blue-600 font-medium"
                                 >
-                                  {expandedNotificationId === notification.id ? 'Hide Details' : 'View Details'}
+                                  {expandedNotificationId === notification.id ? 'Hide' : 'Details'}
                                 </button>
                                 {expandedNotificationId === notification.id && (
-                                  <div className={`mt-2 text-xs space-y-1 break-words p-2 rounded-lg ${isDarkMode ? 'bg-gray-700/30 text-gray-400' : 'bg-gray-50 text-gray-600'}`}>
-                                    {notification.details.customer && (
-                                      <div><span className="font-semibold">Customer:</span> {notification.details.customer}</div>
-                                    )}
-                                    {notification.details.business && (
-                                      <div><span className="font-semibold">Business:</span> {notification.details.business}</div>
-                                    )}
-                                    {notification.details.product && (
-                                      <div><span className="font-semibold">Product:</span> {notification.details.product}</div>
-                                    )}
-                                    {notification.details.phone && (
-                                      <div><span className="font-semibold">Phone:</span> {notification.details.phone}</div>
-                                    )}
-                                    {notification.details.email && (
-                                      <div><span className="font-semibold">Email:</span> {notification.details.email}</div>
-                                    )}
-                                    {notification.details.address && (
-                                      <div><span className="font-semibold">Address:</span> {notification.details.address}</div>
-                                    )}
-                                    {notification.details.transferredFrom && (
-                                      <div><span className="font-semibold">Transferred From:</span> {notification.details.transferredFrom}</div>
-                                    )}
-                                    {notification.details.amount && (
-                                      <div><span className="font-semibold">Amount:</span> ₹{Number(notification.details.amount).toLocaleString()}</div>
-                                    )}
+                                  <div className={`mt-1.5 text-[10px] space-y-0.5 break-words p-2 rounded ${isDarkMode ? 'bg-gray-700/50 text-gray-400' : 'bg-gray-50 text-gray-600'}`}>
+                                    {notification.details.customer && <div><span className="font-semibold">Customer:</span> {notification.details.customer}</div>}
+                                    {notification.details.business && <div><span className="font-semibold">Business:</span> {notification.details.business}</div>}
+                                    {notification.details.phone && <div><span className="font-semibold">Phone:</span> {notification.details.phone}</div>}
+                                    {notification.details.amount && <div><span className="font-semibold">Amount:</span> ₹{Number(notification.details.amount).toLocaleString()}</div>}
                                   </div>
                                 )}
                               </div>
                             )}
-                            <p className={`text-xs mt-2 flex items-center gap-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                            <p className={`text-[10px] mt-1 flex items-center gap-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
                               <Clock className="w-3 h-3" />
                               {formatTime(notification.time)}
                             </p>
@@ -783,23 +741,6 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
                     ))
                   )}
                 </div>
-                
-                {/* Footer */}
-                <div className={`p-3 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} flex-shrink-0 ${isDarkMode ? 'bg-gray-800' : 'bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50'}`}>
-                  <button 
-                    onClick={() => {
-                      markAllAsRead();
-                    }}
-                    className={`w-full text-xs sm:text-sm font-semibold py-2.5 rounded-lg transition-all ${
-                      isDarkMode 
-                        ? 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50' 
-                        : 'bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white hover:from-blue-600 hover:via-purple-600 hover:to-pink-600 shadow-md'
-                    }`}
-                    disabled={unreadCount === 0}
-                  >
-                    Mark All as Read
-                  </button>
-                </div>
               </div>
               </>
             )}
@@ -808,20 +749,20 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
           <button
             onClick={() => window.location.href = '/support'}
             className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${
-              isDarkMode 
-                ? 'hover:bg-gray-700' 
+              headerIsDark 
+                ? 'hover:bg-slate-700' 
                 : 'hover:bg-gray-100'
             }`}
             title="Support & Help"
           >
-            <HelpCircle className={`w-4 h-4 sm:w-5 sm:h-5 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} />
+            <HelpCircle className={`w-4 h-4 sm:w-5 sm:h-5 ${headerIsDark ? 'text-slate-200' : 'text-gray-600'}`} />
           </button>
 
           <button
             onClick={() => setShowProfileModal(true)}
-            className="flex items-center space-x-1.5 sm:space-x-2 hover:bg-gray-100 rounded-lg px-1.5 sm:px-2 py-1 sm:py-1.5 transition-colors cursor-pointer flex-shrink-0"
+            className={`flex items-center space-x-1.5 rounded-lg px-1.5 py-1 transition-colors cursor-pointer flex-shrink-0 ${headerIsDark ? 'hover:bg-slate-700' : 'hover:bg-gray-100'}`}
           >
-            <div className="w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center shadow-md">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center shadow">
               {user?.profile_picture || user?.profilePicture ? (
                 <img 
                   src={user.profile_picture || user.profilePicture} 
@@ -829,19 +770,16 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
                   className="w-full h-full rounded-full object-cover"
                 />
               ) : (
-                <span className="text-white font-medium text-xs sm:text-sm">
+                <span className="text-white font-medium text-[10px] sm:text-xs">
                   {user?.username ? user.username.split(' ').map(n => n[0]).join('').toUpperCase() : 'T'}
                 </span>
               )}
             </div>
             <div className="text-right hidden sm:block">
-              <p className="text-xs sm:text-sm font-medium text-gray-900 truncate max-w-[120px]">
-                {user?.email ? 
-                  `${user.email.split('@')[0]}@${user.email.split('@')[1].substring(0, 3)}...` : 
-                  'testuser@gma...'
-                }
+              <p className={`text-[11px] font-medium truncate max-w-[90px] ${headerIsDark ? 'text-white' : 'text-gray-900'}`}>
+                {user?.email ? `${user.email.split('@')[0]}@${user.email.split('@')[1]?.substring(0, 2) || ''}...` : 'user'}
               </p>
-              <p className="text-[10px] sm:text-xs text-gray-500 truncate">
+              <p className={`text-[9px] truncate ${headerIsDark ? 'text-slate-400' : 'text-gray-500'}`}>
                 {user?.role ? user.role.toUpperCase().replace('_', ' ') : userType.toUpperCase()}
               </p>
             </div>

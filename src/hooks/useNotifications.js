@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 
+const NOTIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+
 const getBaseURL = () => {
   if (import.meta.env.VITE_API_BASE_URL) {
     const baseURL = import.meta.env.VITE_API_BASE_URL;
@@ -23,12 +25,26 @@ const getBaseURL = () => {
 
 const BASE_URL = getBaseURL();
 
+let sharedSocket = null;
+
 export const useNotifications = () => {
   const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const unreadCount = notifications.filter(n => n.unread !== false).length;
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef(null);
   const notificationIdsRef = useRef(new Set());
+  const expiryTimersRef = useRef(new Map());
+
+  const removeExpired = useCallback(() => {
+    const now = Date.now();
+    setNotifications(prev => {
+      const filtered = prev.filter(n => {
+        const time = n.time ? (new Date(n.time)).getTime() : 0;
+        return (now - time) < NOTIFICATION_TTL_MS;
+      });
+      return filtered;
+    });
+  }, []);
 
   const playNotificationSound = useCallback(() => {
     try {
@@ -58,41 +74,6 @@ export const useNotifications = () => {
     }
   }, []);
 
-  const calculateUnreadCount = useCallback((notifications) => {
-    return notifications.filter(n => n.unread !== false).length;
-  }, []);
-
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('authToken');
-      if (!token) return;
-
-      const apiPath = BASE_URL.includes('/api') ? `${BASE_URL}/notifications` : `${BASE_URL}/api/notifications`;
-      
-      const res = await fetch(apiPath, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (!res.ok) return;
-      
-      const json = await res.json();
-      
-      if (json?.success) {
-        const notifications = json.data || [];
-        notifications.forEach(n => notificationIdsRef.current.add(n.id));
-        
-        setNotifications(notifications);
-        const count = calculateUnreadCount(notifications);
-        setUnreadCount(count);
-      } else {
-        setNotifications([]);
-        setUnreadCount(0);
-      }
-    } catch (error) {
-      console.error('Failed to fetch notifications:', error);
-    }
-  }, [calculateUnreadCount]);
-
   const markAsRead = useCallback(async (notificationId) => {
     try {
       const token = localStorage.getItem('authToken');
@@ -105,16 +86,12 @@ export const useNotifications = () => {
       });
 
       if (res.ok) {
-        setNotifications(prev => {
-          const updated = prev.map(n => n.id === notificationId ? { ...n, unread: false } : n);
-          setUnreadCount(calculateUnreadCount(updated));
-          return updated;
-        });
+        setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, unread: false } : n));
       }
     } catch (error) {
       console.error('Failed to mark as read:', error);
     }
-  }, [calculateUnreadCount]);
+  }, []);
 
   const markAsUnread = useCallback(async (notificationId) => {
     try {
@@ -128,16 +105,12 @@ export const useNotifications = () => {
       });
 
       if (res.ok) {
-        setNotifications(prev => {
-          const updated = prev.map(n => n.id === notificationId ? { ...n, unread: true } : n);
-          setUnreadCount(calculateUnreadCount(updated));
-          return updated;
-        });
+        setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, unread: true } : n));
       }
     } catch (error) {
       console.error('Failed to mark as unread:', error);
     }
-  }, [calculateUnreadCount]);
+  }, []);
 
   const markAllAsRead = useCallback(async () => {
     try {
@@ -152,7 +125,6 @@ export const useNotifications = () => {
 
       if (res.ok) {
         setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
-        setUnreadCount(0);
       }
     } catch (error) {
       console.error('Failed to mark all as read:', error);
@@ -163,82 +135,92 @@ export const useNotifications = () => {
     const token = localStorage.getItem('authToken');
     if (!token) return;
 
-    fetchNotifications();
+    const cleanupInterval = setInterval(removeExpired, 60 * 60 * 1000);
 
-    let socketURL;
-    if (BASE_URL.includes('/api')) {
-      socketURL = BASE_URL.split('/api')[0].trim();
-    } else if (BASE_URL.includes('localhost:4500')) {
-      socketURL = 'http://localhost:4500';
-    } else {
-      socketURL = typeof window !== 'undefined' ? window.location.origin : BASE_URL;
+    let socket = sharedSocket;
+    const isDisconnected = socket && !socket.connected && !socket.connecting;
+    const shouldCreateSocket = !socket;
+
+    if (shouldCreateSocket) {
+      let socketURL;
+      if (BASE_URL.includes('/api')) {
+        socketURL = BASE_URL.split('/api')[0].trim();
+      } else if (BASE_URL.includes('localhost:4500')) {
+        socketURL = 'http://localhost:4500';
+      } else {
+        socketURL = typeof window !== 'undefined' ? window.location.origin : BASE_URL;
+      }
+      if (!socketURL || socketURL.endsWith('/')) {
+        socketURL = socketURL.replace(/\/$/, '');
+      }
+      socket = io(socketURL, {
+        auth: { token },
+        transports: ['websocket', 'polling'],
+        path: '/socket.io',
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: Infinity,
+        timeout: 20000,
+      });
+      sharedSocket = socket;
+      socket.on('connect_error', (error) => {
+        console.error('Socket.IO connection error:', error.message);
+      });
+    } else if (isDisconnected && typeof socket.connect === 'function') {
+      socket.connect();
     }
-    
-    if (!socketURL || socketURL.endsWith('/')) {
-      socketURL = socketURL.replace(/\/$/, '');
-    }
-    
-    const socket = io(socketURL, {
-      auth: { token },
-      transports: ['websocket', 'polling'],
-      path: '/socket.io',
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5,
-      timeout: 20000,
-      forceNew: true
-    });
-    
-    socket.on('connect_error', (error) => {
-      console.error('Socket.IO connection error:', error.message);
-    });
 
     socketRef.current = socket;
 
-    socket.on('connect', () => {
+    const onConnect = () => {
       setIsConnected(true);
       console.log('✅ Socket.IO connected');
-    });
-    
-    socket.on('disconnect', () => {
+    };
+    const onDisconnect = () => {
       setIsConnected(false);
       console.log('❌ Socket.IO disconnected');
-    });
-
-    socket.on('notification', (notification) => {
-      console.log('📨 Received real-time notification:', notification);
-      
+    };
+    const onNotification = (notification) => {
       if (!notification || !notification.id) {
         console.warn('Invalid notification received:', notification);
         return;
       }
-      
       if (!notificationIdsRef.current.has(notification.id)) {
         notificationIdsRef.current.add(notification.id);
-        setNotifications(prev => {
-          const updated = [{ ...notification, unread: notification.unread !== false }, ...prev];
-          setUnreadCount(calculateUnreadCount(updated));
-          return updated;
-        });
+        const nWithUnread = { ...notification, unread: notification.unread !== false };
+        setNotifications(prev => [nWithUnread, ...prev]);
         playNotificationSound();
-
-        if (Notification.permission === 'granted') {
-          new Notification(notification.title, {
-            body: notification.message,
-            icon: '/logo.png'
-          });
+        const timer = setTimeout(() => {
+          setNotifications(prev => prev.filter(n => n.id !== notification.id));
+          notificationIdsRef.current.delete(notification.id);
+          expiryTimersRef.current.delete(notification.id);
+        }, NOTIFICATION_TTL_MS);
+        expiryTimersRef.current.set(notification.id, timer);
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          new Notification(notification.title, { body: notification.message, icon: '/logo.png' });
         }
       } else {
         console.log('⚠️ Duplicate notification ignored:', notification.id);
       }
-    });
+    };
 
-    if (Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    socket.on('notification', onNotification);
 
-    return () => socket.disconnect();
-  }, [fetchNotifications, playNotificationSound, calculateUnreadCount]);
+    if (socket.connected) setIsConnected(true);
+
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('notification', onNotification);
+      clearInterval(cleanupInterval);
+      expiryTimersRef.current.forEach(t => clearTimeout(t));
+      expiryTimersRef.current.clear();
+      socketRef.current = null;
+    };
+  }, [removeExpired, playNotificationSound]);
 
   return {
     notifications,
@@ -246,8 +228,7 @@ export const useNotifications = () => {
     isConnected,
     markAsRead,
     markAsUnread,
-    markAllAsRead,
-    refreshNotifications: fetchNotifications
+    markAllAsRead
   };
 };
 

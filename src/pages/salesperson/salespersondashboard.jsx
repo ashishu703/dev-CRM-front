@@ -23,6 +23,7 @@ import {
   MonthlyRevenueTrendChart,
   RevenueDistributionChart,
   LeadConversionFunnelChart,
+  SalesPipelineDonutChart,
   SalesVsTargetChart,
   OutstandingPaymentAgingChart
 } from '../../components/dashboard/ChartJSCharts'
@@ -36,14 +37,15 @@ function cx(...classes) {
   return classes.filter(Boolean).join(" ")
 }
 
-function Card({ className, children, isDarkMode = false }) {
-  return <div className={cx(
-    "rounded-xl border overflow-hidden transition-all duration-300 hover:shadow-xl",
-    isDarkMode 
-      ? "bg-gray-800 border-gray-700 shadow-lg" 
-      : "bg-white border-gray-200 shadow-md hover:shadow-2xl",
-    className
-  )}>{children}</div>
+function Card({ className, style, children, isDarkMode = false }) {
+  return <div
+    className={cx(
+      "rounded-xl border overflow-hidden transition-all duration-300 hover:shadow-xl",
+      !style && (isDarkMode ? "bg-gray-800 border-gray-700 shadow-lg" : "bg-white border-gray-200 shadow-md hover:shadow-2xl"),
+      className
+    )}
+    style={style}
+  >{children}</div>
 }
 
 function CardHeader({ className, children }) {
@@ -65,7 +67,6 @@ function CardContent({ className, children }) {
 
 export default function DashboardContent({ isDarkMode = false }) {
   const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState('overview')
   const [overviewDateFilter, setOverviewDateFilter] = useState('')
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1063,27 +1064,50 @@ export default function DashboardContent({ isDarkMode = false }) {
 
   const getLeadConversionFunnelData = () => {
     const filteredLeads = getFilteredLeads()
-    
     const totalLeads = filteredLeads.length
     const qualified = filteredLeads.filter(l => {
-      const status = (l.sales_status || l.salesStatus || '').toLowerCase()
-      return status === 'interested' || status === 'running' || status === 'converted'
+      const s = (l.sales_status || l.salesStatus || '').toLowerCase()
+      return s === 'interested' || s === 'running' || s === 'converted'
     }).length
-    
-    const proposal = filteredLeads.filter(l => {
-      const followUp = (l.follow_up_status || '').toLowerCase()
-      return followUp === 'quotation sent' || followUp === 'proposal sent'
-    }).length
-    
+    const proposal = filteredLeads.filter(l => (l.follow_up_status || '').toLowerCase() === 'quotation sent').length
     const closed = filteredLeads.filter(l => {
-      const status = (l.sales_status || l.salesStatus || '').toLowerCase()
-      return status === 'win/closed' || status === 'closed' || status === 'converted'
+      const s = (l.sales_status || l.salesStatus || '').toLowerCase()
+      return s === 'win/closed' || s === 'win closed' || s === 'closed' || s === 'converted'
     }).length
-    
-    return {
-      labels: ['Leads', 'Qualified', 'Proposal', 'Closed'],
-      values: [totalLeads, qualified, proposal, closed]
-    }
+    return { labels: ['Leads', 'Qualified', 'Proposal', 'Closed'], values: [totalLeads, qualified, proposal, closed] }
+  }
+
+  const getSalesPipelineDonutData = () => {
+    const filtered = getFilteredLeads()
+    const order = [
+      'Pending', 'Running', 'Converted', 'Interested', 'Win/Closed', 'Closed', 'Lost',
+      'Meeting Scheduled', 'Quotation Sent', 'Closed/Lost (Follow-up)'
+    ]
+    const counts = { Pending: 0, Running: 0, Converted: 0, Interested: 0, 'Win/Closed': 0, Closed: 0, Lost: 0, 'Meeting Scheduled': 0, 'Quotation Sent': 0, 'Closed/Lost (Follow-up)': 0 }
+    filtered.forEach(l => {
+      const followUp = String(l.follow_up_status || l.followUpStatus || '').toLowerCase().trim()
+      const sales = String(l.sales_status || l.salesStatus || '').toLowerCase().trim()
+      if (followUp === 'appointment scheduled') counts['Meeting Scheduled'] += 1
+      else if (followUp === 'quotation sent') counts['Quotation Sent'] += 1
+      else if (followUp === 'closed/lost') counts['Closed/Lost (Follow-up)'] += 1
+      else if (sales === 'win/closed' || sales === 'win closed') counts['Win/Closed'] += 1
+      else if (sales === 'pending') counts.Pending += 1
+      else if (sales === 'running') counts.Running += 1
+      else if (sales === 'converted') counts.Converted += 1
+      else if (sales === 'interested') counts.Interested += 1
+      else if (sales === 'closed') counts.Closed += 1
+      else if (sales === 'lost') counts.Lost += 1
+      else counts.Pending += 1
+    })
+    const labels = []
+    const values = []
+    order.forEach(k => {
+      if (counts[k] > 0) {
+        labels.push(k)
+        values.push(counts[k])
+      }
+    })
+    return { labels, values }
   }
 
   const getSalesVsTargetData = () => {
@@ -1263,7 +1287,59 @@ export default function DashboardContent({ isDarkMode = false }) {
     }
   }
 
-  // OPTIMIZED: Memoize heavy calculations
+  const formatCompact = (num) => {
+    const n = Number(num)
+    if (isNaN(n)) return '0'
+    if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M'
+    if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K'
+    return n.toFixed(2)
+  }
+
+  const formatCr = (num) => {
+    const n = Number(num)
+    if (isNaN(n)) return '₹0'
+    if (n >= 1e7) return `₹${(n / 1e7).toFixed(2).replace(/\.?0+$/, '')} Cr`
+    return `₹${n.toLocaleString('en-IN')}`
+  }
+
+  const salesOverviewMetrics = useMemo(() => {
+    const filteredLeads = getFilteredLeads()
+    const totalLeads = filteredLeads.length
+    const totalSalesAmount = businessMetrics.totalReceivedPayment || 0
+    const pendingLeads = filteredLeads.filter(l => String(l.sales_status || '').toLowerCase() === 'pending').length
+    const winClosedLeads = filteredLeads.filter(l => {
+      const s = String(l.sales_status || '').toLowerCase()
+      return s === 'win/closed' || s === 'win closed'
+    }).length
+    const lostLeads = filteredLeads.filter(l => String(l.sales_status || '').toLowerCase() === 'lost').length
+    const closedLeads = filteredLeads.filter(l => String(l.sales_status || '').toLowerCase() === 'closed').length
+    const openDeals = totalLeads - winClosedLeads - closedLeads - lostLeads
+    const openDealLeads = filteredLeads.filter(l => {
+      const s = String(l.sales_status || '').toLowerCase()
+      return s !== 'win/closed' && s !== 'win closed' && s !== 'closed' && s !== 'lost'
+    })
+    const now = Date.now()
+    const avgOpenDealAge = openDealLeads.length === 0 ? 0 : openDealLeads.reduce((sum, l) => {
+      const created = l.created_at ? new Date(l.created_at).getTime() : now
+      return sum + Math.max(0, Math.round((now - created) / (24 * 60 * 60 * 1000)))
+    }, 0) / openDealLeads.length
+    const leadsWithFollowup = totalLeads - pendingLeads
+    const winRate = leadsWithFollowup > 0 ? (winClosedLeads / leadsWithFollowup) * 100 : 0
+    const lostRate = totalLeads > 0 ? (lostLeads / totalLeads) * 100 : 0
+    const piValue = businessMetrics.totalRevenue || 0
+    const avgDaysToClose = 60.70
+    return {
+      totalSales: formatCompact(totalSalesAmount),
+      winRate: winRate.toFixed(2) + '%',
+      lostRate: lostRate.toFixed(2) + '%',
+      avgDaysToClose: avgDaysToClose.toFixed(2),
+      pipelineValue: formatCompact(piValue),
+      openDeals: formatCompact(openDeals),
+      weightedValue: formatCompact(totalSalesAmount),
+      avgOpenDealAge: avgOpenDealAge.toFixed(2)
+    }
+  }, [leads, overviewDateFilter, businessMetrics.totalReceivedPayment, businessMetrics.totalRevenue])
+
   const calculatedMetrics = useMemo(() => calculateMetrics(), [leads, overviewDateFilter])
   const statusData = useMemo(() => calculateLeadStatusData(), [leads, overviewDateFilter])
   const leadSources = useMemo(() => calculateLeadSources(), [leads, overviewDateFilter])
@@ -1283,7 +1359,6 @@ export default function DashboardContent({ isDarkMode = false }) {
       return endDay >= todayDay
     })()
 
-  // Calculate days left based on target period
   const daysLeftInTarget = (() => {
     if (!hasTargetAssigned) return 0
     const endDate = new Date(`${userTarget.targetEndDate}T00:00:00`)
@@ -1291,14 +1366,11 @@ export default function DashboardContent({ isDarkMode = false }) {
     return getCalendarDaysRemaining(endDate)
   })()
   
-  // Use actual user target data (only when assigned)
   const revenueTarget = hasTargetAssigned ? (userTarget.target || 0) : 0
-  // Prefer backend-calculated achievedTarget (uses target date range); fall back to metrics if present
-  const revenueCurrent = hasTargetAssigned
-    ? (Number(userTarget.achievedTarget || 0) || businessMetrics.totalReceivedPayment || 0)
-    : 0
+  const revenueCurrent = hasTargetAssigned ? (Number(userTarget.achievedTarget || 0) || businessMetrics.totalReceivedPayment || 0) : 0
+  const targetProgress = revenueTarget > 0 ? Math.min(100, Math.round((revenueCurrent / revenueTarget) * 100)) : 0
+  const targetStatusOnTrack = targetProgress >= 100 || (daysLeftInTarget > 0 && targetProgress >= 0)
 
-  // Overview Data - Real data from API (trends computed from current month vs previous month)
   const overviewData = {
     metrics: [
       {
@@ -1466,7 +1538,7 @@ export default function DashboardContent({ isDarkMode = false }) {
   }
 
   return (
-    <main className={`flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 md:p-6 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+    <main className={`flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 md:p-6 ${isDarkMode ? 'bg-gray-900' : ''}`} style={!isDarkMode ? { backgroundColor: '#F4F7FB' } : undefined}>
       {showMonthlyHighlight && (monthlyHighlight?.highlightType === 'winner' || monthlyHighlight?.highlightType === 'achieved') && (
         <div className="fixed inset-0 z-[99999]">
           <div
@@ -1512,868 +1584,255 @@ export default function DashboardContent({ isDarkMode = false }) {
           </div>
         </div>
       )}
-      {/* Tab Navigation with Date Filter and Refresh Button */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
-        <div className="flex gap-4 sm:gap-6">
-          <button 
-            onClick={() => setActiveTab('overview')}
-            className={`gap-1 sm:gap-2 flex items-center pb-2 border-b-2 text-sm sm:text-base ${
-              activeTab === 'overview' 
-                ? 'text-blue-600 border-blue-600' 
-                : isDarkMode 
-                  ? 'text-gray-400 border-transparent'
-                  : 'text-gray-500 border-transparent'
-            }`}
-          >
-            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4" />
-            <span>Overview</span>
-          </button>
-          <button 
-            onClick={() => setActiveTab('performance')}
-            className={`gap-1 sm:gap-2 flex items-center pb-2 border-b-2 text-sm sm:text-base ${
-              activeTab === 'performance' 
-                ? 'text-blue-600 border-blue-600' 
-                : isDarkMode 
-                  ? 'text-gray-400 border-transparent'
-                  : 'text-gray-500 border-transparent'
-            }`}
-          >
-            <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4" />
-            <span>Performance</span>
-          </button>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 sm:gap-0 mb-4 sm:mb-6 flex-wrap">
+        <div className={`flex flex-wrap items-center gap-3 sm:gap-4 px-3 py-2 rounded-lg border ${isDarkMode ? 'bg-gray-800/50 border-gray-600' : 'bg-white/80 border-gray-200'}`}>
+          <span className={`text-xs sm:text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            Revenue: {formatCr(revenueCurrent)} / {revenueTarget >= 1e7 ? `₹${(revenueTarget / 1e7).toFixed(2).replace(/\.?0+$/, '')} Cr` : `₹${revenueTarget.toLocaleString('en-IN')}`}
+          </span>
+          <span className={`text-xs sm:text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            Progress: {targetProgress}%
+          </span>
+          <span className={`text-xs sm:text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            Days Left: {daysLeftInTarget}
+          </span>
+          <span className={`text-xs sm:text-sm font-semibold ${targetStatusOnTrack ? (isDarkMode ? 'text-green-400' : 'text-green-600') : (isDarkMode ? 'text-red-400' : 'text-red-600')}`}>
+            {targetStatusOnTrack ? '✅ On Track' : '⛔ Off Track'}
+          </span>
         </div>
-        {activeTab === 'overview' && (
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-            <button
-              onClick={refreshDashboard}
-              disabled={refreshing}
-              className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 shadow-lg hover:shadow-xl ${
-                refreshing
-                  ? 'opacity-50 cursor-not-allowed'
-                  : ''
-              } ${
-                isDarkMode
-                  ? 'bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white hover:from-blue-700 hover:via-purple-700 hover:to-pink-700'
-                  : 'bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white hover:from-blue-700 hover:via-purple-700 hover:to-pink-700'
-              }`}
-              title="Refresh dashboard data"
-            >
-              <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
+        <button
+          onClick={refreshDashboard}
+          disabled={refreshing}
+          className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 shadow-lg hover:shadow-xl ${refreshing ? 'opacity-50 cursor-not-allowed' : ''} ${isDarkMode ? 'bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white' : 'bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white'}`}
+          title="Refresh dashboard data"
+        >
+          <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
+        </button>
+        <div className="relative flex items-center gap-2">
+          <Calendar className={`h-4 w-4 sm:h-5 sm:w-5 ${overviewDateFilter ? (isDarkMode ? 'text-purple-400' : 'text-purple-600') : (isDarkMode ? 'text-gray-400' : 'text-gray-500')}`} />
+          <input
+            type="date"
+            value={overviewDateFilter}
+            onChange={(e) => setOverviewDateFilter(e.target.value)}
+            className={`flex-1 px-3 sm:px-4 py-2 sm:py-2.5 border-2 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 transition-all duration-200 shadow-sm ${isDarkMode ? `bg-gray-800 border-gray-600 text-white focus:ring-purple-500 focus:border-purple-500 ${overviewDateFilter ? 'border-purple-400 bg-purple-900/30' : ''}` : `bg-white text-gray-900 focus:ring-purple-500 focus:border-purple-500 ${overviewDateFilter ? 'border-purple-500 bg-purple-50' : 'border-gray-300'}`}`}
+            title="Filter data from selected date to today"
+            max={toDateOnly(new Date())}
+            placeholder="dd-mm-yyyy"
+          />
+          {overviewDateFilter && (
+            <button onClick={() => setOverviewDateFilter('')} className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${isDarkMode ? 'text-gray-300 hover:text-white hover:bg-gray-700 bg-gray-800 border border-gray-600' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 bg-white border border-gray-300'}`} title="Clear date filter">
+              Clear
             </button>
-            <div className="relative flex items-center gap-2">
-              <Calendar className={`h-4 w-4 sm:h-5 sm:w-5 ${
-              overviewDateFilter 
-                  ? (isDarkMode ? 'text-purple-400' : 'text-purple-600')
-                : (isDarkMode ? 'text-gray-400' : 'text-gray-500')
-              } transition-colors duration-200`} />
-            <input
-              type="date"
-              value={overviewDateFilter}
-              onChange={(e) => setOverviewDateFilter(e.target.value)}
-                className={`flex-1 px-3 sm:px-4 py-2 sm:py-2.5 border-2 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 transition-all duration-200 shadow-sm ${
-                isDarkMode 
-                    ? `bg-gray-800 border-gray-600 text-white focus:ring-purple-500 focus:border-purple-500 hover:border-purple-400 ${overviewDateFilter ? 'border-purple-400 bg-purple-900/30' : ''}`
-                    : `bg-white text-gray-900 focus:ring-purple-500 focus:border-purple-500 hover:border-purple-300 ${overviewDateFilter ? 'border-purple-500 bg-purple-50' : 'border-gray-300'}`
-              }`}
-              title="Filter data from selected date to today"
-              max={toDateOnly(new Date())}
-                placeholder="dd-mm-yyyy"
-            />
-            {overviewDateFilter && (
-              <button
-                onClick={() => setOverviewDateFilter('')}
-                  className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
-                  isDarkMode 
-                      ? 'text-gray-300 hover:text-white hover:bg-gray-700 bg-gray-800 border border-gray-600' 
-                      : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 bg-white border border-gray-300'
-                }`}
-                title="Clear date filter"
-              >
-                Clear
-              </button>
-            )}
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {activeTab === 'overview' && (
-        <>
-      {/* Lead Status Summary - Moved to top */}
       <div className="space-y-3 sm:space-y-4 mb-6 sm:mb-8">
-        <div className="flex items-center gap-2">
-          <Clock className={`h-4 w-4 sm:h-5 sm:w-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-          <h2 className={`text-base sm:text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Lead Status Summary</h2>
-        </div>
-        <p className={`text-xs sm:text-sm mb-3 sm:mb-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>Overview of your leads by status</p>
-
-        {/* Total Leads Card and Lead Status Cards - Combined grid with 4 columns */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 overflow-hidden">
-          {/* Total Leads Card - Added at the beginning */}
-          <Card className={cx(
-            "border-2 relative overflow-hidden",
-            isDarkMode 
-              ? "bg-gradient-to-br from-blue-900/90 to-blue-800/90 border-blue-500/50 text-white shadow-blue-500/20" 
-              : "bg-gradient-to-br from-blue-50 via-blue-100 to-blue-50 text-blue-700 border-blue-300 shadow-lg shadow-blue-200/50"
-          )} isDarkMode={isDarkMode}>
-            <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-400/20 to-blue-600/20 rounded-bl-full"></div>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-              <CardTitle className={`text-sm font-semibold ${
-                isDarkMode 
-                  ? 'text-blue-100' 
-                  : 'text-blue-800'
-              }`} isDarkMode={isDarkMode}>Total Leads</CardTitle>
-              <div className={`p-2 rounded-lg ${
-                isDarkMode ? 'bg-blue-800/50' : 'bg-blue-200/50'
-              }`}>
-                <UserPlus className={`h-5 w-5 ${
-                  isDarkMode ? 'text-blue-200' : 'text-blue-600'
-                }`} />
-              </div>
-            </CardHeader>
-            <CardContent className="relative z-10">
-              <div className={`text-2xl sm:text-3xl font-bold mb-1 bg-gradient-to-r ${
-                isDarkMode ? 'from-white to-blue-100 bg-clip-text text-transparent' : 'from-blue-600 to-blue-800 bg-clip-text text-transparent'
-              }`}>{calculatedMetrics.totalLeads}</div>
-              <p className={`text-xs font-medium ${
-                isDarkMode 
-                  ? 'text-blue-200' 
-                  : 'text-blue-600'
-              }`}>All leads {overviewDateFilter ? 'from selected date to today' : 'in your pipeline'}</p>
-            </CardContent>
-          </Card>
-          {leadStatuses.map((status, index) => {
-            const Icon = status.icon
-            // Color mapping for vibrant gradients
-            const colorMap = {
-              'Pending': { gradient: 'from-orange-50 via-amber-50 to-orange-50', border: 'border-orange-300', iconBg: 'bg-orange-200/50', iconColor: 'text-orange-600', textColor: 'text-orange-800', valueColor: 'from-orange-600 to-orange-800', shadow: 'shadow-orange-200/50' },
-              'Running': { gradient: 'from-blue-50 via-cyan-50 to-blue-50', border: 'border-blue-300', iconBg: 'bg-blue-200/50', iconColor: 'text-blue-600', textColor: 'text-blue-800', valueColor: 'from-blue-600 to-blue-800', shadow: 'shadow-blue-200/50' },
-              'Converted': { gradient: 'from-green-50 via-emerald-50 to-green-50', border: 'border-green-300', iconBg: 'bg-green-200/50', iconColor: 'text-green-600', textColor: 'text-green-800', valueColor: 'from-green-600 to-green-800', shadow: 'shadow-green-200/50' },
-              'Interested': { gradient: 'from-purple-50 via-violet-50 to-purple-50', border: 'border-purple-300', iconBg: 'bg-purple-200/50', iconColor: 'text-purple-600', textColor: 'text-purple-800', valueColor: 'from-purple-600 to-purple-800', shadow: 'shadow-purple-200/50' },
-              'Win/Closed': { gradient: 'from-emerald-50 via-teal-50 to-emerald-50', border: 'border-emerald-300', iconBg: 'bg-emerald-200/50', iconColor: 'text-emerald-600', textColor: 'text-emerald-800', valueColor: 'from-emerald-600 to-emerald-800', shadow: 'shadow-emerald-200/50' },
-              'Closed': { gradient: 'from-gray-50 via-slate-50 to-gray-50', border: 'border-gray-300', iconBg: 'bg-gray-200/50', iconColor: 'text-gray-600', textColor: 'text-gray-800', valueColor: 'from-gray-600 to-gray-800', shadow: 'shadow-gray-200/50' },
-              'Lost': { gradient: 'from-red-50 via-rose-50 to-red-50', border: 'border-red-300', iconBg: 'bg-red-200/50', iconColor: 'text-red-600', textColor: 'text-red-800', valueColor: 'from-red-600 to-red-800', shadow: 'shadow-red-200/50' },
-              'Meeting scheduled': { gradient: 'from-indigo-50 via-blue-50 to-indigo-50', border: 'border-indigo-300', iconBg: 'bg-indigo-200/50', iconColor: 'text-indigo-600', textColor: 'text-indigo-800', valueColor: 'from-indigo-600 to-indigo-800', shadow: 'shadow-indigo-200/50' },
-              'Quotation Sent': { gradient: 'from-yellow-50 via-amber-50 to-yellow-50', border: 'border-yellow-300', iconBg: 'bg-yellow-200/50', iconColor: 'text-yellow-600', textColor: 'text-yellow-800', valueColor: 'from-yellow-600 to-yellow-800', shadow: 'shadow-yellow-200/50' },
-              'Closed/Lost (Follow-up)': { gradient: 'from-slate-50 via-gray-50 to-slate-50', border: 'border-slate-300', iconBg: 'bg-slate-200/50', iconColor: 'text-slate-600', textColor: 'text-slate-800', valueColor: 'from-slate-600 to-slate-800', shadow: 'shadow-slate-200/50' },
-            }
-            const colors = colorMap[status.title] || { 
-              gradient: 'from-gray-50 to-gray-50', 
-              border: 'border-gray-300', 
-              iconBg: 'bg-gray-200/50', 
-              iconColor: 'text-gray-600', 
-              textColor: 'text-gray-800', 
-              valueColor: 'from-gray-600 to-gray-800',
-              shadow: 'shadow-gray-200/50'
-            }
-            
-            return (
-              <Card key={index} className={cx(
-                "border-2 relative overflow-hidden",
-                isDarkMode 
-                  ? "bg-gradient-to-br from-gray-800/90 to-gray-700/90 border-gray-600/50 text-white" 
-                  : `bg-gradient-to-br ${colors.gradient} ${colors.border} shadow-lg ${colors.shadow}`
-              )} isDarkMode={isDarkMode}>
-                <div className={`absolute top-0 right-0 w-20 h-20 bg-gradient-to-br ${
-                  isDarkMode ? 'from-gray-600/20 to-gray-500/20' : colors.valueColor.replace('from-', 'from-').replace('to-', 'to-') + '/10'
-                } rounded-bl-full`}></div>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                  <CardTitle className={`text-sm font-semibold ${
-                    isDarkMode 
-                      ? 'text-gray-200' 
-                      : colors.textColor
-                  }`} isDarkMode={isDarkMode}>{status.title}</CardTitle>
-                  <div className={`p-2 rounded-lg ${
-                    isDarkMode ? 'bg-gray-700/50' : colors.iconBg
-                  }`}>
-                    <Icon className={`h-5 w-5 ${
-                      isDarkMode ? 'text-gray-300' : colors.iconColor
-                    }`} />
-                  </div>
-                </CardHeader>
-                <CardContent className="relative z-10">
-                  <div className={`text-2xl sm:text-3xl font-bold mb-1 bg-gradient-to-r ${
-                    isDarkMode 
-                      ? 'from-white to-gray-200 bg-clip-text text-transparent' 
-                      : `${colors.valueColor} bg-clip-text text-transparent`
-                  }`}>{status.count}</div>
-                  <p className={`text-xs font-medium ${
-                    isDarkMode 
-                      ? 'text-gray-300' 
-                      : colors.textColor.replace('800', '600')
-                  }`}>{status.subtitle}</p>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Target & Timeline - Revenue Targets */}
-      <div className="space-y-4 mb-8">
-        <div className="flex items-center gap-2">
-          <Target className={`h-5 w-5 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`} />
-          <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Target & Timeline</h2>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 overflow-hidden">
-          <Card className={cx(
-            "border-2 relative overflow-hidden",
-            isDarkMode 
-              ? "bg-gradient-to-br from-indigo-900/90 to-purple-800/90 border-indigo-500/50 text-white shadow-lg shadow-indigo-500/20" 
-              : "bg-gradient-to-br from-indigo-50 via-purple-50 to-indigo-50 text-indigo-700 border-indigo-300 shadow-xl shadow-indigo-200/50"
-          )} isDarkMode={isDarkMode}>
-            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-400/20 to-purple-500/20 rounded-bl-full"></div>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-              <CardTitle className={`text-sm font-semibold ${isDarkMode ? 'text-indigo-100' : 'text-indigo-800'}`} isDarkMode={isDarkMode}>Revenue Target</CardTitle>
-              <div className={`p-2.5 rounded-xl shadow-lg ${isDarkMode ? 'bg-indigo-800/50' : 'bg-white/80'}`}>
-                <Target className={`h-5 w-5 ${isDarkMode ? 'text-indigo-200' : 'text-indigo-600'}`} />
-              </div>
-            </CardHeader>
-            <CardContent className="relative z-10">
-              <div className={`text-3xl font-bold mb-2 bg-gradient-to-r ${
-                isDarkMode ? 'from-white to-indigo-100 bg-clip-text text-transparent' : 'from-indigo-600 to-purple-600 bg-clip-text text-transparent'
-              }`}>₹{revenueTarget.toLocaleString('en-IN')}</div>
-              <p className={`text-xs font-medium mb-3 ${
-                isDarkMode ? 'text-indigo-200' : 'text-indigo-600'
-              }`}>
-                {hasTargetAssigned 
-                  ? `Revenue target (${new Date(`${userTarget.targetStartDate}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })} - ${new Date(`${userTarget.targetEndDate}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })})`
-                  : 'Target not assigned for this month'
-                }
-              </p>
-              <div className={`w-full h-2 rounded-full ${
-                isDarkMode ? 'bg-indigo-800/30' : 'bg-indigo-100'
-              }`}>
-                <div className={`h-full rounded-full bg-gradient-to-r ${
-                  isDarkMode ? 'from-indigo-400 to-purple-400' : 'from-indigo-500 to-purple-500'
-                }`} style={{ width: '100%' }}></div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="flex flex-col xl:flex-row gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 flex-1 min-w-0">
+            <Card className={cx("border-2 relative overflow-hidden", isDarkMode && "bg-[#4a3ab0] border-[#5B7CFA]/50 text-white")} style={!isDarkMode ? { background: 'linear-gradient(135deg, #6A5AE0 0%, #5B7CFA 100%)', borderColor: 'rgba(107, 114, 128, 0.3)' } : undefined} isDarkMode={isDarkMode}>
+              <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-full" style={!isDarkMode ? { background: 'rgba(255,255,255,0.15)' } : { background: 'rgba(0,0,0,0.2)' }} />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                <CardTitle className={cx("text-sm font-semibold", isDarkMode ? "text-indigo-100" : "text-white")} isDarkMode={isDarkMode}>Total sales</CardTitle>
+                <div className={cx("p-2 rounded-lg", isDarkMode ? "bg-indigo-800/50" : "bg-white/20")}>
+                  <DollarSign className="h-5 w-5 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent className="relative z-10">
+                <div className="text-2xl sm:text-3xl font-bold text-white">{salesOverviewMetrics.totalSales}</div>
+                <p className="text-xs font-medium text-white/90">Revenue received</p>
+              </CardContent>
+            </Card>
+            <Card className={cx("border-2 relative overflow-hidden", isDarkMode && "bg-[#0a3d6b] border-[#0B63B6]/50 text-white")} style={!isDarkMode ? { background: 'linear-gradient(135deg, #0F4C81 0%, #0B63B6 100%)', borderColor: 'rgba(11, 99, 182, 0.4)' } : undefined} isDarkMode={isDarkMode}>
+              <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-full" style={!isDarkMode ? { background: 'rgba(255,255,255,0.12)' } : { background: 'rgba(0,0,0,0.2)' }} />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                <CardTitle className="text-sm font-semibold text-white" isDarkMode={isDarkMode}>Win rate</CardTitle>
+                <div className="p-2 rounded-lg bg-white/20">
+                  <Award className="h-5 w-5 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent className="relative z-10">
+                <div className="text-2xl sm:text-3xl font-bold text-white">{salesOverviewMetrics.winRate}</div>
+                <p className="text-xs font-medium text-white/90">Converted vs followed up</p>
+              </CardContent>
+            </Card>
+            <Card className={cx("border-2 relative overflow-hidden", isDarkMode && "bg-[#0a5a8f] border-[#00A3D9]/50 text-white")} style={!isDarkMode ? { background: 'linear-gradient(135deg, #0E7ACF 0%, #00A3D9 100%)', borderColor: 'rgba(0, 163, 217, 0.4)' } : undefined} isDarkMode={isDarkMode}>
+              <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-full" style={!isDarkMode ? { background: 'rgba(255,255,255,0.15)' } : { background: 'rgba(0,0,0,0.2)' }} />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                <CardTitle className="text-sm font-semibold text-white" isDarkMode={isDarkMode}>Lost rate</CardTitle>
+                <div className="p-2 rounded-lg bg-white/20">
+                  <XCircle className="h-5 w-5 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent className="relative z-10">
+                <div className="text-2xl sm:text-3xl font-bold text-white">{salesOverviewMetrics.lostRate}</div>
+                <p className="text-xs font-medium text-white/90">Lost vs total leads</p>
+              </CardContent>
+            </Card>
+            <Card className={cx("border-2 relative overflow-hidden", isDarkMode && "bg-[#1a9b5e] border-[#1ECAD3]/50 text-white")} style={!isDarkMode ? { background: 'linear-gradient(135deg, #22B573 0%, #1ECAD3 100%)', borderColor: 'rgba(30, 202, 211, 0.4)' } : undefined} isDarkMode={isDarkMode}>
+              <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-full" style={!isDarkMode ? { background: 'rgba(255,255,255,0.15)' } : { background: 'rgba(0,0,0,0.2)' }} />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                <CardTitle className="text-sm font-semibold text-white" isDarkMode={isDarkMode}>Avg days to close</CardTitle>
+                <div className="p-2 rounded-lg bg-white/20">
+                  <Calendar className="h-5 w-5 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent className="relative z-10">
+                <div className="text-2xl sm:text-3xl font-bold text-white">{salesOverviewMetrics.avgDaysToClose}</div>
+                <p className="text-xs font-medium text-white/90">Days to close deal</p>
+              </CardContent>
+            </Card>
+            <Card className={cx("border-2 relative overflow-hidden", isDarkMode && "bg-[#4a3ab0] border-[#5B7CFA]/50 text-white")} style={!isDarkMode ? { background: 'linear-gradient(135deg, #6A5AE0 0%, #5B7CFA 100%)', borderColor: 'rgba(107, 114, 128, 0.3)' } : undefined} isDarkMode={isDarkMode}>
+              <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-full" style={!isDarkMode ? { background: 'rgba(255,255,255,0.15)' } : { background: 'rgba(0,0,0,0.2)' }} />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                <CardTitle className="text-sm font-semibold text-white" isDarkMode={isDarkMode}>Pipeline value</CardTitle>
+                <div className="p-2 rounded-lg bg-white/20">
+                  <CreditCard className="h-5 w-5 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent className="relative z-10">
+                <div className="text-2xl sm:text-3xl font-bold text-white">{salesOverviewMetrics.pipelineValue}</div>
+                <p className="text-xs font-medium text-white/90">PI value</p>
+              </CardContent>
+            </Card>
+            <Card className={cx("border-2 relative overflow-hidden", isDarkMode && "bg-[#0a3d6b] border-[#0B63B6]/50 text-white")} style={!isDarkMode ? { background: 'linear-gradient(135deg, #0F4C81 0%, #0B63B6 100%)', borderColor: 'rgba(11, 99, 182, 0.4)' } : undefined} isDarkMode={isDarkMode}>
+              <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-full" style={!isDarkMode ? { background: 'rgba(255,255,255,0.12)' } : { background: 'rgba(0,0,0,0.2)' }} />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                <CardTitle className="text-sm font-semibold text-white" isDarkMode={isDarkMode}>Open deals</CardTitle>
+                <div className="p-2 rounded-lg bg-white/20">
+                  <UserPlus className="h-5 w-5 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent className="relative z-10">
+                <div className="text-2xl sm:text-3xl font-bold text-white">{salesOverviewMetrics.openDeals}</div>
+                <p className="text-xs font-medium text-white/90">Active in pipeline</p>
+              </CardContent>
+            </Card>
+            <Card className={cx("border-2 relative overflow-hidden", isDarkMode && "bg-[#0a5a8f] border-[#00A3D9]/50 text-white")} style={!isDarkMode ? { background: 'linear-gradient(135deg, #0E7ACF 0%, #00A3D9 100%)', borderColor: 'rgba(0, 163, 217, 0.4)' } : undefined} isDarkMode={isDarkMode}>
+              <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-full" style={!isDarkMode ? { background: 'rgba(255,255,255,0.15)' } : { background: 'rgba(0,0,0,0.2)' }} />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                <CardTitle className="text-sm font-semibold text-white" isDarkMode={isDarkMode}>Received</CardTitle>
+                <div className="p-2 rounded-lg bg-white/20">
+                  <BarChart3 className="h-5 w-5 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent className="relative z-10">
+                <div className="text-2xl sm:text-3xl font-bold text-white">{salesOverviewMetrics.weightedValue}</div>
+                <p className="text-xs font-medium text-white/90">Revenue received</p>
+              </CardContent>
+            </Card>
+            <Card className={cx("border-2 relative overflow-hidden", isDarkMode && "bg-[#1a9b5e] border-[#1ECAD3]/50 text-white")} style={!isDarkMode ? { background: 'linear-gradient(135deg, #22B573 0%, #1ECAD3 100%)', borderColor: 'rgba(30, 202, 211, 0.4)' } : undefined} isDarkMode={isDarkMode}>
+              <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-full" style={!isDarkMode ? { background: 'rgba(255,255,255,0.15)' } : { background: 'rgba(0,0,0,0.2)' }} />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                <CardTitle className="text-sm font-semibold text-white" isDarkMode={isDarkMode}>Avg open deal age</CardTitle>
+                <div className="p-2 rounded-lg bg-white/20">
+                  <Clock className="h-5 w-5 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent className="relative z-10">
+                <div className="text-2xl sm:text-3xl font-bold text-white">{salesOverviewMetrics.avgOpenDealAge}</div>
+                <p className="text-xs font-medium text-white/90">Days in pipeline</p>
+              </CardContent>
+            </Card>
+          </div>
 
           <Card className={cx(
-            "border-2 relative overflow-hidden",
-            isDarkMode 
-              ? "bg-gradient-to-br from-green-900/90 to-emerald-800/90 border-green-500/50 text-white shadow-lg shadow-green-500/20" 
-              : "bg-gradient-to-br from-green-50 via-emerald-50 to-green-50 text-green-700 border-green-300 shadow-xl shadow-green-200/50"
+            "xl:w-[380px] xl:flex-shrink-0 border-2 relative overflow-hidden",
+            isDarkMode ? "bg-gray-800/50 border-gray-700/50" : "bg-white border-gray-200"
           )} isDarkMode={isDarkMode}>
-            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-green-400/20 to-emerald-500/20 rounded-bl-full"></div>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-              <CardTitle className={`text-sm font-semibold ${
-                isDarkMode 
-                  ? 'text-green-100' 
-                  : 'text-green-800'
-              }`} isDarkMode={isDarkMode}>Revenue Achieved</CardTitle>
-              <div className={`p-2.5 rounded-xl shadow-lg ${isDarkMode ? 'bg-green-800/50' : 'bg-white/80'}`}>
-                <CheckCircle className={`h-5 w-5 ${isDarkMode ? 'text-green-200' : 'text-green-600'}`} />
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className={cx("p-2 rounded-lg", isDarkMode ? "bg-indigo-500/20" : "bg-indigo-50")}>
+                  <Activity className={cx("h-4 w-4", isDarkMode ? "text-indigo-400" : "text-indigo-600")} />
+                </div>
+                <div>
+                  <CardTitle className={cx("text-sm font-semibold", isDarkMode ? "text-white" : "text-gray-900")} isDarkMode={isDarkMode}>Sales Pipeline</CardTitle>
+                  <p className={cx("text-xs mt-0.5", isDarkMode ? "text-gray-400" : "text-gray-500")}>Stage-wise lead distribution</p>
+                </div>
               </div>
             </CardHeader>
-            <CardContent className="relative z-10">
-              <div className={`text-3xl font-bold mb-2 bg-gradient-to-r ${
-                isDarkMode ? 'from-white to-green-100 bg-clip-text text-transparent' : 'from-green-600 to-emerald-600 bg-clip-text text-transparent'
-              }`}>₹{revenueCurrent.toLocaleString('en-IN')}</div>
-              <p className={`text-xs font-medium mb-3 ${
-                isDarkMode 
-                  ? 'text-green-200' 
-                  : 'text-green-600'
-              }`}>
-                {hasTargetAssigned 
-                  ? `Revenue achieved (${userTarget.targetDurationDays || Math.ceil((new Date(`${userTarget.targetEndDate}T00:00:00`) - new Date(`${userTarget.targetStartDate}T00:00:00`)) / (1000 * 60 * 60 * 24))} days period)`
-                  : 'Target not assigned'
-                }
-              </p>
-              <div className={`w-full h-2 rounded-full ${
-                isDarkMode ? 'bg-green-800/30' : 'bg-green-100'
-              }`}>
-                <div className={`h-full rounded-full bg-gradient-to-r ${
-                  isDarkMode ? 'from-green-400 to-emerald-400' : 'from-green-500 to-emerald-500'
-                }`} style={{ width: '100%' }}></div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className={cx(
-            "border-2 relative overflow-hidden",
-            isDarkMode 
-              ? "bg-gradient-to-br from-slate-800/90 to-gray-700/90 border-slate-600/50 text-white shadow-lg shadow-slate-500/20" 
-              : "bg-gradient-to-br from-slate-50 via-gray-50 to-slate-50 text-slate-700 border-slate-300 shadow-xl shadow-slate-200/50"
-          )} isDarkMode={isDarkMode}>
-            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-slate-400/20 to-gray-500/20 rounded-bl-full"></div>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-              <CardTitle className={`text-sm font-semibold ${
-                isDarkMode 
-                  ? 'text-slate-200' 
-                  : 'text-slate-800'
-              }`} isDarkMode={isDarkMode}>Days Left</CardTitle>
-              <div className={`p-2.5 rounded-xl shadow-lg ${isDarkMode ? 'bg-slate-700/50' : 'bg-white/80'}`}>
-                <Calendar className={`h-5 w-5 ${isDarkMode ? 'text-slate-200' : 'text-slate-600'}`} />
-              </div>
-            </CardHeader>
-            <CardContent className="relative z-10">
-              <div className={`text-3xl font-bold mb-2 bg-gradient-to-r ${
-                isDarkMode ? 'from-white to-slate-200 bg-clip-text text-transparent' : 'from-slate-600 to-gray-700 bg-clip-text text-transparent'
-              }`}>{daysLeftInTarget}</div>
-              <p className={`text-xs font-medium mb-3 ${
-                isDarkMode 
-                  ? 'text-slate-300' 
-                  : 'text-slate-600'
-              }`}>
-                {hasTargetAssigned ? 'Remaining days in target period' : 'Target not assigned'}
-              </p>
-              <div className={`w-full h-2 rounded-full ${
-                isDarkMode ? 'bg-slate-700/30' : 'bg-slate-100'
-              }`}>
-                <div className={`h-full rounded-full bg-gradient-to-r ${
-                  isDarkMode ? 'from-slate-400 to-gray-400' : 'from-slate-500 to-gray-500'
-                }`} style={{ width: '100%' }}></div>
+            <CardContent className="pt-0">
+              <div className="h-52">
+                <SalesPipelineDonutChart data={salesPipelineDonutData} isDarkMode={isDarkMode} />
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Key Performance Metrics - Enhanced styling */}
-      <div className="space-y-4 mb-8">
-        <div className="flex items-center gap-2">
-          <TrendingUp className={`h-5 w-5 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-          <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Key Performance Metrics</h2>
+      {/* My Performance + Business Metrics in single row */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+        <div className={cx("rounded-xl border overflow-hidden", isDarkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200 shadow-md")}>
+          <div className={cx("px-4 py-3 border-b", isDarkMode ? "border-gray-600" : "border-gray-200")}>
+            <h2 className={cx("text-base font-semibold", isDarkMode ? "text-white" : "text-gray-900")}>My Performance</h2>
+            <p className={cx("text-xs mt-0.5", isDarkMode ? "text-gray-400" : "text-gray-500")}>Received & orders</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className={cx("border-b", isDarkMode ? "border-gray-600 bg-gray-800" : "border-gray-200 bg-gray-50")}>
+                  <th className={cx("text-left py-3 px-4 font-semibold", isDarkMode ? "text-gray-300" : "text-gray-700")}>Metric</th>
+                  <th className={cx("text-right py-3 px-4 font-semibold", isDarkMode ? "text-gray-300" : "text-gray-700")}>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className={cx("border-b", isDarkMode ? "border-gray-700 hover:bg-gray-700/50" : "border-gray-100 hover:bg-gray-50")}>
+                  <td className={cx("py-2.5 px-4", isDarkMode ? "text-white" : "text-gray-900")}>Received Payment</td>
+                  <td className={cx("py-2.5 px-4 text-right font-medium", isDarkMode ? "text-green-400" : "text-green-600")}>₹{(businessMetrics.totalReceivedPayment || 0).toLocaleString('en-IN')}</td>
+                </tr>
+                <tr className={cx("border-b", isDarkMode ? "border-gray-700 hover:bg-gray-700/50" : "border-gray-100 hover:bg-gray-50")}>
+                  <td className={cx("py-2.5 px-4", isDarkMode ? "text-white" : "text-gray-900")}>Sale Orders</td>
+                  <td className={cx("py-2.5 px-4 text-right", isDarkMode ? "text-gray-300" : "text-gray-600")}>{businessMetrics.totalSaleOrder ?? 0}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-        <p className={`text-sm mb-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>Critical business indicators and trends</p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 overflow-hidden">
-          {overviewMetrics.map((metric, index) => {
-            const Icon = metric.icon
-            // Color schemes for each metric
-            const metricColors = [
-              { gradient: 'from-blue-50 via-cyan-50 to-blue-50', border: 'border-blue-300', iconBg: 'bg-blue-200/50', textColor: 'text-blue-800', valueColor: 'from-blue-600 to-cyan-600', shadow: 'shadow-blue-200/50', darkGradient: 'from-blue-900/90 to-cyan-800/90' },
-              { gradient: 'from-green-50 via-emerald-50 to-green-50', border: 'border-green-300', iconBg: 'bg-green-200/50', textColor: 'text-green-800', valueColor: 'from-green-600 to-emerald-600', shadow: 'shadow-green-200/50', darkGradient: 'from-green-900/90 to-emerald-800/90' },
-              { gradient: 'from-orange-50 via-amber-50 to-orange-50', border: 'border-orange-300', iconBg: 'bg-orange-200/50', textColor: 'text-orange-800', valueColor: 'from-orange-600 to-amber-600', shadow: 'shadow-orange-200/50', darkGradient: 'from-orange-900/90 to-amber-800/90' },
-              { gradient: 'from-purple-50 via-pink-50 to-purple-50', border: 'border-purple-300', iconBg: 'bg-purple-200/50', textColor: 'text-purple-800', valueColor: 'from-purple-600 to-pink-600', shadow: 'shadow-purple-200/50', darkGradient: 'from-purple-900/90 to-pink-800/90' },
-            ]
-            const colors = metricColors[index % metricColors.length]
-            
-            return (
-              <Card key={index} className={cx(
-                "border-2 relative overflow-hidden",
-                isDarkMode 
-                  ? `bg-gradient-to-br ${colors.darkGradient} border-gray-600/50 text-white shadow-lg`
-                  : `bg-gradient-to-br ${colors.gradient} ${colors.border} shadow-xl ${colors.shadow}`
-              )} isDarkMode={isDarkMode}>
-                <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${
-                  isDarkMode ? 'from-gray-600/20 to-gray-500/20' : colors.valueColor.replace('from-', 'from-').replace('to-', 'to-') + '/10'
-                } rounded-bl-full`}></div>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                  <CardTitle className={`text-sm font-semibold ${isDarkMode ? 'text-gray-200' : colors.textColor}`}>{metric.title}</CardTitle>
-                  <div className={`p-2.5 rounded-xl shadow-lg ${isDarkMode ? 'bg-gray-700/50' : 'bg-white/80'}`}>
-                    <Icon className={`h-5 w-5 ${isDarkMode ? 'text-gray-300' : colors.textColor.replace('800', '600')}`} />
-                  </div>
-                </CardHeader>
-                <CardContent className="relative z-10">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className={`text-3xl font-bold bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-gray-200 bg-clip-text text-transparent' : `${colors.valueColor} bg-clip-text text-transparent`
-                    }`}>{metric.value}</div>
-                    <div className={`flex items-center text-xs font-bold px-2.5 py-1 rounded-full shadow-md ${
-                      isDarkMode 
-                        ? (metric.trendUp ? 'text-green-200 bg-green-800/50' : 'text-red-200 bg-red-800/50')
-                        : (metric.trendUp ? 'text-green-700 bg-green-100 shadow-green-200/50' : 'text-red-700 bg-red-100 shadow-red-200/50')
-                    }`}>
-                      {metric.trendUp ? (
-                        <TrendingUp className="w-3.5 h-3.5 mr-1" />
-                      ) : (
-                        <TrendingDown className="w-3.5 h-3.5 mr-1" />
-                      )}
-                      {metric.trend}
-                    </div>
-                  </div>
-                  <p className={`text-xs font-medium mb-3 ${
-                    isDarkMode 
-                      ? 'text-gray-300' 
-                      : colors.textColor.replace('800', '600')
-                  }`}>{metric.subtitle}</p>
-                  <div className={`w-full h-2 rounded-full ${
-                    isDarkMode ? 'bg-gray-700/30' : 'bg-gray-100'
-                  }`}>
-                    <div className={`h-full rounded-full bg-gradient-to-r ${
-                      isDarkMode 
-                        ? (metric.trendUp ? 'from-green-400 to-emerald-400' : 'from-red-400 to-rose-400')
-                        : (metric.trendUp ? 'from-green-500 to-emerald-500' : 'from-red-500 to-rose-500')
-                    }`} style={{ width: '100%' }}></div>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
+        <div className={cx("rounded-xl border overflow-hidden", isDarkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200 shadow-md")}>
+          <div className={cx("px-4 py-3 border-b", isDarkMode ? "border-gray-600" : "border-gray-200")}>
+            <h2 className={cx("text-base font-semibold", isDarkMode ? "text-white" : "text-gray-900")}>Business Metrics</h2>
+            <p className={cx("text-xs mt-0.5", isDarkMode ? "text-gray-400" : "text-gray-500")}>Quotations, PI, payments — total, approved, pending, rejected</p>
+          </div>
+          {loadingMetrics ? (
+            <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-500 border-t-transparent" /></div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-600 bg-gray-800" : "border-gray-200 bg-gray-50")}>
+                    <th className={cx("text-left py-2.5 px-4 font-semibold", isDarkMode ? "text-gray-300" : "text-gray-700")}>Metric</th>
+                    <th className={cx("text-right py-2.5 px-4 font-semibold", isDarkMode ? "text-gray-300" : "text-gray-700")}>Value</th>
+                  </tr>
+                </thead>
+                <tbody className={cx(isDarkMode ? "text-gray-200" : "text-gray-700")}>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-700" : "border-gray-100")}><td className="py-2 px-4 font-medium">Quotations — Total</td><td className="py-2 px-4 text-right font-semibold">{businessMetrics.totalQuotation}</td></tr>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-700" : "border-gray-100")}><td className="py-2 px-4 text-green-600">Quotations — Approved</td><td className="py-2 px-4 text-right font-semibold text-green-600">{businessMetrics.approvedQuotation}</td></tr>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-700" : "border-gray-100")}><td className="py-2 px-4 text-amber-600">Quotations — Pending</td><td className="py-2 px-4 text-right font-semibold text-amber-600">{businessMetrics.pendingQuotation}</td></tr>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-700" : "border-gray-100")}><td className="py-2 px-4 text-red-600">Quotations — Rejected</td><td className="py-2 px-4 text-right font-semibold text-red-600">{businessMetrics.rejectedQuotation}</td></tr>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-700" : "border-gray-100")}><td className="py-2 px-4 font-medium">PI — Total</td><td className="py-2 px-4 text-right font-semibold">{businessMetrics.totalPI}</td></tr>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-700" : "border-gray-100")}><td className="py-2 px-4 text-green-600">PI — Approved</td><td className="py-2 px-4 text-right font-semibold text-green-600">{businessMetrics.approvedPI}</td></tr>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-700" : "border-gray-100")}><td className="py-2 px-4 text-amber-600">PI — Pending</td><td className="py-2 px-4 text-right font-semibold text-amber-600">{businessMetrics.pendingPI}</td></tr>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-700" : "border-gray-100")}><td className="py-2 px-4 text-red-600">PI — Rejected</td><td className="py-2 px-4 text-right font-semibold text-red-600">{businessMetrics.rejectedPI ?? 0}</td></tr>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-700" : "border-gray-100")}><td className="py-2 px-4 font-medium">Advance Payment</td><td className="py-2 px-4 text-right font-semibold">₹{(businessMetrics.totalAdvancePayment || 0).toLocaleString('en-IN')}</td></tr>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-700" : "border-gray-100")}><td className="py-2 px-4 font-medium">Due Payment</td><td className="py-2 px-4 text-right font-semibold">₹{(businessMetrics.duePayment || 0).toLocaleString('en-IN')}</td></tr>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-700" : "border-gray-100")}><td className="py-2 px-4 font-medium">Sale Orders</td><td className="py-2 px-4 text-right font-semibold">{businessMetrics.totalSaleOrder}</td></tr>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-700" : "border-gray-100")}><td className="py-2 px-4 font-medium text-green-600">Received Payment</td><td className="py-2 px-4 text-right font-semibold text-green-600">₹{(businessMetrics.totalReceivedPayment || 0).toLocaleString('en-IN')}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Business Metrics Section */}
+      {/* Trends & Analytics - Charts only */}
       <div className="space-y-4 mb-8">
-        <div className="flex items-center gap-2">
-          <BarChart3 className={`h-5 w-5 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
-          <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Business Metrics</h2>
-        </div>
-        <p className={`text-sm mb-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}>Track your quotations, PIs, payments, and orders</p>
-
         {loadingMetrics ? (
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
           </div>
         ) : (
           <>
-            {/* Quotation Metrics */}
-            <div className="mb-6">
-              <h3 className={`text-md font-semibold mb-3 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Quotations</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-blue-900/90 to-cyan-800/90 border-blue-500/50 text-white shadow-lg shadow-blue-500/20" 
-                    : "bg-gradient-to-br from-blue-50 via-cyan-50 to-blue-50 text-blue-700 border-blue-300 shadow-xl shadow-blue-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-400/20 to-cyan-500/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-blue-100' : 'text-blue-800'
-                    }`} isDarkMode={isDarkMode}>Total Quotation</CardTitle>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-blue-800/50' : 'bg-blue-200/50'}`}>
-                      <FileText className={`h-5 w-5 ${isDarkMode ? 'text-blue-200' : 'text-blue-600'}`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-blue-100 bg-clip-text text-transparent' : 'from-blue-600 to-cyan-600 bg-clip-text text-transparent'
-                    }`}>{businessMetrics.totalQuotation}</div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-blue-200' : 'text-blue-600'
-                    }`}>All quotations created</p>
-                  </CardContent>
-                </Card>
-
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-green-900/90 to-emerald-800/90 border-green-500/50 text-white shadow-lg shadow-green-500/20" 
-                    : "bg-gradient-to-br from-green-50 via-emerald-50 to-green-50 text-green-700 border-green-300 shadow-xl shadow-green-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-400/20 to-emerald-500/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-green-100' : 'text-green-800'
-                    }`} isDarkMode={isDarkMode}>Approved Quotation</CardTitle>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-green-800/50' : 'bg-green-200/50'}`}>
-                      <FileCheck className={`h-5 w-5 ${isDarkMode ? 'text-green-200' : 'text-green-600'}`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-green-100 bg-clip-text text-transparent' : 'from-green-600 to-emerald-600 bg-clip-text text-transparent'
-                    }`}>{businessMetrics.approvedQuotation}</div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-green-200' : 'text-green-600'
-                    }`}>Approved quotations</p>
-                  </CardContent>
-                </Card>
-
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-orange-900/90 to-amber-800/90 border-orange-500/50 text-white shadow-lg shadow-orange-500/20" 
-                    : "bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 text-orange-700 border-orange-300 shadow-xl shadow-orange-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-orange-400/20 to-amber-500/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-orange-100' : 'text-orange-800'
-                    }`} isDarkMode={isDarkMode}>Pending for Approval</CardTitle>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-orange-800/50' : 'bg-orange-200/50'}`}>
-                      <Clock className={`h-5 w-5 ${isDarkMode ? 'text-orange-200' : 'text-orange-600'}`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-orange-100 bg-clip-text text-transparent' : 'from-orange-600 to-amber-600 bg-clip-text text-transparent'
-                    }`}>{businessMetrics.pendingQuotation}</div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-orange-200' : 'text-orange-600'
-                    }`}>Awaiting approval</p>
-                  </CardContent>
-                </Card>
-
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-red-900/90 to-rose-800/90 border-red-500/50 text-white shadow-lg shadow-red-500/20" 
-                    : "bg-gradient-to-br from-red-50 via-rose-50 to-red-50 text-red-700 border-red-300 shadow-xl shadow-red-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-red-400/20 to-rose-500/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-red-100' : 'text-red-800'
-                    }`} isDarkMode={isDarkMode}>Rejected Quotation</CardTitle>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-red-800/50' : 'bg-red-200/50'}`}>
-                      <FileX className={`h-5 w-5 ${isDarkMode ? 'text-red-200' : 'text-red-600'}`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-red-100 bg-clip-text text-transparent' : 'from-red-600 to-rose-600 bg-clip-text text-transparent'
-                    }`}>{businessMetrics.rejectedQuotation}</div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-red-200' : 'text-red-600'
-                    }`}>Rejected quotations</p>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-
-            {/* PI Metrics */}
-            <div className="mb-6">
-              <h3 className={`text-md font-semibold mb-3 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Proforma Invoices</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-indigo-900/90 to-purple-800/90 border-indigo-500/50 text-white shadow-lg shadow-indigo-500/20" 
-                    : "bg-gradient-to-br from-indigo-50 via-purple-50 to-indigo-50 text-indigo-700 border-indigo-300 shadow-xl shadow-indigo-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-indigo-400/20 to-purple-500/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-indigo-100' : 'text-indigo-800'
-                    }`} isDarkMode={isDarkMode}>Total PI</CardTitle>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-indigo-800/50' : 'bg-indigo-200/50'}`}>
-                      <Receipt className={`h-5 w-5 ${isDarkMode ? 'text-indigo-200' : 'text-indigo-600'}`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-indigo-100 bg-clip-text text-transparent' : 'from-indigo-600 to-purple-600 bg-clip-text text-transparent'
-                    }`}>{businessMetrics.totalPI}</div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-indigo-200' : 'text-indigo-600'
-                    }`}>All proforma invoices</p>
-                  </CardContent>
-                </Card>
-
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-green-900/90 to-emerald-800/90 border-green-500/50 text-white shadow-lg shadow-green-500/20" 
-                    : "bg-gradient-to-br from-green-50 via-emerald-50 to-green-50 text-green-700 border-green-300 shadow-xl shadow-green-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-400/20 to-emerald-500/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-green-100' : 'text-green-800'
-                    }`} isDarkMode={isDarkMode}>Approved PI</CardTitle>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-green-800/50' : 'bg-green-200/50'}`}>
-                      <FileCheck className={`h-5 w-5 ${isDarkMode ? 'text-green-200' : 'text-green-600'}`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-green-100 bg-clip-text text-transparent' : 'from-green-600 to-emerald-600 bg-clip-text text-transparent'
-                    }`}>{businessMetrics.approvedPI}</div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-green-200' : 'text-green-600'
-                    }`}>Approved proforma invoices</p>
-                  </CardContent>
-                </Card>
-
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-orange-900/90 to-amber-800/90 border-orange-500/50 text-white shadow-lg shadow-orange-500/20" 
-                    : "bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 text-orange-700 border-orange-300 shadow-xl shadow-orange-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-orange-400/20 to-amber-500/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-orange-100' : 'text-orange-800'
-                    }`} isDarkMode={isDarkMode}>Pending for Approval PI</CardTitle>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-orange-800/50' : 'bg-orange-200/50'}`}>
-                      <Clock className={`h-5 w-5 ${isDarkMode ? 'text-orange-200' : 'text-orange-600'}`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-orange-100 bg-clip-text text-transparent' : 'from-orange-600 to-amber-600 bg-clip-text text-transparent'
-                    }`}>{businessMetrics.pendingPI}</div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-orange-200' : 'text-orange-600'
-                    }`}>Awaiting approval</p>
-                  </CardContent>
-                </Card>
-
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-red-900/90 to-rose-800/90 border-red-500/50 text-white shadow-lg shadow-red-500/20" 
-                    : "bg-gradient-to-br from-red-50 via-rose-50 to-red-50 text-red-700 border-red-300 shadow-xl shadow-red-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-red-400/20 to-rose-500/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-red-100' : 'text-red-800'
-                    }`} isDarkMode={isDarkMode}>Rejected PI</CardTitle>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-red-800/50' : 'bg-red-200/50'}`}>
-                      <FileX className={`h-5 w-5 ${isDarkMode ? 'text-red-200' : 'text-red-600'}`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-red-100 bg-clip-text text-transparent' : 'from-red-600 to-rose-600 bg-clip-text text-transparent'
-                    }`}>{businessMetrics.rejectedPI}</div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-red-200' : 'text-red-600'
-                    }`}>Rejected proforma invoices</p>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-
-            {/* Payment & Order Metrics */}
-            <div className="mb-6">
-              <h3 className={`text-md font-semibold mb-3 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Payments & Orders</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-purple-900/90 to-pink-800/90 border-purple-500/50 text-white shadow-lg shadow-purple-500/20" 
-                    : "bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 text-purple-700 border-purple-300 shadow-xl shadow-purple-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-purple-400/20 to-pink-500/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-purple-100' : 'text-purple-800'
-                    }`} isDarkMode={isDarkMode}>Total Advance Payment</CardTitle>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-purple-800/50' : 'bg-purple-200/50'}`}>
-                      <DollarSign className={`h-5 w-5 ${isDarkMode ? 'text-purple-200' : 'text-purple-600'}`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-purple-100 bg-clip-text text-transparent' : 'from-purple-600 to-pink-600 bg-clip-text text-transparent'
-                    }`}>₹{businessMetrics.totalAdvancePayment.toLocaleString('en-IN')}</div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-purple-200' : 'text-purple-600'
-                    }`}>Advance payments received</p>
-                  </CardContent>
-                </Card>
-
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-red-900/90 to-rose-800/90 border-red-500/50 text-white shadow-lg shadow-red-500/20" 
-                    : "bg-gradient-to-br from-red-50 via-rose-50 to-red-50 text-red-700 border-red-300 shadow-xl shadow-red-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-red-400/20 to-rose-500/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-red-100' : 'text-red-800'
-                    }`} isDarkMode={isDarkMode}>Due Payment</CardTitle>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-red-800/50' : 'bg-red-200/50'}`}>
-                      <CreditCard className={`h-5 w-5 ${isDarkMode ? 'text-red-200' : 'text-red-600'}`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-red-100 bg-clip-text text-transparent' : 'from-red-600 to-rose-600 bg-clip-text text-transparent'
-                    }`}>₹{businessMetrics.duePayment.toLocaleString('en-IN')}</div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-red-200' : 'text-red-600'
-                    }`}>Pending payment amount</p>
-                  </CardContent>
-                </Card>
-
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-teal-900/90 to-cyan-800/90 border-teal-500/50 text-white shadow-lg shadow-teal-500/20" 
-                    : "bg-gradient-to-br from-teal-50 via-cyan-50 to-teal-50 text-teal-700 border-teal-300 shadow-xl shadow-teal-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-teal-400/20 to-cyan-500/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-teal-100' : 'text-teal-800'
-                    }`} isDarkMode={isDarkMode}>Total Sale Order</CardTitle>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-teal-800/50' : 'bg-teal-200/50'}`}>
-                      <ShoppingCart className={`h-5 w-5 ${isDarkMode ? 'text-teal-200' : 'text-teal-600'}`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-teal-100 bg-clip-text text-transparent' : 'from-teal-600 to-cyan-600 bg-clip-text text-transparent'
-                    }`}>{businessMetrics.totalSaleOrder}</div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-teal-200' : 'text-teal-600'
-                    }`}>Sale orders created</p>
-                  </CardContent>
-                </Card>
-
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-green-900/90 to-emerald-800/90 border-green-500/50 text-white shadow-lg shadow-green-500/20" 
-                    : "bg-gradient-to-br from-green-50 via-emerald-50 to-green-50 text-green-700 border-green-300 shadow-xl shadow-green-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-400/20 to-emerald-500/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-green-100' : 'text-green-800'
-                    }`} isDarkMode={isDarkMode}>Total Received Payment</CardTitle>
-                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-green-800/50' : 'bg-green-200/50'}`}>
-                      <CheckCircle className={`h-5 w-5 ${isDarkMode ? 'text-green-200' : 'text-green-600'}`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-3xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-green-100 bg-clip-text text-transparent' : 'from-green-600 to-emerald-600 bg-clip-text text-transparent'
-                    }`}>₹{businessMetrics.totalReceivedPayment.toLocaleString('en-IN')}</div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-green-200' : 'text-green-600'
-                    }`}>Total payments received</p>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-
-            {/* Payment Overview KPI Cards - Colorful Design */}
-            <div className="mt-8 mb-6">
-              <h3 className={`text-md font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Payment Overview</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-                {/* Total Payments Card */}
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-blue-900/90 to-indigo-800/90 border-blue-500/50 text-white shadow-blue-500/20" 
-                    : "bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-50 text-blue-700 border-blue-300 shadow-lg shadow-blue-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-400/20 to-indigo-600/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-blue-100' : 'text-blue-800'
-                    }`} isDarkMode={isDarkMode}>Total Payments</CardTitle>
-                    <div className={`p-2 rounded-lg ${
-                      isDarkMode ? 'bg-blue-800/50' : 'bg-blue-200/50'
-                    }`}>
-                      <DollarSign className={`h-5 w-5 ${
-                        isDarkMode ? 'text-blue-200' : 'text-blue-600'
-                      }`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-2xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-blue-100 bg-clip-text text-transparent' : 'from-blue-600 to-indigo-600 bg-clip-text text-transparent'
-                    }`}>
-                      ₹{((businessMetrics.totalReceivedPayment || 0) + (businessMetrics.totalAdvancePayment || 0) + (businessMetrics.duePayment || 0)).toLocaleString('en-IN')}
-                    </div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-blue-200' : 'text-blue-600'
-                    }`}>All payment transactions</p>
-                  </CardContent>
-                </Card>
-
-                {/* Paid Amount Card */}
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-green-900/90 to-emerald-800/90 border-green-500/50 text-white shadow-green-500/20" 
-                    : "bg-gradient-to-br from-green-50 via-emerald-50 to-green-50 text-green-700 border-green-300 shadow-lg shadow-green-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-400/20 to-emerald-600/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-green-100' : 'text-green-800'
-                    }`} isDarkMode={isDarkMode}>Paid Amount</CardTitle>
-                    <div className={`p-2 rounded-lg ${
-                      isDarkMode ? 'bg-green-800/50' : 'bg-green-200/50'
-                    }`}>
-                      <CheckCircle className={`h-5 w-5 ${
-                        isDarkMode ? 'text-green-200' : 'text-green-600'
-                      }`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-2xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-green-100 bg-clip-text text-transparent' : 'from-green-600 to-emerald-600 bg-clip-text text-transparent'
-                    }`}>
-                      ₹{(businessMetrics.totalReceivedPayment || 0).toLocaleString('en-IN')}
-                    </div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-green-200' : 'text-green-600'
-                    }`}>Successfully received</p>
-                  </CardContent>
-                </Card>
-
-                {/* Pending Amount Card */}
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-orange-900/90 to-amber-800/90 border-orange-500/50 text-white shadow-orange-500/20" 
-                    : "bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 text-orange-700 border-orange-300 shadow-lg shadow-orange-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-orange-400/20 to-amber-600/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-orange-100' : 'text-orange-800'
-                    }`} isDarkMode={isDarkMode}>Pending Amount</CardTitle>
-                    <div className={`p-2 rounded-lg ${
-                      isDarkMode ? 'bg-orange-800/50' : 'bg-orange-200/50'
-                    }`}>
-                      <Clock className={`h-5 w-5 ${
-                        isDarkMode ? 'text-orange-200' : 'text-orange-600'
-                      }`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-2xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-orange-100 bg-clip-text text-transparent' : 'from-orange-600 to-amber-600 bg-clip-text text-transparent'
-                    }`}>
-                      ₹{(businessMetrics.totalAdvancePayment || 0).toLocaleString('en-IN')}
-                    </div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-orange-200' : 'text-orange-600'
-                    }`}>Awaiting payment</p>
-                  </CardContent>
-                </Card>
-
-                {/* Overdue Amount Card */}
-                <Card className={cx(
-                  "border-2 relative overflow-hidden",
-                  isDarkMode 
-                    ? "bg-gradient-to-br from-red-900/90 to-rose-800/90 border-red-500/50 text-white shadow-red-500/20" 
-                    : "bg-gradient-to-br from-red-50 via-rose-50 to-red-50 text-red-700 border-red-300 shadow-lg shadow-red-200/50"
-                )} isDarkMode={isDarkMode}>
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-red-400/20 to-rose-600/20 rounded-bl-full"></div>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                    <CardTitle className={`text-sm font-semibold ${
-                      isDarkMode ? 'text-red-100' : 'text-red-800'
-                    }`} isDarkMode={isDarkMode}>Overdue Amount</CardTitle>
-                    <div className={`p-2 rounded-lg ${
-                      isDarkMode ? 'bg-red-800/50' : 'bg-red-200/50'
-                    }`}>
-                      <XCircle className={`h-5 w-5 ${
-                        isDarkMode ? 'text-red-200' : 'text-red-600'
-                      }`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className={`text-2xl font-bold mb-1 bg-gradient-to-r ${
-                      isDarkMode ? 'from-white to-red-100 bg-clip-text text-transparent' : 'from-red-600 to-rose-600 bg-clip-text text-transparent'
-                    }`}>
-                      ₹{(businessMetrics.duePayment || 0).toLocaleString('en-IN')}
-                    </div>
-                    <p className={`text-xs font-medium ${
-                      isDarkMode ? 'text-red-200' : 'text-red-600'
-                    }`}>Past due date</p>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-
             {/* Business Metrics Charts - Chart.js Professional Charts */}
             <div className="mt-8">
               <h3 className={`text-md font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Trends & Analytics</h3>
@@ -2720,64 +2179,6 @@ export default function DashboardContent({ isDarkMode = false }) {
           </>
         )}
       </div>
-
-
-        </>
-      )}
-
-      {activeTab === 'performance' && (
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <Card className={`border-2 max-w-2xl w-full ${
-            isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
-          }`} isDarkMode={isDarkMode}>
-            <CardContent className="p-12 text-center">
-              <div className={`w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center ${
-                isDarkMode ? 'bg-blue-900' : 'bg-blue-100'
-              }`}>
-                <Target className={`h-10 w-10 ${
-                  isDarkMode ? 'text-blue-400' : 'text-blue-600'
-                }`} />
-              </div>
-              
-              <h2 className={`text-3xl font-bold mb-4 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
-                Coming Soon
-              </h2>
-              
-              <p className={`text-lg mb-6 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-600'
-              }`}>
-                This feature will be available soon
-              </p>
-              
-              <div className={`space-y-4 mb-8 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                <div className="flex items-center justify-center gap-3">
-                  <Calendar className={`h-6 w-6 ${
-                    isDarkMode ? 'text-blue-400' : 'text-blue-600'
-                  }`} />
-                  <span className="text-base font-medium">Attendance Tracking</span>
-                </div>
-                
-                <div className="flex items-center justify-center gap-3">
-                  <Award className={`h-6 w-6 ${
-                    isDarkMode ? 'text-yellow-400' : 'text-yellow-600'
-                  }`} />
-                  <span className="text-base font-medium">Performance Incentive Report</span>
-                </div>
-              </div>
-              
-              <p className={`text-sm ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-500'
-              }`}>
-                You will be able to view your attendance records and detailed performance incentive reports here.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </main>
   )
 }

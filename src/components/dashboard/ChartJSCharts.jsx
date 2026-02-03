@@ -469,6 +469,80 @@ export const LeadConversionFunnelChart = ({ data, isDarkMode = false }) => {
   return <Bar data={chartData} options={options} />;
 };
 
+const PIPELINE_STAGE_COLORS = [
+  '#f59e0b', '#3b82f6', '#22c55e', '#8b5cf6', '#10b981', '#6b7280', '#ef4444',
+  '#6366f1', '#eab308', '#64748b'
+];
+
+export const SalesPipelineDonutChart = ({ data, isDarkMode = false }) => {
+  let labels = data?.labels || [];
+  let values = data?.values || [];
+  if (values.length === 0) {
+    labels = ['No leads'];
+    values = [1];
+  }
+  const total = values.reduce((s, v) => s + v, 0);
+
+  const chartData = {
+    labels,
+    datasets: [
+      {
+        data: values,
+        backgroundColor: PIPELINE_STAGE_COLORS.slice(0, labels.length),
+        borderWidth: 2,
+        borderColor: isDarkMode ? '#1f2937' : '#ffffff',
+        hoverOffset: 4
+      }
+    ]
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: true,
+    aspectRatio: 1,
+    layout: {
+      padding: { top: 4, bottom: 4, left: 4, right: 4 }
+    },
+    cutout: '65%',
+    plugins: {
+      legend: {
+        display: true,
+        position: 'bottom',
+        labels: {
+          usePointStyle: true,
+          padding: 10,
+          font: { size: 11, family: "'Inter', sans-serif" },
+          color: isDarkMode ? '#e5e7eb' : '#374151'
+        }
+      },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const v = ctx.raw || 0;
+            const pct = total > 0 ? ((v / total) * 100).toFixed(1) : 0;
+            return `${ctx.label}: ${v} (${pct}%)`;
+          }
+        },
+        backgroundColor: isDarkMode ? 'rgba(31, 41, 55, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+        titleColor: isDarkMode ? '#f3f4f6' : '#111827',
+        bodyColor: isDarkMode ? '#d1d5db' : '#374151',
+        borderColor: isDarkMode ? '#4b5563' : '#e5e7eb',
+        borderWidth: 1,
+        padding: 10,
+        cornerRadius: 8
+      }
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 180, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start' }}>
+      <div style={{ width: 180, height: 180, flexShrink: 0 }}>
+        <Doughnut data={chartData} options={options} />
+      </div>
+    </div>
+  );
+};
+
 // 12. Sales vs Target - Bar Chart
 export const SalesVsTargetChart = ({ data, isDarkMode = false }) => {
   const chartData = {

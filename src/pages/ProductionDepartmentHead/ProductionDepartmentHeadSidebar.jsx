@@ -6,7 +6,6 @@ import {
   Target,
   Menu,
   X,
-  LogOut,
   TrendingUp,
   Package,
   Settings,
@@ -153,17 +152,6 @@ const ProductionDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView }
         >
           <HelpCircle className="w-5 h-5" />
           {isExpanded && <span className="text-sm font-medium">Support</span>}
-        </button>
-      </div>
-
-      {/* Logout Button */}
-      <div className="p-4 border-t border-gray-200">
-        <button 
-          onClick={onLogout}
-          className="w-full flex items-center space-x-3 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-        >
-          <LogOut className="w-5 h-5" />
-          {isExpanded && <span className="text-sm font-medium">Logout</span>}
         </button>
       </div>
     </div>

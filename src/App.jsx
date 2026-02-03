@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { AuthProvider } from './context/AuthContext'
 import { useAuth } from './hooks/useAuth'
-import { useFirebasePush } from './hooks/useFirebasePush'
 import LoginPage from './pages/Auth/LoginPage.jsx'
 import AnocabLanding from './pages/landingpage.jsx'
 import SupportPage from './pages/support.jsx'
@@ -24,13 +23,12 @@ import ItLayout from './pages/it/ItLayout.jsx'
 import ItDashboard from './pages/it/itdashboard.jsx'
 import { getUserTypeForRole } from './constants/auth'
 import RoleGuard from './components/RoleGuard'
+import NotificationPrompt from './components/NotificationPrompt'
 
 function AppContent() {
   const { isAuthenticated, user, logout } = useAuth()
   const [activeView, setActiveView] = useState('dashboard')
   const [currentPath, setCurrentPath] = useState(window.location.pathname)
-  
-  useFirebasePush()
   
   useEffect(() => {
     const handleLocationChange = () => {
@@ -102,6 +100,7 @@ function AppContent() {
   
   return (
     <div className="App">
+      {shouldShowDashboard && <NotificationPrompt />}
       {shouldShowDashboard ? (
         userType === 'salesdepartmenthead' ? (
           <SalesDepartmentHeadLayout onLogout={handleLogout} activeView={activeView} setActiveView={setActiveView}>

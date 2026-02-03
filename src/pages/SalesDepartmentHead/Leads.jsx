@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { FileText, Package, RefreshCw, Filter, Phone, Clock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { FileText, Package, RefreshCw, Filter, Phone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Activity } from 'lucide-react';
 import AddCustomerModal from './AddCustomerModal';
 import QuotationPreview from '../../components/QuotationPreview';
 import PIPreview from '../../components/PIPreview';
@@ -7,6 +7,7 @@ import CustomerTimeline from '../../components/CustomerTimeline';
 import FilterBadges from '../../components/FilterBadges';
 import SearchBar from '../../components/SearchBar';
 import LeadTable from '../../components/LeadTable';
+import LeadFilters from '../../components/salesperson/LeadFilters';
 import ColumnFilterModal from '../../components/ColumnFilterModal';
 import EditLeadModal from '../../components/EditLeadModal';
 import AssignLeadModal from '../../components/AssignLeadModal';
@@ -17,14 +18,14 @@ import apiErrorHandler from '../../utils/ApiErrorHandler';
 import toastManager from '../../utils/ToastManager';
 import apiClient from '../../utils/apiClient';
 import { API_ENDPOINTS } from '../../api/admin_api/api';
-import { LeadsFilterService, IDMatcher } from '../../services/LeadsFilterService';
+import { LeadsFilterService } from '../../services/LeadsFilterService';
 import LeadService from '../../services/LeadService';
 import UserService from '../../services/UserService';
 import PIService from '../../services/PIService';
 import QuotationService from '../../services/QuotationService';
 import { generateQuotationPDF } from '../../utils/pdfUtils';
 import paymentService from '../../api/admin_api/paymentService';
-import { downloadCSVTemplate, parseCSV, formatDate as formatDateUtil, exportToExcel } from '../../utils/csvUtils';
+import { downloadCSVTemplate, parseCSV, exportToExcel } from '../../utils/csvUtils';
 import { getStatusBadge as getStatusBadgeUtil } from '../../utils/statusUtils';
 import { calculateAssignedCounts, getUnassignedLeadIds, filterLeads } from '../../utils/leadFilters';
 import { COMPANY_BRANCHES, DEFAULT_USER, DEFAULT_BRANCH } from '../../config/appConfig';
@@ -32,9 +33,7 @@ import { useAuth } from '../../hooks/useAuth';
 import CSVImportValidationService from '../../services/CSVImportValidationService';
 import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton';
 import EnquiryTable from '../../components/EnquiryTable';
-import reportService from '../../api/admin_api/reportService';
 import departmentHeadService from '../../api/admin_api/departmentHeadService';
-import { Users, Activity } from 'lucide-react';
 
 const LeadsSimplified = () => {
   const [activeTab, setActiveTab] = useState('leads');
@@ -120,8 +119,6 @@ const LeadsSimplified = () => {
   const [statusFilter, setStatusFilter] = useState({ type: null, status: null });
   const [assignmentFilter, setAssignmentFilter] = useState(null);
   const [filteredCustomerIds, setFilteredCustomerIds] = useState(new Set());
-  const [assignedSalespersonFilter, setAssignedSalespersonFilter] = useState('');
-  const [assignedTelecallerFilter, setAssignedTelecallerFilter] = useState('');
   const [columnFilters, setColumnFilters] = useState({
     customerId: '',
     customer: '',
@@ -151,6 +148,18 @@ const LeadsSimplified = () => {
   const [selectedLeadIds, setSelectedLeadIds] = useState([]);
   const [isAllSelected, setIsAllSelected] = useState(false);
   const [showColumnFilter, setShowColumnFilter] = useState(false);
+  
+  // Global Filter Panel States
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState({
+    tag: '', followUpStatus: '', salesStatus: '', state: '', leadSource: '', productType: '', dateFrom: '', dateTo: ''
+  });
+  const [enabledFilters, setEnabledFilters] = useState({
+    tag: false, followUpStatus: false, salesStatus: false, state: false, leadSource: false, productType: false, dateRange: false
+  });
+  const [sortBy, setSortBy] = useState('none');
+  const [sortOrder, setSortOrder] = useState('asc');
+  
   const [visibleColumns, setVisibleColumns] = useState({
     customerId: false,
     customer: true,
@@ -884,7 +893,7 @@ const LeadsSimplified = () => {
         // Only refresh all leads if filters are active
         const hasActiveFilters = statusFilter.type || assignmentFilter || 
           Object.values(columnFilters).some(v => v) || 
-          assignedSalespersonFilter || assignedTelecallerFilter;
+          Object.values(enabledFilters).some(Boolean);
         if (hasActiveFilters) {
           requestAllLeadsRefresh();
         }
@@ -1048,7 +1057,7 @@ const LeadsSimplified = () => {
     // Only refresh all leads if filters are active
     const hasActiveFilters = statusFilter.type || assignmentFilter || 
       Object.values(columnFilters).some(v => v) || 
-      assignedSalespersonFilter || assignedTelecallerFilter;
+      Object.values(enabledFilters).some(Boolean);
     if (hasActiveFilters) {
       requestAllLeadsRefresh();
     }
@@ -1078,7 +1087,7 @@ const LeadsSimplified = () => {
         await fetchLeads();
         const hasActiveFilters = statusFilter.type || assignmentFilter || 
           Object.values(columnFilters).some(v => v) || 
-          assignedSalespersonFilter || assignedTelecallerFilter;
+          Object.values(enabledFilters).some(Boolean);
         if (hasActiveFilters) {
           requestAllLeadsRefresh();
         }
@@ -1176,14 +1185,14 @@ const LeadsSimplified = () => {
   useEffect(() => {
     const hasActiveFilters = statusFilter.type || assignmentFilter || 
       Object.values(columnFilters).some(v => v) || 
-      assignedSalespersonFilter || assignedTelecallerFilter;
+      Object.values(enabledFilters).some(Boolean);
     
     // Only fetch all leads if filters are active or explicitly requested
     if (hasActiveFilters || allLeadsRefreshKey > 0) {
       loadAllLeadsForFilters(true).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allLeadsRefreshKey, statusFilter.type, assignmentFilter, assignedSalespersonFilter, assignedTelecallerFilter]);
+  }, [allLeadsRefreshKey, statusFilter.type, assignmentFilter, enabledFilters]);
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
@@ -1273,25 +1282,190 @@ const LeadsSimplified = () => {
     ? (allLeadsDataRef.current.length > 0 ? allLeadsDataRef.current : allLeadsData.length > 0 ? allLeadsData : []) 
     : leadsData;
 
+  // Get unique filter options for global filter panel
+  const getUniqueFilterOptions = useMemo(() => {
+    const cleanValue = (value) => {
+      if (!value) return null;
+      const trimmed = String(value).trim();
+      return trimmed && trimmed !== 'N/A' && trimmed !== 'null' && trimmed !== '' && trimmed.toLowerCase() !== 'n/a' ? trimmed : null;
+    };
+
+    const allData = allLeadsData.length > 0 ? allLeadsData : leadsData;
+    
+    // Extract products
+    const allProductValues = [];
+    allData.forEach(lead => {
+      const product = lead.productNames || lead.product_type || lead.productType || lead.productNamesText || '';
+      if (typeof product === 'string' && product.includes(',')) {
+        const splitProducts = product.split(',').map(p => cleanValue(p)).filter(Boolean);
+        allProductValues.push(...splitProducts);
+      } else {
+        const cleaned = cleanValue(product);
+        if (cleaned) allProductValues.push(cleaned);
+      }
+    });
+
+    return {
+      tags: [...new Set(allData.map(lead => cleanValue(lead.customerType || lead.category)).filter(Boolean))].sort(),
+      followUpStatuses: [...new Set(allData.map(lead => cleanValue(lead.followUpStatus || lead.connectedStatus || lead.telecallerStatus)).filter(Boolean))].sort(),
+      salesStatuses: [...new Set(allData.map(lead => cleanValue(lead.salesStatus)).filter(Boolean))].sort(),
+      states: [...new Set(allData.map(lead => cleanValue(lead.state)).filter(Boolean))].sort(),
+      leadSources: [...new Set(allData.map(lead => cleanValue(lead.leadSource)).filter(Boolean))].sort(),
+      products: [...new Set(allProductValues)].sort()
+    };
+  }, [allLeadsData, leadsData]);
+
+  // Global filter handlers
+  const handleAdvancedFilterChange = useCallback((filterKey, value) => {
+    setAdvancedFilters(prev => ({ ...prev, [filterKey]: value }));
+  }, []);
+
+  const toggleFilterSection = useCallback((filterKey) => {
+    setEnabledFilters(prev => ({ ...prev, [filterKey]: !prev[filterKey] }));
+    // Clear the filter value when disabling
+    if (enabledFilters[filterKey]) {
+      if (filterKey === 'dateRange') {
+        setAdvancedFilters(prev => ({ ...prev, dateFrom: '', dateTo: '' }));
+      } else {
+        setAdvancedFilters(prev => ({ ...prev, [filterKey]: '' }));
+      }
+    }
+  }, [enabledFilters]);
+
+  const clearAdvancedFilters = useCallback(() => {
+    setAdvancedFilters({
+      tag: '', followUpStatus: '', salesStatus: '', state: '', leadSource: '', productType: '', dateFrom: '', dateTo: ''
+    });
+    setEnabledFilters({
+      tag: false, followUpStatus: false, salesStatus: false, state: false, leadSource: false, productType: false, dateRange: false
+    });
+    setSortBy('none');
+    setSortOrder('asc');
+  }, []);
+
+  const handleSortChange = useCallback((newSortBy) => {
+    setSortBy(newSortBy);
+    if (newSortBy === 'none') {
+      setSortOrder('asc');
+    }
+  }, []);
+
+  const handleSortOrderChange = useCallback((newSortOrder) => {
+    setSortOrder(newSortOrder);
+  }, []);
+
   // OPTIMIZED: useMemo with async chunk processing for large arrays
   const filteredLeads = useMemo(() => {
     // For large arrays, use chunk processing (handled inside filterLeads)
     // For now, return synchronous result (filterLeads will handle chunking internally)
-    const result = filterLeads(
+    let result = filterLeads(
       activeLeadPool,
       debouncedSearchTerm, // Use debounced search instead of immediate
       assignmentFilter,
       statusFilter,
       filteredCustomerIds,
       isLeadAssigned,
-      assignedSalespersonFilter,
-      assignedTelecallerFilter,
+      '', // removed inline salesperson filter
+      '', // removed inline telecaller filter
       columnFilters
     );
-    // If result is a promise, we need to handle it differently
-    // For now, assuming filterLeads returns sync result for small arrays
+
+    const hasAdvancedFilters = Object.values(enabledFilters).some(Boolean);
+    if (hasAdvancedFilters) {
+      result = result.filter(lead => {
+        if (enabledFilters.tag && advancedFilters.tag) {
+          const leadTag = (lead.customerType || lead.category || '').toLowerCase();
+          if (!leadTag.includes(advancedFilters.tag.toLowerCase())) return false;
+        }
+        
+        if (enabledFilters.followUpStatus && advancedFilters.followUpStatus) {
+          const status = (lead.followUpStatus || lead.connectedStatus || lead.telecallerStatus || '').toLowerCase();
+          if (!status.includes(advancedFilters.followUpStatus.toLowerCase())) return false;
+        }
+        
+        // Sales Status filter
+        if (enabledFilters.salesStatus && advancedFilters.salesStatus) {
+          const status = (lead.salesStatus || '').toLowerCase();
+          if (!status.includes(advancedFilters.salesStatus.toLowerCase())) return false;
+        }
+        
+        // State filter
+        if (enabledFilters.state && advancedFilters.state) {
+          const state = (lead.state || '').toLowerCase();
+          if (!state.includes(advancedFilters.state.toLowerCase())) return false;
+        }
+        
+        // Lead Source filter
+        if (enabledFilters.leadSource && advancedFilters.leadSource) {
+          const source = (lead.leadSource || '').toLowerCase();
+          if (!source.includes(advancedFilters.leadSource.toLowerCase())) return false;
+        }
+        
+        // Product Type filter
+        if (enabledFilters.productType && advancedFilters.productType) {
+          const product = (lead.productNames || lead.product_type || lead.productNamesText || '').toLowerCase();
+          if (!product.includes(advancedFilters.productType.toLowerCase())) return false;
+        }
+        
+        // Date Range filter
+        if (enabledFilters.dateRange && (advancedFilters.dateFrom || advancedFilters.dateTo)) {
+          const leadDate = lead.createdAt ? new Date(lead.createdAt) : null;
+          if (leadDate) {
+            if (advancedFilters.dateFrom && leadDate < new Date(advancedFilters.dateFrom)) return false;
+            if (advancedFilters.dateTo && leadDate > new Date(advancedFilters.dateTo + 'T23:59:59')) return false;
+          }
+        }
+        
+        return true;
+      });
+    }
+
+    // Apply sorting
+    if (sortBy !== 'none') {
+      result = [...result].sort((a, b) => {
+        let valA, valB;
+        
+        switch (sortBy) {
+          case 'name':
+            valA = (a.customer || a.name || '').toLowerCase();
+            valB = (b.customer || b.name || '').toLowerCase();
+            break;
+          case 'business':
+            valA = (a.business || '').toLowerCase();
+            valB = (b.business || '').toLowerCase();
+            break;
+          case 'state':
+            valA = (a.state || '').toLowerCase();
+            valB = (b.state || '').toLowerCase();
+            break;
+          case 'salesStatus':
+            valA = (a.salesStatus || '').toLowerCase();
+            valB = (b.salesStatus || '').toLowerCase();
+            break;
+          case 'followUpStatus':
+            valA = (a.followUpStatus || a.connectedStatus || '').toLowerCase();
+            valB = (b.followUpStatus || b.connectedStatus || '').toLowerCase();
+            break;
+          case 'date':
+            valA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            valB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            break;
+          case 'phone':
+            valA = a.phone || '';
+            valB = b.phone || '';
+            break;
+          default:
+            return 0;
+        }
+        
+        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
     return result;
-  }, [activeLeadPool, debouncedSearchTerm, assignmentFilter, statusFilter, filteredCustomerIds, isLeadAssigned, assignedSalespersonFilter, assignedTelecallerFilter, columnFilters]);
+  }, [activeLeadPool, debouncedSearchTerm, assignmentFilter, statusFilter, filteredCustomerIds, isLeadAssigned, columnFilters, enabledFilters, advancedFilters, sortBy, sortOrder]);
 
   const uniqueFilteredLeads = useMemo(() => {
     const seen = new Set();
@@ -1375,8 +1549,6 @@ const LeadsSimplified = () => {
       // Show loading state immediately
       setLoadingAllLeads(true);
       
-      // OPTIMIZED: Load all leads and counts in parallel, but with proper loading states
-      // This ensures counts and filtering work on ALL leads (5000+), not just current page
       const [loadedLeads, countsResult] = await Promise.all([
         loadAllLeadsForFilters(true).catch(err => {
           console.error('Error loading all leads:', err);
@@ -1752,20 +1924,60 @@ const LeadsSimplified = () => {
 
       {activeTab === 'leads' && (
         <>
-      <SearchBar
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        onImportClick={() => setShowImportPopup(true)}
-        onAddCustomer={() => setShowAddCustomer(true)}
-        onAssignSelected={() => {
-          setAssigningLead(null);
-          setAssignForm({ salesperson: '', telecaller: '' });
-          setShowAssignModal(true);
-        }}
-        onBulkDelete={handleBulkDelete}
-        onExportExcel={handleExportToExcel}
-        selectedCount={selectedLeadIds.length}
-        onRefresh={handleManualRefresh}
+      <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex-1">
+          <SearchBar
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            onImportClick={() => setShowImportPopup(true)}
+            onAddCustomer={() => setShowAddCustomer(true)}
+            onAssignSelected={() => {
+              setAssigningLead(null);
+              setAssignForm({ salesperson: '', telecaller: '' });
+              setShowAssignModal(true);
+            }}
+            onBulkDelete={handleBulkDelete}
+            onExportExcel={handleExportToExcel}
+            selectedCount={selectedLeadIds.length}
+            onRefresh={handleManualRefresh}
+          />
+        </div>
+        
+        {/* Global Filter Button */}
+        <button
+          onClick={() => setShowFilterPanel(!showFilterPanel)}
+          className={`relative p-2.5 rounded-lg transition-all duration-200 flex items-center gap-2 ${
+            showFilterPanel 
+              ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg' 
+              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-blue-300'
+          }`}
+          title="Filter Leads"
+        >
+          <Filter className="w-5 h-5" />
+          {Object.values(enabledFilters).some(Boolean) && (
+            <span className="absolute -top-1 -right-1 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-gradient-to-r from-blue-500 to-purple-500 rounded-full shadow-lg">
+              {Object.values(enabledFilters).filter(Boolean).length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Global Filters Panel */}
+      <LeadFilters
+        showFilterPanel={showFilterPanel}
+        setShowFilterPanel={setShowFilterPanel}
+        enabledFilters={enabledFilters}
+        advancedFilters={advancedFilters}
+        getUniqueFilterOptions={getUniqueFilterOptions}
+        handleAdvancedFilterChange={handleAdvancedFilterChange}
+        toggleFilterSection={toggleFilterSection}
+        clearAdvancedFilters={clearAdvancedFilters}
+        sortBy={sortBy}
+        setSortBy={setSortBy}
+        sortOrder={sortOrder}
+        setSortOrder={setSortOrder}
+        handleSortChange={handleSortChange}
+        handleSortOrderChange={handleSortOrderChange}
       />
 
       <FilterBadges
@@ -1799,8 +2011,8 @@ const LeadsSimplified = () => {
           setStatusFilter({ type: null, status: null });
           setAssignmentFilter(null);
           setFilteredCustomerIds(new Set());
-          setAssignedSalespersonFilter('');
-          setAssignedTelecallerFilter('');
+          // Clear global filters
+          clearAdvancedFilters();
           setColumnFilters({
             customerId: '',
             customer: '',
@@ -1845,10 +2057,6 @@ const LeadsSimplified = () => {
         showCustomerTimeline={showCustomerTimeline}
         setShowColumnFilter={setShowColumnFilter}
         allLeadsData={allLeadsData}
-        assignedSalespersonFilter={assignedSalespersonFilter}
-        assignedTelecallerFilter={assignedTelecallerFilter}
-        onAssignedSalespersonFilterChange={setAssignedSalespersonFilter}
-        onAssignedTelecallerFilterChange={setAssignedTelecallerFilter}
         usernames={usernames}
         columnFilters={columnFilters}
         onColumnFilterChange={(key, value) => setColumnFilters(prev => ({ ...prev, [key]: value }))}

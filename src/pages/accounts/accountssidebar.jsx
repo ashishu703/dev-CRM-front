@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart3, CreditCard, LogOut, Shield, HelpCircle, Menu, X, DollarSign } from 'lucide-react';
+import { BarChart3, CreditCard, Shield, HelpCircle, Menu, X, DollarSign } from 'lucide-react';
 
 const menuItems = [
   {
@@ -115,18 +115,6 @@ const AccountsSidebar = ({ activeView, setActiveView, onLogout, userType = 'acco
         </button>
       </div>
 
-      <div className="px-4 py-5 border-t border-slate-200">
-        <button
-          onClick={() => {
-            setIsMobileOpen(false);
-            onLogout();
-          }}
-          className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white py-2.5 rounded-lg hover:bg-slate-800 transition"
-        >
-          <LogOut className="w-4 h-4" />
-          Logout
-        </button>
-      </div>
     </aside>
     </>
   );
