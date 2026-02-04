@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Download, User, DollarSign, Clock, Calendar, Link, Copy, Eye, MoreHorizontal, CreditCard, AlertCircle, CheckCircle, XCircle, ChevronDown, Edit, Package, RotateCw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Building2, Users, Hash, MapPin, FileText, ShoppingCart, Truck, Settings } from 'lucide-react';
+import { Search, Filter, Download, User, DollarSign, Clock, Calendar, Link, Copy, Eye, MoreHorizontal, CreditCard, AlertCircle, CheckCircle, XCircle, ChevronDown, Edit, Package, RotateCw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Building2, Users, Hash, MapPin, FileText, ShoppingCart, Truck, Settings, BarChart3, RotateCcw } from 'lucide-react';
 import paymentService from '../../api/admin_api/paymentService';
 import departmentHeadService from '../../api/admin_api/departmentHeadService';
 import PaymentInfoTable from '../../components/payment/PaymentInfoTable';
 import { SkeletonTable, SkeletonStatCard } from '../../components/dashboard/DashboardSkeleton';
 
+const PAYMENT_INFO_TABS = [
+  { id: 'payments', label: 'Payments', icon: CreditCard },
+  { id: 'payment-status', label: 'Payment Status', icon: BarChart3 }
+];
+
 const PaymentInfo = () => {
+  const [activeTab, setActiveTab] = useState('payments');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
@@ -35,6 +41,97 @@ const PaymentInfo = () => {
     total: 0,
     pages: 0
   });
+
+  // Payment Status tab: by lead (salesperson, lead name, total/paid/pending)
+  const [paymentStatusRows, setPaymentStatusRows] = useState([]);
+  const [paymentStatusLoading, setPaymentStatusLoading] = useState(false);
+  const [paymentStatusSearch, setPaymentStatusSearch] = useState('');
+  const [showPaymentStatusFilter, setShowPaymentStatusFilter] = useState(false);
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState({
+    department_head: '',
+    salesperson: '',
+    lead_name: '',
+    start_date: '',
+    end_date: ''
+  });
+  const [paymentStatusOptions, setPaymentStatusOptions] = useState({
+    departmentHeads: [],
+    salespersons: []
+  });
+  const [showLeadDetailsModal, setShowLeadDetailsModal] = useState(false);
+  const [leadDetailsData, setLeadDetailsData] = useState(null);
+  const [leadDetailsLoading, setLeadDetailsLoading] = useState(false);
+  const [selectedLeadName, setSelectedLeadName] = useState('');
+
+  const openLeadDetails = async (row) => {
+    if (row.lead_id == null) return;
+    setSelectedLeadName(row.lead_name || 'Lead');
+    setShowLeadDetailsModal(true);
+    setLeadDetailsData(null);
+    setLeadDetailsLoading(true);
+    try {
+      const res = await paymentService.getLeadDetails(row.lead_id);
+      if (res?.success && res?.data) setLeadDetailsData(res.data);
+      else setLeadDetailsData(null);
+    } catch {
+      setLeadDetailsData(null);
+    } finally {
+      setLeadDetailsLoading(false);
+    }
+  };
+
+  const fetchPaymentStatus = async (filterOverrides = null) => {
+    setPaymentStatusLoading(true);
+    const filters = filterOverrides !== null ? filterOverrides : paymentStatusFilter;
+    const params = {};
+    if (filters.department_head) params.department_head = filters.department_head;
+    if (filters.salesperson) params.salesperson = filters.salesperson;
+    if (filters.lead_name) params.lead_name = filters.lead_name;
+    if (filters.start_date) params.start_date = filters.start_date;
+    if (filters.end_date) params.end_date = filters.end_date;
+    try {
+      const res = await paymentService.getPaymentStatusByLead(params);
+      if (res?.success && Array.isArray(res?.data)) {
+        setPaymentStatusRows(res.data);
+        if (Object.keys(params).length === 0) {
+          const dhSet = new Set();
+          const spSet = new Set();
+          res.data.forEach((r) => {
+            if (r.department_head_name) dhSet.add(r.department_head_name);
+            if (r.salesperson_name) spSet.add(r.salesperson_name);
+          });
+          setPaymentStatusOptions({
+            departmentHeads: [...dhSet].sort(),
+            salespersons: [...spSet].sort()
+          });
+        }
+      } else {
+        setPaymentStatusRows([]);
+      }
+    } catch (e) {
+      setPaymentStatusRows([]);
+    } finally {
+      setPaymentStatusLoading(false);
+    }
+  };
+
+  const applyPaymentStatusFilter = () => {
+    setShowPaymentStatusFilter(false);
+    fetchPaymentStatus();
+  };
+
+  const clearPaymentStatusFilter = () => {
+    const empty = { department_head: '', salesperson: '', lead_name: '', start_date: '', end_date: '' };
+    setPaymentStatusFilter(empty);
+    setShowPaymentStatusFilter(false);
+    fetchPaymentStatus(empty);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'payment-status') {
+      fetchPaymentStatus();
+    }
+  }, [activeTab]);
 
   // Fetch all leads to get company name and department type
   const fetchLeads = async () => {
@@ -505,7 +602,374 @@ const PaymentInfo = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6">
+        {PAYMENT_INFO_TABS.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all duration-200 ${
+                activeTab === tab.id
+                  ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg'
+                  : 'bg-white/90 border-2 border-gray-200 text-gray-700 hover:border-green-300 hover:bg-green-50/50'
+              }`}
+              style={{ fontFamily: 'Inter, sans-serif' }}
+            >
+              <Icon className="w-5 h-5" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Payment Status tab content */}
+      {activeTab === 'payment-status' && (
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-gray-200/50 p-6 shadow-xl mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <h2 className="text-lg font-bold text-gray-800" style={{ fontFamily: 'Poppins, sans-serif' }}>Payment Status by Lead</h2>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by lead, salesperson, department head..."
+                  value={paymentStatusSearch}
+                  onChange={(e) => setPaymentStatusSearch(e.target.value)}
+                  className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm w-64 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentStatusFilter(!showPaymentStatusFilter)}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
+                    showPaymentStatusFilter || [paymentStatusFilter.department_head, paymentStatusFilter.salesperson, paymentStatusFilter.lead_name, paymentStatusFilter.start_date, paymentStatusFilter.end_date].some(Boolean)
+                      ? 'bg-green-50 border-green-400 text-green-700'
+                      : 'bg-white border-gray-200 text-gray-700 hover:border-green-300 hover:bg-green-50/50'
+                  }`}
+                >
+                  <Filter className="w-4 h-4" />
+                  Filters
+                  {[paymentStatusFilter.department_head, paymentStatusFilter.salesperson, paymentStatusFilter.lead_name, paymentStatusFilter.start_date, paymentStatusFilter.end_date].filter(Boolean).length > 0 && (
+                    <span className="bg-green-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                      {[paymentStatusFilter.department_head, paymentStatusFilter.salesperson, paymentStatusFilter.lead_name, paymentStatusFilter.start_date, paymentStatusFilter.end_date].filter(Boolean).length}
+                    </span>
+                  )}
+                </button>
+                {showPaymentStatusFilter && (
+                  <>
+                    <div className="absolute right-0 top-full mt-2 z-20 w-80 bg-white rounded-xl border-2 border-gray-200 shadow-lg p-4">
+                      <div className="text-sm font-semibold text-gray-800 mb-3">Quick filters</div>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Department Head</label>
+                          <select
+                            value={paymentStatusFilter.department_head}
+                            onChange={(e) => setPaymentStatusFilter((f) => ({ ...f, department_head: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                          >
+                            <option value="">All</option>
+                            {paymentStatusOptions.departmentHeads.map((name) => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Salesperson</label>
+                          <select
+                            value={paymentStatusFilter.salesperson}
+                            onChange={(e) => setPaymentStatusFilter((f) => ({ ...f, salesperson: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                          >
+                            <option value="">All</option>
+                            {paymentStatusOptions.salespersons.map((name) => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Lead Name</label>
+                          <input
+                            type="text"
+                            value={paymentStatusFilter.lead_name}
+                            onChange={(e) => setPaymentStatusFilter((f) => ({ ...f, lead_name: e.target.value }))}
+                            placeholder="Type to filter..."
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
+                            <input
+                              type="date"
+                              value={paymentStatusFilter.start_date}
+                              onChange={(e) => setPaymentStatusFilter((f) => ({ ...f, start_date: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
+                            <input
+                              type="date"
+                              value={paymentStatusFilter.end_date}
+                              onChange={(e) => setPaymentStatusFilter((f) => ({ ...f, end_date: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 mt-4 pt-3 border-t border-gray-200">
+                        <button
+                          type="button"
+                          onClick={clearPaymentStatusFilter}
+                          className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                        >
+                          Clear
+                        </button>
+                        <button
+                          type="button"
+                          onClick={applyPaymentStatusFilter}
+                          className="flex-1 px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </div>
+                    <div
+                      className="fixed inset-0 z-10"
+                      aria-hidden
+                      onClick={() => setShowPaymentStatusFilter(false)}
+                    />
+                  </>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => fetchPaymentStatus()}
+                disabled={paymentStatusLoading}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-60 text-sm font-medium"
+              >
+                <RotateCcw className={`w-4 h-4 ${paymentStatusLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px]">
+              <thead className="bg-gradient-to-r from-slate-50 to-gray-50 border-b-2 border-gray-200">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Department Head</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Salesperson</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Lead Name</th>
+                  <th className="px-4 py-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wider">Total Amount</th>
+                  <th className="px-4 py-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wider">Paid</th>
+                  <th className="px-4 py-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wider">Pending</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {paymentStatusLoading ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-6 w-6 border-2 border-green-500 border-t-transparent" />
+                        Loading payment status...
+                      </div>
+                    </td>
+                  </tr>
+                ) : (() => {
+                  const filtered = paymentStatusRows.filter((row) => {
+                    if (!paymentStatusSearch.trim()) return true;
+                    const q = paymentStatusSearch.toLowerCase();
+                    return (
+                      (row.lead_name || '').toLowerCase().includes(q) ||
+                      (row.salesperson_name || '').toLowerCase().includes(q) ||
+                      (row.department_head_name || '').toLowerCase().includes(q)
+                    );
+                  });
+                  if (filtered.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                          No payment status data. Ensure leads have approved/completed quotations.
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return filtered.map((row, idx) => (
+                    <tr key={row.lead_id != null ? `lead-${row.lead_id}` : `row-${idx}`} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.department_head_name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{row.salesperson_name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        <span className="inline-flex items-center gap-2">
+                          <span>{row.lead_name}</span>
+                          <button
+                            type="button"
+                            onClick={() => openLeadDetails(row)}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:text-green-600 hover:bg-green-50 transition-colors"
+                            title="View lead details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">
+                        ₹{Number(row.total_amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right text-green-600 font-medium">
+                        ₹{Number(row.paid_amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right text-red-600 font-medium">
+                        ₹{Number(row.pending_amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ));
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Lead details modal (Payment Status tab) */}
+      {showLeadDetailsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowLeadDetailsModal(false)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Lead details – {selectedLeadName}</h3>
+              <button type="button" onClick={() => setShowLeadDetailsModal(false)} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100">
+                <span className="sr-only">Close</span>×
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {leadDetailsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-2 border-green-500 border-t-transparent" />
+                </div>
+              ) : leadDetailsData ? (
+                <>
+                  {leadDetailsData.lead && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <User className="w-4 h-4" /> Lead info
+                      </h4>
+                      <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                        <div><span className="text-gray-500">Name</span><br />{leadDetailsData.lead.name}</div>
+                        {leadDetailsData.lead.phone && <div><span className="text-gray-500">Phone</span><br />{leadDetailsData.lead.phone}</div>}
+                        {leadDetailsData.lead.email && <div><span className="text-gray-500">Email</span><br />{leadDetailsData.lead.email}</div>}
+                        {leadDetailsData.lead.business && <div><span className="text-gray-500">Business</span><br />{leadDetailsData.lead.business}</div>}
+                        {leadDetailsData.lead.address && <div className="sm:col-span-2"><span className="text-gray-500">Address</span><br />{leadDetailsData.lead.address}</div>}
+                        {leadDetailsData.lead.gst_no && <div><span className="text-gray-500">GST No</span><br />{leadDetailsData.lead.gst_no}</div>}
+                      </div>
+                    </div>
+                  )}
+                  {(leadDetailsData.payment_summary || (leadDetailsData.quotations && leadDetailsData.quotations.length > 0)) && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <DollarSign className="w-4 h-4" /> Payment summary
+                      </h4>
+                      <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+                        {leadDetailsData.payment_summary && (
+                          <div className="flex flex-wrap gap-4">
+                            <span>Total: <strong>₹{Number(leadDetailsData.payment_summary.total_quotation_amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong></span>
+                            <span className="text-green-600">Paid: <strong>₹{Number(leadDetailsData.payment_summary.total_paid || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong></span>
+                            <span className="text-red-600">Remaining: <strong>₹{Number(leadDetailsData.payment_summary.current_remaining || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong></span>
+                            {Number(leadDetailsData.payment_summary.current_credit || 0) > 0 && (
+                              <span className="text-blue-600">Credit: <strong>₹{Number(leadDetailsData.payment_summary.current_credit).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong></span>
+                            )}
+                          </div>
+                        )}
+                        {leadDetailsData.quotations && leadDetailsData.quotations.length > 0 && (
+                          <div>
+                            <p className="text-gray-500 mt-2 mb-1">Quotations</p>
+                            <ul className="divide-y divide-gray-200">
+                              {leadDetailsData.quotations.map((q) => (
+                                <li key={q.id} className="py-2 flex justify-between items-center">
+                                  <span>{q.quotation_number}</span>
+                                  <span>₹{Number(q.total_amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })} (Paid: ₹{Number(q.paid_amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })})</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {leadDetailsData.payments && leadDetailsData.payments.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <CreditCard className="w-4 h-4" /> Payment history
+                      </h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead><tr className="border-b"><th className="text-left py-2">Quotation</th><th className="text-left py-2">Date</th><th className="text-right py-2">Amount</th><th className="text-left py-2">Status</th></tr></thead>
+                          <tbody>
+                            {leadDetailsData.payments.map((p) => (
+                              <tr key={p.id} className="border-b border-gray-100">
+                                <td className="py-2">{p.quotation_number || '–'}</td>
+                                <td className="py-2">{p.payment_date ? new Date(p.payment_date).toLocaleDateString('en-IN') : '–'}</td>
+                                <td className="py-2 text-right">₹{Number(p.installment_amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+                                <td className="py-2">{p.approval_status || '–'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  {leadDetailsData.rfps && leadDetailsData.rfps.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <FileText className="w-4 h-4" /> RFP details
+                      </h4>
+                      <div className="space-y-4">
+                        {leadDetailsData.rfps.map((rfp) => (
+                          <div key={rfp.id} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                            <div className="flex flex-wrap gap-2 items-center mb-2">
+                              <span className="font-medium">{rfp.rfp_id}</span>
+                              <span className="px-2 py-0.5 rounded text-xs bg-gray-200 text-gray-700">{rfp.status}</span>
+                              {rfp.company_name && <span className="text-gray-500 text-sm">{rfp.company_name}</span>}
+                              {rfp.created_at && <span className="text-gray-400 text-xs">{new Date(rfp.created_at).toLocaleString('en-IN')}</span>}
+                            </div>
+                            {rfp.delivery_timeline && <p className="text-sm text-gray-600 mb-1"><span className="text-gray-500">Delivery:</span> {rfp.delivery_timeline}</p>}
+                            {rfp.special_requirements && <p className="text-sm text-gray-600 mb-2"><span className="text-gray-500">Requirements:</span> {rfp.special_requirements}</p>}
+                            {rfp.products && rfp.products.length > 0 && (
+                              <table className="w-full text-sm mt-2">
+                                <thead><tr className="border-b text-gray-500"><th className="text-left py-1">Product</th><th className="text-right py-1">Qty</th><th className="text-left py-1">Unit</th><th className="text-right py-1">Target price</th></tr></thead>
+                                <tbody>
+                                  {rfp.products.map((prod) => (
+                                    <tr key={prod.id} className="border-b border-gray-100">
+                                      <td className="py-1">{prod.product_spec || '–'}</td>
+                                      <td className="py-1 text-right">{prod.quantity != null ? prod.quantity : '–'}</td>
+                                      <td className="py-1">{prod.length_unit || '–'}</td>
+                                      <td className="py-1 text-right">{prod.target_price != null ? `₹${Number(prod.target_price).toLocaleString('en-IN')}` : '–'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!leadDetailsData.lead && !leadDetailsData.payment_summary && (!leadDetailsData.quotations || leadDetailsData.quotations.length === 0) && (!leadDetailsData.rfps || leadDetailsData.rfps.length === 0) && (
+                    <p className="text-gray-500 text-sm">No details found for this lead.</p>
+                  )}
+                </>
+              ) : (
+                <p className="text-gray-500 text-sm">Failed to load lead details.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payments tab: Stats Cards + table */}
+      {activeTab === 'payments' && (
+      <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
         <StatCard
           title="All Payments"
@@ -1031,6 +1495,8 @@ const PaymentInfo = () => {
           )}
         </div>
       </div>
+      </>
+      )}
 
       {/* View Payment Modal - Same as SalesDepartmentHead */}
       {showViewModal && viewingPayment && (

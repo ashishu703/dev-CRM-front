@@ -12,6 +12,36 @@ class PaymentService {
     }
   }
 
+  // Get full lead details for Payment Status view: lead, payment summary, quotations, payments, rfps
+  async getLeadDetails(customerId) {
+    try {
+      const response = await apiClient.get(`/api/payments/lead-details/${encodeURIComponent(customerId)}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching lead details:', error);
+      throw error;
+    }
+  }
+
+  // Get payment status by lead (salesperson, lead name, total/paid/pending) for SuperAdmin
+  // Optional params: department_head, salesperson, lead_name, start_date, end_date
+  async getPaymentStatusByLead(params = {}) {
+    try {
+      const query = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+          query.append(key, String(value).trim());
+        }
+      });
+      const url = query.toString() ? `/api/payments/payment-status?${query.toString()}` : '/api/payments/payment-status';
+      const response = await apiClient.get(url);
+      return response;
+    } catch (error) {
+      console.error('Error fetching payment status by lead:', error);
+      throw error;
+    }
+  }
+
   // Get all payments with pagination and filtering
   async getAllPayments(params = {}) {
     try {
