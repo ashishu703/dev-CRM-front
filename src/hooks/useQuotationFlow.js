@@ -117,37 +117,41 @@ export function useQuotationFlow(customerId, isRefreshing = false) {
           remark: item.remark || ''
         })),
         
-        // Master RFP ID for tracking (from sessionStorage)
-        masterRfpId: sessionStorage.getItem('pricingRfpDecisionId') || null
+        rfpId: quotationData.rfpId || sessionStorage.getItem('pricingRfpDecisionId') || null,
+        masterRfpId: quotationData.masterRfpId || sessionStorage.getItem('pricingRfpDecisionId') || null
       }
       
       console.log('📤 Quotation payload being sent:', quotationPayload);
       
       let response;
       if (isEdit) {
-        // Update existing quotation
         response = await quotationService.updateQuotation(quotationId, quotationPayload);
         if (response.success) {
           const updatedQuotation = QuotationHelper.normalizeQuotation(response.data, viewingCustomer);
           setQuotations(prev => prev.map(q => (q.id === quotationId ? updatedQuotation : q)));
           Toast.success('Quotation updated successfully!');
-          return true;
+          return { success: true };
         }
       } else {
-        // Create new quotation
         response = await quotationService.createQuotation(quotationPayload);
         if (response.success) {
           const newQuotation = QuotationHelper.normalizeQuotation(response.data, viewingCustomer);
           setQuotations(prev => [newQuotation, ...prev]);
           Toast.success('Quotation created and saved successfully!');
-          return true;
+          return { success: true };
         }
       }
     } catch (error) {
       console.error('Error saving quotation:', error);
+      const status = error?.response?.status;
+      const data = error?.response?.data;
+      if (status === 409 && data?.existingQuotationId) {
+        Toast.warning(data.message || 'A quotation already exists for this RFP ID.');
+        return { success: false, existingQuotationId: data.existingQuotationId };
+      }
       Toast.error(isEdit ? 'Failed to update quotation' : 'Failed to save quotation to database');
     }
-    return false;
+    return { success: false };
   }
 
   const handleViewQuotation = async (quotation) => {

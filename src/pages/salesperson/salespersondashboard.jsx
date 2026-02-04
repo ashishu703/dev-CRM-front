@@ -1753,7 +1753,7 @@ export default function DashboardContent({ isDarkMode = false }) {
             </CardHeader>
             <CardContent className="pt-0">
               <div className="h-52">
-                <SalesPipelineDonutChart data={salesPipelineDonutData} isDarkMode={isDarkMode} />
+                <SalesPipelineDonutChart data={getSalesPipelineDonutData()} isDarkMode={isDarkMode} />
               </div>
             </CardContent>
           </Card>

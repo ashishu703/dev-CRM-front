@@ -633,7 +633,7 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                       <div className="space-y-1">
                         {rfp.products.slice(0, 2).map((p, idx) => (
                           <div key={idx} className="text-xs">
-                            {p.product_spec} {p.quantity ? `(Qty: ${p.quantity})` : ''}
+                            {p.product_spec} {(p.quantity ?? p.length) != null && (p.quantity ?? p.length) !== '' ? `(Qty: ${p.quantity ?? p.length})` : ''}
                           </div>
                         ))}
                         {rfp.products.length > 2 && (
@@ -646,8 +646,8 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                   </td>
                   <td className="px-4 py-3 text-slate-700">
                     {rfp.products && rfp.products.length > 0
-                      ? rfp.products.reduce((sum, p) => sum + (parseFloat(p.length) || 0), 0).toFixed(2)
-                      : (rfp.length || '-')}
+                      ? rfp.products.reduce((sum, p) => sum + ((parseFloat(p.quantity) ?? parseFloat(p.length)) || 0), 0).toFixed(2)
+                      : ((parseFloat(rfp.quantity) ?? parseFloat(rfp.length)) || '-')}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusBadge(rfp.status)}`}>
@@ -1228,10 +1228,9 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                     <div className="max-h-[400px] overflow-y-auto space-y-5 pr-1" style={{ scrollBehavior: 'smooth' }}>
                       {itemsWithLog.map(({ product, log }, idx) => {
                         const detail = log || {};
-                        const lengthUsed =
-                          detail.quantity !== undefined && detail.quantity !== null
-                            ? detail.quantity
-                            : (detail.length !== undefined && detail.length !== null ? detail.length : (product.quantity ?? product.length ?? '—'));
+                        const fromProduct = product.quantity ?? product.length;
+                        const fromDetail = detail.quantity !== undefined && detail.quantity !== null ? detail.quantity : (detail.length !== undefined && detail.length !== null ? detail.length : null);
+                        const lengthUsed = (fromDetail != null && fromDetail !== '' && Number(fromDetail) !== 0) ? fromDetail : (fromProduct != null && fromProduct !== '' ? fromProduct : '—');
                         const unitFromRateType = (rt) => (rt && String(rt).includes('per_kg')) ? 'Kg' : 'Km';
                         const qtyUnit = detail.quantityUnit || product.length_unit || product.quantityUnit || unitFromRateType(detail.rateType) || 'Km';
                         const lengthWithUnit = lengthUsed !== '—' && lengthUsed != null ? `${lengthUsed} ${qtyUnit}` : lengthUsed;

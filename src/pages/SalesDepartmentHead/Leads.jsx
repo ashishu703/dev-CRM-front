@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { FileText, Package, RefreshCw, Filter, Phone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Activity } from 'lucide-react';
+import { FileText, Package, RefreshCw, Filter, Phone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Activity, Users } from 'lucide-react';
 import AddCustomerModal from './AddCustomerModal';
 import QuotationPreview from '../../components/QuotationPreview';
 import PIPreview from '../../components/PIPreview';
@@ -18,13 +18,12 @@ import apiErrorHandler from '../../utils/ApiErrorHandler';
 import toastManager from '../../utils/ToastManager';
 import apiClient from '../../utils/apiClient';
 import { API_ENDPOINTS } from '../../api/admin_api/api';
-import { LeadsFilterService } from '../../services/LeadsFilterService';
+import { LeadsFilterService, IDMatcher } from '../../services/LeadsFilterService';
 import LeadService from '../../services/LeadService';
 import UserService from '../../services/UserService';
 import PIService from '../../services/PIService';
 import QuotationService from '../../services/QuotationService';
 import { generateQuotationPDF } from '../../utils/pdfUtils';
-import paymentService from '../../api/admin_api/paymentService';
 import { downloadCSVTemplate, parseCSV, exportToExcel } from '../../utils/csvUtils';
 import { getStatusBadge as getStatusBadgeUtil } from '../../utils/statusUtils';
 import { calculateAssignedCounts, getUnassignedLeadIds, filterLeads } from '../../utils/leadFilters';
@@ -35,8 +34,6 @@ import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton';
 import EnquiryTable from '../../components/EnquiryTable';
 import departmentHeadService from '../../api/admin_api/departmentHeadService';
 import proformaInvoiceService from '../../api/admin_api/proformaInvoiceService';
-import { Users, Activity } from 'lucide-react';
-
 const LeadsSimplified = () => {
   const [activeTab, setActiveTab] = useState('leads');
   const { user } = useAuth();
@@ -436,13 +433,15 @@ const LeadsSimplified = () => {
       allEnquiries.push(...enquiries);
     }
     
+    const followUpFromData = [...new Set(allEnquiries.map(e => e.follow_up_status).filter(Boolean))];
+    const salesFromData = [...new Set(allEnquiries.map(e => e.sales_status).filter(Boolean))];
     return {
       salespersons: [...new Set(allEnquiries.map(e => e.salesperson).filter(Boolean))].sort(),
       telecallers: [...new Set(allEnquiries.map(e => e.telecaller).filter(Boolean))].sort(),
       states: [...new Set(allEnquiries.map(e => e.state).filter(Boolean))].sort(),
       divisions: [...new Set(allEnquiries.map(e => e.division).filter(Boolean))].sort(),
-      followUpStatuses: [...new Set(allEnquiries.map(e => e.follow_up_status).filter(Boolean))].sort(),
-      salesStatuses: [...new Set(allEnquiries.map(e => e.sales_status).filter(Boolean))].sort()
+      followUpStatuses: [...new Set([...followUpFromData, 'pending'])].sort(),
+      salesStatuses: [...new Set([...salesFromData, 'pending'])].sort()
     };
   }, [enquiries, enquiriesGroupedByDate]);
 
@@ -1373,10 +1372,12 @@ const LeadsSimplified = () => {
       }
     });
 
+    const followUpFromData = [...new Set(allData.map(lead => cleanValue(lead.followUpStatus || lead.connectedStatus || lead.telecallerStatus)).filter(Boolean))];
+    const salesFromData = [...new Set(allData.map(lead => cleanValue(lead.salesStatus)).filter(Boolean))];
     return {
       tags: [...new Set(allData.map(lead => cleanValue(lead.customerType || lead.category)).filter(Boolean))].sort(),
-      followUpStatuses: [...new Set(allData.map(lead => cleanValue(lead.followUpStatus || lead.connectedStatus || lead.telecallerStatus)).filter(Boolean))].sort(),
-      salesStatuses: [...new Set(allData.map(lead => cleanValue(lead.salesStatus)).filter(Boolean))].sort(),
+      followUpStatuses: [...new Set([...followUpFromData, 'pending'])].sort(),
+      salesStatuses: [...new Set([...salesFromData, 'pending'])].sort(),
       states: [...new Set(allData.map(lead => cleanValue(lead.state)).filter(Boolean))].sort(),
       leadSources: [...new Set(allData.map(lead => cleanValue(lead.leadSource)).filter(Boolean))].sort(),
       products: [...new Set(allProductValues)].sort()
@@ -2180,8 +2181,6 @@ const LeadsSimplified = () => {
           setAssignmentFilter(null);
           setFilteredCustomerIds(new Set());
           statusFilterLeadsRef.current = [];
-          setAssignedSalespersonFilter('');
-          setAssignedTelecallerFilter('');
           setColumnFilters({
             customerId: '',
             customer: '',

@@ -6,7 +6,6 @@ import apiClient from "../../utils/apiClient"
 import { API_ENDPOINTS } from "../../api/admin_api/api"
 import DashboardSkeleton from "../../components/dashboard/DashboardSkeleton"
 
-// Helper function to get side view image for each product
 const getSideViewImage = (productName) => {
   const sideViewMapping = {
     "Aerial Bunch Cable": "/images/products/aerial bunch cable.jpeg",
@@ -49,7 +48,6 @@ export default function StockManagement({ isDarkMode = false }) {
   const [tallyConnected, setTallyConnected] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
 
-  // Load stock data and check Tally connection
   useEffect(() => {
     loadStockData();
     checkTallyConnection();
@@ -64,14 +62,12 @@ export default function StockManagement({ isDarkMode = false }) {
       const response = await apiClient.get(API_ENDPOINTS.STOCK_GET_ALL());
       
       if (response.success && response.data) {
-        // Set flat products list with proper structure
         const productsFromDB = response.data
-          .filter(stockData => stockData && stockData.product_name) // Filter out null/undefined
-          .filter(stockData => isFinishedGoodsGroup(stockData.group)) // ONLY Finished Goods
+          .filter(stockData => stockData && stockData.product_name)
+          .filter(stockData => isFinishedGoodsGroup(stockData.group))
           .map(stockData => ({
             name: stockData.product_name,
-            product_name: stockData.product_name, // Keep for compatibility
-            description: 'Cable product',
+            product_name: stockData.product_name,
             sideViewImage: getSideViewImage(stockData.product_name),
             availability: {
               status: String(stockData.status || 'out_of_stock').toLowerCase(),
@@ -130,7 +126,6 @@ export default function StockManagement({ isDarkMode = false }) {
     }
   };
 
-  // Filter flat products
   const filteredProducts = useMemo(() => {
     let filtered = products;
     
@@ -158,7 +153,6 @@ export default function StockManagement({ isDarkMode = false }) {
   }, [products]);
 
   const getAvailabilityBadge = (availability) => {
-    // Handle null/undefined availability
     if (!availability) {
       return {
         Icon: AlertCircle,
@@ -210,35 +204,31 @@ export default function StockManagement({ isDarkMode = false }) {
       <div className="max-w-7xl mx-auto">
         {/* Tally Connection Status and Sync Button */}
         <div className={`mb-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} p-3 sm:p-4`}>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                {tallyConnected ? (
-                  <Wifi className="w-5 h-5 text-green-500" />
-                ) : (
-                  <WifiOff className="w-5 h-5 text-red-500" />
-                )}
-                <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                  Tally: {tallyConnected ? 'Connected' : 'Disconnected'}
-                </span>
-              </div>
-              {syncMessage && (
-                <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {syncMessage}
-                </span>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              {tallyConnected ? (
+                <Wifi className="w-5 h-5 flex-shrink-0 text-green-500" />
+              ) : (
+                <WifiOff className="w-5 h-5 flex-shrink-0 text-red-500" />
               )}
+              <div className="min-w-0">
+                <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                  Tally: {tallyConnected ? 'Connected' : 'Disconnected'}
+                </p>
+                {syncMessage && (
+                  <p className={`text-xs truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{syncMessage}</p>
+                )}
+              </div>
             </div>
             <button
               onClick={syncWithTally}
               disabled={syncing}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all flex-shrink-0 ${
                 syncing
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : tallyConnected
-                    ? isDarkMode
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                      : 'bg-blue-500 hover:bg-blue-600 text-white'
-                    : 'bg-gray-400 cursor-not-allowed text-white'
+                  ? 'bg-gray-400 cursor-not-allowed text-white'
+                  : isDarkMode
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                    : 'bg-indigo-600 hover:bg-indigo-700 text-white'
               }`}
             >
               <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
@@ -247,11 +237,10 @@ export default function StockManagement({ isDarkMode = false }) {
           </div>
         </div>
 
-        {/* Search Bar and View Toggle */}
-        <div className={`mb-4 sm:mb-6 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} p-3 sm:p-4`}>
+        <div className={`mb-4 sm:mb-6 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-sm border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} p-4`}>
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
-              <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-3 h-3 sm:w-4 sm:h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+              <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
               <input
                 type="text"
                 placeholder="Search products by name..."
@@ -267,124 +256,116 @@ export default function StockManagement({ isDarkMode = false }) {
           </div>
         </div>
 
-        {/* Three Header Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
-          <div 
+          <button
+            type="button"
             onClick={() => setSelectedFilter(selectedFilter === 'available' ? 'all' : 'available')}
-            className={`rounded-lg shadow-sm border p-4 cursor-pointer transition-all ${
+            className={`rounded-xl shadow-sm border p-4 cursor-pointer transition-all text-left ${
               selectedFilter === 'available'
-                ? isDarkMode ? 'bg-blue-900 border-blue-700 ring-2 ring-blue-500' : 'bg-blue-50 border-blue-300 ring-2 ring-blue-500'
+                ? isDarkMode ? 'bg-emerald-900/40 border-emerald-600 ring-2 ring-emerald-500' : 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-500'
                 : isDarkMode ? 'bg-gray-800 border-gray-700 hover:border-gray-600' : 'bg-white border-gray-200 hover:border-gray-300'
             }`}
           >
             <div className="flex items-center justify-between">
               <div>
-                <h3 className={`text-base sm:text-lg font-bold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Availables</h3>
-                <p className={`text-xl sm:text-2xl font-bold ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>{statusCounts.available}</p>
+                <h3 className={`text-sm font-semibold uppercase tracking-wide mb-0.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Available</h3>
+                <p className={`text-2xl font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>{statusCounts.available}</p>
               </div>
-              <CheckCircle className={`w-6 h-6 sm:w-8 sm:h-8 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
+              <CheckCircle className={`w-8 h-8 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
             </div>
-          </div>
+          </button>
 
-          <div 
+          <button
+            type="button"
             onClick={() => setSelectedFilter(selectedFilter === 'limited' ? 'all' : 'limited')}
-            className={`rounded-lg shadow-sm border p-4 cursor-pointer transition-all ${
+            className={`rounded-xl shadow-sm border p-4 cursor-pointer transition-all text-left ${
               selectedFilter === 'limited'
-                ? isDarkMode ? 'bg-yellow-900 border-yellow-700 ring-2 ring-yellow-500' : 'bg-yellow-50 border-yellow-300 ring-2 ring-yellow-500'
+                ? isDarkMode ? 'bg-amber-900/40 border-amber-600 ring-2 ring-amber-500' : 'bg-amber-50 border-amber-400 ring-2 ring-amber-500'
                 : isDarkMode ? 'bg-gray-800 border-gray-700 hover:border-gray-600' : 'bg-white border-gray-200 hover:border-gray-300'
             }`}
           >
             <div className="flex items-center justify-between">
               <div>
-                <h3 className={`text-base sm:text-lg font-bold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Limiteds</h3>
-                <p className={`text-xl sm:text-2xl font-bold ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>{statusCounts.limited}</p>
+                <h3 className={`text-sm font-semibold uppercase tracking-wide mb-0.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Limited</h3>
+                <p className={`text-2xl font-bold ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`}>{statusCounts.limited}</p>
               </div>
-              <AlertCircle className={`w-6 h-6 sm:w-8 sm:h-8 ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`} />
+              <AlertCircle className={`w-8 h-8 ${isDarkMode ? 'text-amber-400' : 'text-amber-600'}`} />
             </div>
-          </div>
+          </button>
 
-          <div 
+          <button
+            type="button"
             onClick={() => setSelectedFilter(selectedFilter === 'out_of_stock' ? 'all' : 'out_of_stock')}
-            className={`rounded-lg shadow-sm border p-4 cursor-pointer transition-all ${
+            className={`rounded-xl shadow-sm border p-4 cursor-pointer transition-all text-left ${
               selectedFilter === 'out_of_stock'
-                ? isDarkMode ? 'bg-red-900 border-red-700 ring-2 ring-red-500' : 'bg-red-50 border-red-300 ring-2 ring-red-500'
+                ? isDarkMode ? 'bg-red-900/40 border-red-600 ring-2 ring-red-500' : 'bg-red-50 border-red-400 ring-2 ring-red-500'
                 : isDarkMode ? 'bg-gray-800 border-gray-700 hover:border-gray-600' : 'bg-white border-gray-200 hover:border-gray-300'
             }`}
           >
             <div className="flex items-center justify-between">
               <div>
-                <h3 className={`text-base sm:text-lg font-bold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Out of Stocks</h3>
-                <p className={`text-xl sm:text-2xl font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>{statusCounts.out_of_stock}</p>
+                <h3 className={`text-sm font-semibold uppercase tracking-wide mb-0.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Out of Stock</h3>
+                <p className={`text-2xl font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>{statusCounts.out_of_stock}</p>
               </div>
-              <XCircle className={`w-6 h-6 sm:w-8 sm:h-8 ${isDarkMode ? 'text-red-400' : 'text-red-600'}`} />
+              <XCircle className={`w-8 h-8 ${isDarkMode ? 'text-red-400' : 'text-red-600'}`} />
             </div>
-          </div>
+          </button>
         </div>
 
-        {/* Finished Goods Flat View */}
         {filteredProducts.length === 0 ? (
-          <div className={`text-center py-12 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-            <Package className={`w-12 h-12 mx-auto mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`} />
-            <p className={`text-base sm:text-lg font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No products found</p>
+          <div className={`text-center py-16 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-sm border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+            <Package className={`w-14 h-14 mx-auto mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`} />
+            <p className={`text-base font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No products found</p>
           </div>
         ) : (
           <div className="space-y-3">
             {filteredProducts.map((product, index) => {
               const availabilityBadge = getAvailabilityBadge(product.availability);
+              const isOutOfStock = String(product.availability?.status || '').toLowerCase() === 'out_of_stock';
+              const rate = product.availability?.rate ?? 0;
+              const value = product.availability?.value ?? 0;
               return (
                 <div
-                  key={index}
-                  className={`rounded-lg shadow-sm border overflow-hidden transition-all hover:shadow-md ${
+                  key={`${product.name}-${index}`}
+                  className={`rounded-xl shadow-sm border overflow-hidden transition-all hover:shadow-md ${
                     isDarkMode ? 'bg-gray-800 border-gray-700 hover:border-gray-600' : 'bg-white border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  <div className="flex items-center gap-2 sm:gap-4 p-2 sm:p-3">
-                    <div className={`w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg flex items-center justify-center overflow-hidden`}>
+                  <div className="flex items-center gap-3 sm:gap-4 p-4">
+                    <div className={`w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'} rounded-lg flex items-center justify-center overflow-hidden`}>
                       <img
                         src={product.sideViewImage}
                         alt={product.name}
                         className="w-full h-full object-contain p-1.5"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
                       />
                     </div>
-                    <div className="flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-                      <div className="flex-1 min-w-0">
-                        <h3 className={`font-semibold text-xs sm:text-sm mb-1 line-clamp-2 sm:line-clamp-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                          {product.name}
-                        </h3>
-                        {product.subgroup && (
-                          <p className={`text-[11px] sm:text-xs mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            {product.subgroup}
-                          </p>
-                        )}
-                        {String(product.availability.status || '').toLowerCase() !== 'out_of_stock' && (
-                          <div className="mt-1 space-y-0.5">
-                            <p className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                              <span className="font-medium">Qty:</span> {product.availability.quantity.toLocaleString()} {product.availability.unit}
-                            </p>
-                            {product.availability.rate > 0 && (
-                              <p className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                                <span className="font-medium">Rate:</span> ₹{product.availability.rate.toLocaleString()}
-                              </p>
-                            )}
-                            {product.availability.value > 0 && (
-                              <p className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                                <span className="font-medium">Value:</span> ₹{product.availability.value.toLocaleString()}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-shrink-0 self-start sm:self-auto">
-                        <div className={`flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border text-xs font-medium ${availabilityBadge.className}`}>
-                          <span className={availabilityBadge.iconColor}>
-                            <availabilityBadge.Icon className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <div className="flex-1 min-w-0">
+                      <h3 className={`font-semibold text-sm mb-0.5 line-clamp-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {product.name}
+                      </h3>
+                      {product.subgroup && (
+                        <p className={`text-xs mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{product.subgroup}</p>
+                      )}
+                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
+                        {!isOutOfStock && (
+                          <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
+                            <span className="font-medium">Qty:</span> {Number(product.availability?.quantity || 0).toLocaleString()} {product.availability?.unit || 'meters'}
                           </span>
-                          <span>{availabilityBadge.text}</span>
-                        </div>
+                        )}
+                        <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
+                          <span className="font-medium">Rate:</span> {rate > 0 ? `₹${Number(rate).toLocaleString('en-IN')}` : '—'}
+                        </span>
+                        <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
+                          <span className="font-medium">Value:</span> {value > 0 ? `₹${Number(value).toLocaleString('en-IN')}` : '—'}
+                        </span>
                       </div>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium ${availabilityBadge.className}`}>
+                        <availabilityBadge.Icon className="w-4 h-4" />
+                        {availabilityBadge.text}
+                      </span>
                     </div>
                   </div>
                 </div>

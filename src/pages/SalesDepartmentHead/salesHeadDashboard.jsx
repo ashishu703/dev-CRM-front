@@ -2,8 +2,6 @@
 
 import { TrendingUp, CheckCircle, Clock, CreditCard, UserPlus, CalendarCheck, ArrowUp, XCircle, PhoneOff, Target, BarChart3, PieChart as PieChartIcon, Activity, Award, TrendingDown, ArrowRightLeft, Calendar, FileText, FileCheck, FileX, Receipt, ShoppingCart, DollarSign, RefreshCw, Trophy, IndianRupee } from "lucide-react"
 import React, { useState, useEffect, useMemo, useCallback } from "react"
-import apiClient from '../../utils/apiClient'
-import { API_ENDPOINTS } from '../../api/admin_api/api'
 import quotationService from '../../api/admin_api/quotationService'
 import paymentService from '../../api/admin_api/paymentService'
 import proformaInvoiceService from '../../api/admin_api/proformaInvoiceService'
@@ -109,9 +107,7 @@ const SalesHeadDashboard = ({ setActiveView, isDarkMode = false }) => {
   })
   const [loadingMetrics, setLoadingMetrics] = useState(false)
 
-  // Helper functions to reduce code duplication
   const isPaymentApprovedByAccounts = (payment) => {
-    // Check approval_status first (primary field), then fallback to other field names
     const accountsStatus = (payment.approval_status || payment.accounts_approval_status || payment.accountsApprovalStatus || '').toLowerCase()
     const isApproved = accountsStatus === 'approved'
 
@@ -147,14 +143,10 @@ const SalesHeadDashboard = ({ setActiveView, isDarkMode = false }) => {
     return isNaN(amount) ? 0 : amount
   }
 
-  // OPTIMIZED: Fetch ALL leads at once for dashboard overview
-  // Use salesDataService.fetchAllLeads() to match SuperAdmin dashboard logic
   const fetchLeads = useCallback(async () => {
     try {
       setLoading(true)
       
-      // Use the same fetching method as SuperAdmin dashboard
-      // Pass departmentType to ensure we get all leads from the department (not just created by this user)
       const departmentType = user?.departmentType || user?.department_type || 'office_sales'
       const allLeads = await salesDataService.fetchAllLeads(departmentType)
       

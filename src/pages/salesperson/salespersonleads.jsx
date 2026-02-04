@@ -309,8 +309,8 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
 
   // Handle adding product from search input or dropdown
   const handleAddProduct = async (productName = null) => {
-    const productToAdd = productName || productSearch.trim()
-    if (!productToAdd) return
+    const productToAdd = (productName || productSearch.trim() || '').trim()
+    if (!productToAdd || productToAdd.toLowerCase() === 'n/a') return
     
     // Don't add if already exists (exact match)
     if (rfpForm.products.some(p => p.productSpec.toLowerCase() === productToAdd.toLowerCase())) {
@@ -403,7 +403,8 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   }
 
   const openPricingModal = async (customer) => {
-    const productSpec = customer?.productName || ''
+    const rawSpec = (customer?.productName || '').trim()
+    const productSpec = rawSpec && rawSpec.toLowerCase() !== 'n/a' ? rawSpec : ''
     setPricingLead(customer)
     setPricingError('')
     setPricingPrice(null)
@@ -702,6 +703,23 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
         sessionStorage.setItem('pricingRfpDecisionData', JSON.stringify(decision))
 
         setShowRfpIdValidationModal(false)
+        const rfpId = rfpIdInput.trim()
+        try {
+          const res = await quotationService.getQuotationsByCustomer(viewingCustomerForQuotation.id)
+          const list = res?.data || []
+          const existing = list.find(q => (q.rfp_id || q.master_rfp_id || '') === rfpId)
+          if (existing) {
+            const full = await quotationService.getQuotation(existing.id)
+            if (full?.success) {
+              setEditingQuotation(full.data)
+              Toast.info('This RFP already has a quotation. Opened for editing.')
+            }
+          } else {
+            setEditingQuotation(null)
+          }
+        } catch (_) {
+          setEditingQuotation(null)
+        }
         setShowCreateQuotation(true)
       } else {
         setValidationError('Invalid RFP ID. Please check and try again.')
@@ -1255,17 +1273,26 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
       return
     }
     const quotationId = quotationData.quotationId || editingQuotation?.id || null
-    const success = await quotationHook.handleSaveQuotation(quotationData, customerToUse, quotationId)
-    if (success) {
+    const result = await quotationHook.handleSaveQuotation(quotationData, customerToUse, quotationId)
+    if (result?.success) {
       setShowCreateQuotation(false)
       setViewingCustomerForQuotation(null)
       setEditingQuotation(null)
-      // Refresh quotations list
       if (customerToUse.id) {
         const res = await quotationService.getQuotationsByCustomer(customerToUse.id)
         if (res?.success) {
           quotationHook.setQuotations((res.data || []).map(q => QuotationHelper.normalizeQuotation(q)))
         }
+      }
+    } else if (result?.existingQuotationId) {
+      try {
+        const res = await quotationService.getQuotation(result.existingQuotationId)
+        if (res?.success) {
+          setEditingQuotation(res.data)
+          Toast.success('Opened existing quotation for this RFP. Only one quotation per RFP is allowed.')
+        }
+      } catch (_) {
+        Toast.error('Could not open existing quotation.')
       }
     }
   }

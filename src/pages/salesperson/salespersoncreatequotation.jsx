@@ -1579,26 +1579,6 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
               </div>
             </div>
 
-            {/* Remark Section */}
-            <div className="space-y-3">
-              <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                <div className="p-1.5 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-md">
-                  <FileText className="h-4 w-4 text-white" />
-                </div>
-                Remarks
-              </h3>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Quotation Remark</label>
-                <textarea
-                  value={quotationData.remark}
-                  onChange={(e) => handleInputChange('remark', e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                  placeholder="Enter any additional remarks or notes for this quotation"
-                />
-              </div>
-            </div>
-
             {/* Transport Details */}
             <div className="space-y-3">
               <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
