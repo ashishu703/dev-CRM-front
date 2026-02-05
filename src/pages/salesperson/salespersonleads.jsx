@@ -14,12 +14,13 @@ import TagManager from '../../components/salesperson/TagManager'
 import CustomerDetailSidebar from '../../components/salesperson/CustomerDetailSidebar'
 import ImportLeadsModal from '../../components/salesperson/ImportLeadsModal'
 import ColumnVisibilityModal from '../../components/salesperson/ColumnVisibilityModal'
+import InlineStatusDropdown from '../../components/InlineStatusDropdown'
+import InlineFollowUpStatusCell from '../../components/InlineFollowUpStatusCell'
 import AddCustomerForm from './salespersonaddcustomer.jsx'
 import CreateQuotationForm from './salespersoncreatequotation.jsx'
 import CreatePIForm from './CreatePIForm.jsx'
 import Toast from '../../utils/Toast'
 import { QuotationHelper } from '../../utils/QuotationHelper'
-import { StatusConverter } from '../../utils/StatusConverter'
 import { Search, RefreshCw, Plus, Filter, Eye, Pencil, FileText, Upload, Settings, Tag, X, User, Mail, Building2, Package, Hash, MapPin, Globe, Users, TrendingUp, Calendar, Clock, MoreHorizontal, ShieldCheck, Copy, Check } from 'lucide-react'
 import { apiClient, API_ENDPOINTS, quotationService } from '../../utils/globalImports'
 import rfpService from '../../services/RfpService'
@@ -30,6 +31,7 @@ import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton'
 import { EditLeadStatusModal } from './LeadStatus'
 import EnquiryTable from '../../components/EnquiryTable'
 import { useAuth } from '../../hooks/useAuth'
+import { useClickOutside } from '../../hooks/useClickOutside'
 import { getProducts } from '../../constants/products'
 
 const getUserData = () => {
@@ -109,27 +111,13 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     general: '' // General form-level errors
   })
 
-  // When Pricing modal opens, always load products list so dropdown has all products & types
   React.useEffect(() => {
     if (showPricingModal && pricingLead) {
       setProducts(getProducts())
     }
   }, [showPricingModal, pricingLead])
 
-  // Close dropdown when clicking outside
-  React.useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target)) {
-        setShowProductDropdown(false)
-      }
-    }
-    if (showProductDropdown) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showProductDropdown])
+  useClickOutside(productDropdownRef, () => setShowProductDropdown(false), showProductDropdown)
   const [selectedBranch, setSelectedBranch] = React.useState('')
   const [companyBranches, setCompanyBranches] = React.useState({})
 
@@ -491,9 +479,6 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   const canRaiseRfp = () => {
     if (rfpForm.products.length === 0) return false
     
-    // Check if ANY product needs RFP:
-    // 1. Custom products always need RFP
-    // 2. Price NOT available (regardless of stock status)
     return rfpForm.products.some(product => {
       const isCustom = isCustomProduct(product.productSpec)
       if (isCustom) return true // Custom products always need RFP
@@ -934,10 +919,70 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
         setSelectedCustomerForLeadStatus(null)
       }
     } catch (error) {
-      Toast.error('Failed to update lead status')
+        Toast.error('Failed to update lead status')
       throw error
     }
   }
+
+  const handleInlineStatusChange = React.useCallback(async (leadId, field, newStatus) => {
+    const customer = leadsHook.customers.find(c => c.id === leadId)
+    if (!customer) return
+    const payload = {
+      sales_status: field === 'salesStatus' ? newStatus : (customer.salesStatus ?? ''),
+      sales_status_remark: customer.salesStatusRemark ?? '',
+      follow_up_status: field === 'followUpStatus' ? newStatus : (customer.followUpStatus ?? ''),
+      follow_up_remark: customer.followUpRemark ?? '',
+      follow_up_date: customer.followUpDate ?? '',
+      follow_up_time: customer.followUpTime ?? '',
+      enquired_products: JSON.stringify(customer.enquired_products || customer.enquiredProducts || []),
+      other_product: customer.other_product || customer.otherProduct || ''
+    }
+    try {
+      const fd = new FormData()
+      Object.entries(payload).forEach(([k, v]) => fd.append(k, v == null ? '' : v))
+      const response = await apiClient.putFormData(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(leadId), fd)
+      if (response.success) {
+        const updated = leadsHook.customers.map(c =>
+          c.id === leadId ? { ...c, [field]: newStatus } : c
+        )
+        leadsHook.setCustomers(updated)
+        setCustomers(updated)
+        Toast.success(`${field === 'followUpStatus' ? 'Follow up' : 'Sales'} status updated`)
+      }
+    } catch {
+      Toast.error('Failed to update status')
+    }
+  }, [leadsHook.customers, leadsHook.setCustomers, setCustomers])
+
+  const handleAppointmentChange = React.useCallback(async (leadId, { followUpDate, followUpTime }) => {
+    const customer = leadsHook.customers.find(c => c.id === leadId)
+    if (!customer) return
+    const payload = {
+      sales_status: customer.salesStatus ?? '',
+      sales_status_remark: customer.salesStatusRemark ?? '',
+      follow_up_status: customer.followUpStatus ?? 'appointment scheduled',
+      follow_up_remark: customer.followUpRemark ?? '',
+      follow_up_date: followUpDate ?? '',
+      follow_up_time: followUpTime ?? '',
+      enquired_products: JSON.stringify(customer.enquired_products || customer.enquiredProducts || []),
+      other_product: customer.other_product || customer.otherProduct || ''
+    }
+    try {
+      const fd = new FormData()
+      Object.entries(payload).forEach(([k, v]) => fd.append(k, v == null ? '' : v))
+      const response = await apiClient.putFormData(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(leadId), fd)
+      if (response.success) {
+        const updated = leadsHook.customers.map(c =>
+          c.id === leadId ? { ...c, followUpDate: followUpDate ?? '', followUpTime: followUpTime ?? '' } : c
+        )
+        leadsHook.setCustomers(updated)
+        setCustomers(updated)
+        Toast.success('Appointment updated')
+      }
+    } catch {
+      Toast.error('Failed to update appointment')
+    }
+  }, [leadsHook.customers, leadsHook.setCustomers, setCustomers])
 
   const handleToggleLeadForTag = (leadId) => {
     setSelectedLeadsForTag(prev => prev.includes(leadId) ? prev.filter(id => id !== leadId) : [...prev, leadId])
@@ -1394,118 +1439,6 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [actionMenuOpen])
-
-  // Get unique color for Sales Status
-  const getSalesStatusColor = (status) => {
-    if (!status) return 'bg-gray-100 text-gray-800 border-gray-200'
-    const statusLower = String(status).toLowerCase()
-    const colorMap = {
-      'pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      'approved': 'bg-green-100 text-green-800 border-green-200',
-      'connected': 'bg-blue-100 text-blue-800 border-blue-200',
-      'not_connected': 'bg-red-100 text-red-800 border-red-200',
-      'not connected': 'bg-red-100 text-red-800 border-red-200',
-      'follow_up': 'bg-orange-100 text-orange-800 border-orange-200',
-      'follow up': 'bg-orange-100 text-orange-800 border-orange-200',
-      'next_meeting': 'bg-purple-100 text-purple-800 border-purple-200',
-      'next meeting': 'bg-purple-100 text-purple-800 border-purple-200',
-      'order_confirmed': 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      'order confirmed': 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      'closed': 'bg-indigo-100 text-indigo-800 border-indigo-200',
-      'open': 'bg-cyan-100 text-cyan-800 border-cyan-200',
-      'win': 'bg-lime-100 text-lime-800 border-lime-200',
-      'loose': 'bg-rose-100 text-rose-800 border-rose-200',
-      'not interested': 'bg-slate-100 text-slate-800 border-slate-200',
-      'not_interested': 'bg-slate-100 text-slate-800 border-slate-200',
-      'running': 'bg-amber-100 text-amber-800 border-amber-200',
-      'converted': 'bg-teal-100 text-teal-800 border-teal-200',
-      'interested': 'bg-pink-100 text-pink-800 border-pink-200'
-    }
-    return colorMap[statusLower] || 'bg-gray-100 text-gray-800 border-gray-200'
-  }
-
-  // Get unique color for Follow Up Status
-  const getFollowUpStatusColor = (status) => {
-    if (!status) return 'bg-gray-100 text-gray-800 border-gray-200'
-    const statusLower = String(status).toLowerCase()
-    const colorMap = {
-      'pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      'unreachable': 'bg-red-100 text-red-800 border-red-200',
-      'unreachable/call not connected': 'bg-red-100 text-red-800 border-red-200',
-      'inactive': 'bg-gray-100 text-gray-800 border-gray-200',
-      'interested': 'bg-green-100 text-green-800 border-green-200',
-      'not interested': 'bg-rose-100 text-rose-800 border-rose-200',
-      'appointment scheduled': 'bg-blue-100 text-blue-800 border-blue-200',
-      'quotation sent': 'bg-purple-100 text-purple-800 border-purple-200',
-      'negotiation': 'bg-orange-100 text-orange-800 border-orange-200',
-      'close order': 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      'closed/lost': 'bg-slate-100 text-slate-800 border-slate-200',
-      'call back request': 'bg-amber-100 text-amber-800 border-amber-200',
-      'currently not required': 'bg-gray-100 text-gray-800 border-gray-200',
-      'not required': 'bg-gray-100 text-gray-800 border-gray-200',
-      'not relevant': 'bg-gray-100 text-gray-800 border-gray-200',
-      'connected': 'bg-cyan-100 text-cyan-800 border-cyan-200',
-      'follow up': 'bg-indigo-100 text-indigo-800 border-indigo-200',
-      'follow_up': 'bg-indigo-100 text-indigo-800 border-indigo-200'
-    }
-    return colorMap[statusLower] || 'bg-gray-100 text-gray-800 border-gray-200'
-  }
-
-  // Get dark mode color for Sales Status
-  const getSalesStatusColorDark = (status) => {
-    if (!status) return 'bg-gray-800/30 text-gray-300 border-gray-700'
-    const statusLower = String(status).toLowerCase()
-    const colorMap = {
-      'pending': 'bg-yellow-900/30 text-yellow-300 border-yellow-700',
-      'approved': 'bg-green-900/30 text-green-300 border-green-700',
-      'connected': 'bg-blue-900/30 text-blue-300 border-blue-700',
-      'not_connected': 'bg-red-900/30 text-red-300 border-red-700',
-      'not connected': 'bg-red-900/30 text-red-300 border-red-700',
-      'follow_up': 'bg-orange-900/30 text-orange-300 border-orange-700',
-      'follow up': 'bg-orange-900/30 text-orange-300 border-orange-700',
-      'next_meeting': 'bg-purple-900/30 text-purple-300 border-purple-700',
-      'next meeting': 'bg-purple-900/30 text-purple-300 border-purple-700',
-      'order_confirmed': 'bg-emerald-900/30 text-emerald-300 border-emerald-700',
-      'order confirmed': 'bg-emerald-900/30 text-emerald-300 border-emerald-700',
-      'closed': 'bg-indigo-900/30 text-indigo-300 border-indigo-700',
-      'open': 'bg-cyan-900/30 text-cyan-300 border-cyan-700',
-      'win': 'bg-lime-900/30 text-lime-300 border-lime-700',
-      'loose': 'bg-rose-900/30 text-rose-300 border-rose-700',
-      'not interested': 'bg-slate-900/30 text-slate-300 border-slate-700',
-      'not_interested': 'bg-slate-900/30 text-slate-300 border-slate-700',
-      'running': 'bg-amber-900/30 text-amber-300 border-amber-700',
-      'converted': 'bg-teal-900/30 text-teal-300 border-teal-700',
-      'interested': 'bg-pink-900/30 text-pink-300 border-pink-700'
-    }
-    return colorMap[statusLower] || 'bg-gray-800/30 text-gray-300 border-gray-700'
-  }
-
-  // Get dark mode color for Follow Up Status
-  const getFollowUpStatusColorDark = (status) => {
-    if (!status) return 'bg-gray-800/30 text-gray-300 border-gray-700'
-    const statusLower = String(status).toLowerCase()
-    const colorMap = {
-      'pending': 'bg-yellow-900/30 text-yellow-300 border-yellow-700',
-      'unreachable': 'bg-red-900/30 text-red-300 border-red-700',
-      'unreachable/call not connected': 'bg-red-900/30 text-red-300 border-red-700',
-      'inactive': 'bg-gray-800/30 text-gray-300 border-gray-700',
-      'interested': 'bg-green-900/30 text-green-300 border-green-700',
-      'not interested': 'bg-rose-900/30 text-rose-300 border-rose-700',
-      'appointment scheduled': 'bg-blue-900/30 text-blue-300 border-blue-700',
-      'quotation sent': 'bg-purple-900/30 text-purple-300 border-purple-700',
-      'negotiation': 'bg-orange-900/30 text-orange-300 border-orange-700',
-      'close order': 'bg-emerald-900/30 text-emerald-300 border-emerald-700',
-      'closed/lost': 'bg-slate-900/30 text-slate-300 border-slate-700',
-      'call back request': 'bg-amber-900/30 text-amber-300 border-amber-700',
-      'currently not required': 'bg-gray-800/30 text-gray-300 border-gray-700',
-      'not required': 'bg-gray-800/30 text-gray-300 border-gray-700',
-      'not relevant': 'bg-gray-800/30 text-gray-300 border-gray-700',
-      'connected': 'bg-cyan-900/30 text-cyan-300 border-cyan-700',
-      'follow up': 'bg-indigo-900/30 text-indigo-300 border-indigo-700',
-      'follow_up': 'bg-indigo-900/30 text-indigo-300 border-indigo-700'
-    }
-    return colorMap[statusLower] || 'bg-gray-800/30 text-gray-300 border-gray-700'
-  }
 
   const truncateText = (text, maxLength = 30) => {
     if (!text || text === 'N/A' || text === '-') return text === 'N/A' || text === '-' ? '-' : (text || '-')
@@ -2056,7 +1989,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
               isDarkMode ? 'from-gray-800 via-gray-750 to-gray-800 border-gray-700' : 'border-blue-200'
             }`}>
               <tr>
-                <th className="px-4 py-4 text-left text-xs font-bold uppercase w-12">
+                <th className="px-2 py-2 text-left text-[10px] font-bold uppercase w-10">
                   <input
                     type="checkbox"
                     checked={selectedLeadsForTag.length > 0 && selectedLeadsForTag.length === leadsHook.paginatedCustomers.length}
@@ -2069,7 +2002,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   />
                 </th>
                 {columnVisibility.leadId && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Hash className="h-4 w-4 text-purple-600" />
                       <span>LEAD ID</span>
@@ -2077,7 +2010,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {(columnVisibility.namePhone || columnVisibility.email) && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <User className="h-4 w-4 text-blue-600" />
                       <span>CUSTOMER</span>
@@ -2085,7 +2018,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.business && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-purple-600" />
                       <span>BUSINESS</span>
@@ -2093,7 +2026,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.productType && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Package className="h-4 w-4 text-green-600" />
                       <span>Product Type</span>
@@ -2101,7 +2034,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.gstNo && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Hash className="h-4 w-4 text-orange-600" />
                       <span>GST No</span>
@@ -2109,7 +2042,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.address && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-red-600" />
                       <span>ADDRESS</span>
@@ -2117,7 +2050,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.state && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Globe className="h-4 w-4 text-indigo-600" />
                       <span>STATE</span>
@@ -2125,7 +2058,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.division && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 text-cyan-600" />
                       <span>Division</span>
@@ -2133,7 +2066,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.customerType && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Tag className="h-4 w-4 text-pink-600" />
                       <span>Customer Type</span>
@@ -2141,7 +2074,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.leadSource && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <TrendingUp className="h-4 w-4 text-emerald-600" />
                       <span>Lead Source</span>
@@ -2149,7 +2082,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.salesStatus && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Clock className="h-4 w-4 text-yellow-600" />
                       <span>SALES STATUS</span>
@@ -2157,7 +2090,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.followUpStatus && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-teal-600" />
                       <span>FOLLOW UP STATUS</span>
@@ -2165,7 +2098,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.followUpDate && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4" />
                       <span>Follow Up Date</span>
@@ -2173,7 +2106,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.followUpTime && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Clock className="h-4 w-4" />
                       <span>Follow Up Time</span>
@@ -2181,14 +2114,14 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.date && (
-                  <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4" />
                       <span>Date</span>
                     </div>
                   </th>
                 )}
-                <th className={`px-4 py-4 text-left text-xs font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                   <div className="flex items-center gap-2">
                     <MoreHorizontal className="h-4 w-4" />
                     <span>Actions</span>
@@ -2212,7 +2145,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                 <tr key={customer.id} className={`transition-colors duration-150 ${
                   isDarkMode ? 'hover:bg-gray-700/50' : 'hover:bg-blue-50/50'
                 }`}>
-                  <td className="px-4 py-3">
+                  <td className="px-2 py-2">
                     <input
                       type="checkbox"
                       checked={selectedLeadsForTag.includes(customer.id)}
@@ -2225,12 +2158,12 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                     />
                   </td>
                   {columnVisibility.leadId && (
-                    <td className={`px-4 py-3 text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={`Lead ID: ${customer.id}`}>
+                    <td className={`px-2 py-2 text-xs font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={`Lead ID: ${customer.id}`}>
                       {customer.id}
                     </td>
                   )}
                   {(columnVisibility.namePhone || columnVisibility.email) && (
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-2">
                       <div className="space-y-1">
                         {columnVisibility.namePhone && (
                           <div className={`font-semibold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={customer.name}>
@@ -2258,37 +2191,37 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                     </td>
                   )}
                   {columnVisibility.business && (
-                    <td className={`px-4 py-3 text-sm font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={customer.business}>
+                    <td className={`px-2 py-2 text-xs font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={customer.business}>
                       {truncateText(customer.business, 30)}
                     </td>
                   )}
                   {columnVisibility.productType && (
-                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.productName !== 'N/A' ? customer.productName : ''}>
+                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.productName !== 'N/A' ? customer.productName : ''}>
                       {customer.productName !== 'N/A' ? truncateText(customer.productName, 20) : '-'}
                     </td>
                   )}
                   {columnVisibility.gstNo && (
-                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.gstNo !== 'N/A' ? customer.gstNo : ''}>
+                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.gstNo !== 'N/A' ? customer.gstNo : ''}>
                       {customer.gstNo !== 'N/A' ? truncateText(customer.gstNo, 15) : '-'}
                     </td>
                   )}
                   {columnVisibility.address && (
-                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.address}>
+                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.address}>
                       <div className="whitespace-pre-line">{truncateText(customer.address, 60)}</div>
                     </td>
                   )}
                   {columnVisibility.state && (
-                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.state}>
+                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.state}>
                       {truncateText(customer.state, 20)}
                     </td>
                   )}
                   {columnVisibility.division && (
-                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.division || ''}>
+                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.division || ''}>
                       {customer.division ? truncateText(customer.division, 20) : '-'}
                     </td>
                   )}
                   {columnVisibility.customerType && (
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-2">
                       <span className={`px-3 py-1 text-xs font-medium rounded-full bg-gradient-to-r from-blue-100 to-purple-100 text-blue-800 border border-blue-200 shadow-sm ${
                         isDarkMode ? 'from-blue-900/50 to-purple-900/50 text-blue-200 border-blue-700' : ''
                       }`} title={customer.customerType}>
@@ -2297,20 +2230,18 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                     </td>
                   )}
                   {columnVisibility.leadSource && (
-                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.enquiryBy !== 'N/A' ? customer.enquiryBy : ''}>
+                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.enquiryBy !== 'N/A' ? customer.enquiryBy : ''}>
                       {customer.enquiryBy !== 'N/A' ? truncateText(customer.enquiryBy, 20) : '-'}
                     </td>
                   )}
                   {columnVisibility.salesStatus && (
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-2">
                       <div className="space-y-1">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
-                          isDarkMode 
-                            ? getSalesStatusColorDark(customer.salesStatus)
-                            : getSalesStatusColor(customer.salesStatus)
-                        }`}>
-                          {StatusConverter.toTitleStatus(customer.salesStatus)}
-                        </span>
+                        <InlineStatusDropdown
+                          value={customer.salesStatus}
+                          leadId={customer.id}
+                          onChange={(id, status) => handleInlineStatusChange(id, 'salesStatus', status)}
+                        />
                         {customer.salesStatusRemark && (
                           <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} title={customer.salesStatusRemark}>
                             "{truncateText(customer.salesStatusRemark, 40)}"
@@ -2320,39 +2251,35 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                     </td>
                   )}
                   {columnVisibility.followUpStatus && (
-                    <td className="px-4 py-3">
-                      <div className="space-y-1">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
-                          isDarkMode 
-                            ? getFollowUpStatusColorDark(customer.followUpStatus)
-                            : getFollowUpStatusColor(customer.followUpStatus)
-                        }`}>
-                          {StatusConverter.toTitleStatus(customer.followUpStatus)}
-                        </span>
-                        {customer.followUpRemark && (
-                          <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} title={customer.followUpRemark}>
-                            "{truncateText(customer.followUpRemark, 40)}"
-                          </div>
-                        )}
-                      </div>
+                    <td className="px-2 py-2">
+                      <InlineFollowUpStatusCell
+                        value={customer.followUpStatus}
+                        leadId={customer.id}
+                        followUpDate={customer.followUpDate}
+                        followUpTime={customer.followUpTime}
+                        followUpRemark={customer.followUpRemark}
+                        onChange={(id, status) => handleInlineStatusChange(id, 'followUpStatus', status)}
+                        onAppointmentChange={handleAppointmentChange}
+                        isDarkMode={isDarkMode}
+                      />
                     </td>
                   )}
                   {columnVisibility.followUpDate && (
-                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                       {customer.followUpDate || '-'}
                     </td>
                   )}
                   {columnVisibility.followUpTime && (
-                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                       {customer.followUpTime || '-'}
                     </td>
                   )}
                   {columnVisibility.date && (
-                    <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                       {customer.date ? new Date(customer.date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}
                     </td>
                   )}
-                  <td className="px-4 py-3">
+                  <td className="px-2 py-2">
                     <div className="relative action-menu-container">
                       <button 
                         onClick={() => setActionMenuOpen(actionMenuOpen === customer.id ? null : customer.id)} 

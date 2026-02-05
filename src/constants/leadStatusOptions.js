@@ -1,0 +1,30 @@
+/** Shared status options for lead/sales UI components */
+
+export const FOLLOW_UP_OPTIONS = [
+  'APPOINTMENT SCHEDULED',
+  'NOT INTERESTED',
+  'INTERESTED',
+  'QUOTATION SENT',
+  'NEGOTIATION',
+  'CLOSE ORDER',
+  'CLOSED/LOST',
+  'CALL BACK REQUEST',
+  'UNREACHABLE/CALL NOT CONNECTED',
+  'CURRENTLY NOT REQUIRED',
+  'NOT RELEVANT'
+];
+
+export const SALES_OPTIONS = [
+  'PENDING',
+  'RUNNING',
+  'INTERESTED',
+  'CONVERTED',
+  'LOOSE',
+  'LOST',
+  'WIN/CLOSED',
+  'WIN LEAD',
+  'LOST/CLOSED',
+  'CLOSED',
+  'IN PROGRESS',
+  'COMPLETED'
+];
