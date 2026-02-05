@@ -1277,11 +1277,11 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                                         no_of_wires_aluminium: 'NoOfWiresAluminium', no_of_wires_steel: 'NoOfWiresSteel',
                                         size_aluminium: 'SizeAluminium', size_steel: 'SizeSteel', size_specs: 'SizeSpecs',
                                         weight_aluminium: 'WeightAluminium', weight_steel: 'WeightSteel', total_weight: 'TotalWeight',
-                                        aluminium_cg_grade: 'AluminiumCGGrade', aluminium_ec_grade: 'AluminiumECGrade', steel_rate: 'SteelRate',
+                                        aluminium_ec_grade: 'AluminiumECGrade', steel_rate: 'SteelRate',
                                         cost_conductor_isi_per_mtr: 'CostConductorISIPerMtr', cost_conductor_commercial_per_mtr: 'CostConductorCommPerMtr',
                                         cost_conductor_isi_per_kg: 'CostConductorISIPerKg', cost_conductor_commercial_per_kg: 'CostConductorCommPerKg',
                                         'NO OF CORES': 'NoOfCores', 'CROSS-SECTIONAL AREA (SQ MM)': 'CrossSectionalAreaSqMm',
-                                        'FINAL RATE': 'FinalRate', SIZE: 'Size', TYPE: 'Type'
+                                        SIZE: 'Size', TYPE: 'Type'
                                     }
                                       const fmtVal = (k, v) => {
                                         if (v == null || v === '') return '—'
