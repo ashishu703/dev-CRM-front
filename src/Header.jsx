@@ -89,7 +89,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
       // Salesperson pages
       case 'customers':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Leads",
           subtitle: "Manage and track your sales leads"
         };
@@ -101,19 +101,19 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
         };
       case 'profile':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Profile & Attendance",
           subtitle: "Manage your profile information and track attendance"
         };
       case 'stock':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Available Stock",
           subtitle: "Manage inventory and stock levels"
         };
       case 'products':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Payment Tracking",
           subtitle: "Browse and manage all payment tracking"
         };
@@ -189,31 +189,31 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
       // SuperAdmin pages
       case 'customer-list':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Customer List",
           subtitle: "View and manage all customers"
         };
       case 'department':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Department Management",
           subtitle: "Manage departments and organizational structure"
         };
       case 'leads':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Leads Management",
           subtitle: "View and manage all leads"
         };
       case 'all-leads':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "All Leads",
           subtitle: "Comprehensive view of all leads across departments"
         };
       case 'configuration':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Configuration",
           subtitle: "System settings and configuration options"
         };
@@ -241,7 +241,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
       // Office Sales Person pages
       case 'office-sales-person':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Office Sales Dashboard",
           subtitle: "Manage office sales activities"
         };
@@ -249,7 +249,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
       // Marketing Salesperson pages
       case 'generate-lead':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Generate Lead",
           subtitle: "Create and manage new leads"
         };
@@ -287,7 +287,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
         };
       case 'sales-department-users':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Department Users",
           subtitle: "Manage sales department users and permissions"
         };
@@ -351,7 +351,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
         };
       case 'supervisor':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Supervisor",
           subtitle: "Task Assignment"
         };
@@ -410,7 +410,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
         };
       case 'production-users':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Production Staff",
           subtitle: ""
         };
@@ -445,7 +445,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
         };
       case 'it-users':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "User & Access Management",
           subtitle: "Create, manage, and control user access and permissions"
         };
@@ -487,7 +487,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
         };
       case 'create-organisation':
         return {
-          icon: <Users className="w-6 h-6 text-white" />,
+          icon: <Users className="w-5 h-5 text-white" />,
           title: "Create Organisation",
           subtitle: "Set up your organization profile and details"
         };
@@ -539,10 +539,10 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
               <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
           )}
-          <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg flex-shrink-0" style={{
+          <div className="w-6 h-6 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg flex-shrink-0" style={{
             boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.3), 0 4px 6px -2px rgba(99, 102, 241, 0.2)'
           }}>
-            <div className="text-white text-sm sm:text-base">
+            <div className="text-white text-xs sm:text-sm">
               {pageContent.icon}
             </div>
           </div>
@@ -551,15 +551,15 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
             style={isSalesHeadTheme ? { borderLeft: '3px solid #6366F1', paddingLeft: 14 } : undefined}
           >
             <h1 
-              className={`truncate ${!isSalesHeadTheme ? (headerIsDark ? 'text-white' : 'text-gray-900') + ' text-base sm:text-lg lg:text-xl font-bold' : ''}`}
-              style={isSalesHeadTheme ? { fontFamily: 'Poppins, sans-serif', fontSize: 22, fontWeight: 600, letterSpacing: '0.3px', color: '#F8FAFC', margin: 0 } : { fontFamily: 'Poppins, sans-serif' }}
+              className={`truncate ${!isSalesHeadTheme ? (headerIsDark ? 'text-white' : 'text-gray-900') + ' text-sm sm:text-base lg:text-lg font-bold' : ''}`}
+              style={isSalesHeadTheme ? { fontFamily: 'Poppins, sans-serif', fontSize: 17, fontWeight: 600, letterSpacing: '0.3px', color: '#F8FAFC', margin: 0 } : { fontFamily: 'Poppins, sans-serif' }}
             >
               {pageContent.title}
             </h1>
             {pageContent.subtitle && (
               <p 
-                className={`truncate hidden sm:block ${!isSalesHeadTheme ? (headerIsDark ? 'text-slate-300' : 'text-gray-600') + ' text-xs sm:text-sm mt-0 sm:mt-0.5' : ''}`}
-                style={isSalesHeadTheme ? { fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 400, color: '#94A3B8', margin: '2px 0 0' } : { fontFamily: 'Inter, sans-serif' }}
+                className={`truncate hidden sm:block ${!isSalesHeadTheme ? (headerIsDark ? 'text-slate-300' : 'text-gray-600') + ' text-[10px] sm:text-xs mt-0 sm:mt-0.5' : ''}`}
+                style={isSalesHeadTheme ? { fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 400, color: '#94A3B8', margin: '1px 0 0' } : { fontFamily: 'Inter, sans-serif' }}
               >
                 {pageContent.subtitle}
               </p>

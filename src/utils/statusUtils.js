@@ -24,6 +24,9 @@ export const getStatusBadge = (status, type) => {
   const followUpMap = {
     'ACTIVE': { bg: 'bg-green-100', text: 'text-green-800', label: 'ACTIVE' },
     'INACTIVE': { bg: 'bg-red-100', text: 'text-red-800', label: 'INACTIVE' },
+    'NOT CONNECTED': { bg: 'bg-red-100', text: 'text-red-800', label: 'NOT CONNECTED' },
+    'FOLLOW UP': { bg: 'bg-amber-100', text: 'text-amber-800', label: 'FOLLOW UP' },
+    'ASSIGNED': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'ASSIGNED' },
     'appointment scheduled': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'APPOINTMENT SCHEDULED' },
     'not interested': { bg: 'bg-red-100', text: 'text-red-800', label: 'NOT INTERESTED' },
     'interested': { bg: 'bg-green-100', text: 'text-green-800', label: 'INTERESTED' },
@@ -33,7 +36,9 @@ export const getStatusBadge = (status, type) => {
     'closed/lost': { bg: 'bg-gray-100', text: 'text-gray-800', label: 'CLOSED/LOST' },
     'call back request': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'CALL BACK REQUEST' },
     'unreachable/call not connected': { bg: 'bg-red-100', text: 'text-red-800', label: 'UNREACHABLE' },
+    'UNREACHABLE/CALL NOT CONNECTED': { bg: 'bg-red-100', text: 'text-red-800', label: 'UNREACHABLE' },
     'currently not required': { bg: 'bg-gray-100', text: 'text-gray-800', label: 'NOT REQUIRED' },
+    'CURRENTLY NOT REQUIRED': { bg: 'bg-gray-100', text: 'text-gray-800', label: 'NOT REQUIRED' },
     'not relevant': { bg: 'bg-gray-100', text: 'text-gray-800', label: 'NOT RELEVANT' },
     'pending': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'PENDING' }
   };
@@ -50,7 +55,7 @@ export const getStatusBadge = (status, type) => {
   return React.createElement(
     'span',
     {
-      className: `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`
+      className: `inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${config.bg} ${config.text}`
     },
     config.label
   );

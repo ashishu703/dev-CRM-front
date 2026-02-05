@@ -2026,9 +2026,40 @@ const LeadsSimplified = () => {
     }
   };
 
-  const getStatusBadge = getStatusBadgeUtil;
+  const handleStatusChange = useCallback(async (leadId, field, newStatus) => {
+    try {
+      await leadService.updateLead(leadId, { [field]: newStatus });
+      setLeadsData(prev =>
+        prev.map((l) => (l.id === leadId ? { ...l, [field]: newStatus } : l))
+      );
+      requestAllLeadsRefresh?.();
+      toastManager.success(`${field === 'followUpStatus' ? 'Follow up' : 'Sales'} status updated`);
+    } catch (err) {
+      apiErrorHandler.handleError(err, `update ${field}`);
+    }
+  }, [requestAllLeadsRefresh]);
 
-  // Show skeleton loader on initial load
+  const handleAppointmentChange = useCallback(async (leadId, { followUpDate, followUpTime }) => {
+    try {
+      await leadService.updateLead(leadId, {
+        followUpStatus: 'appointment scheduled',
+        followUpDate: followUpDate || '',
+        followUpTime: followUpTime || ''
+      });
+      setLeadsData(prev =>
+        prev.map((l) =>
+          l.id === leadId
+            ? { ...l, followUpDate: followUpDate || '', followUpTime: followUpTime || '' }
+            : l
+        )
+      );
+      requestAllLeadsRefresh?.();
+      toastManager.success('Appointment updated');
+    } catch (err) {
+      apiErrorHandler.handleError(err, 'update appointment');
+    }
+  }, [requestAllLeadsRefresh]);
+
   if (initialLoading) {
     return <DashboardSkeleton />;
   }
@@ -2112,14 +2143,14 @@ const LeadsSimplified = () => {
         {/* Global Filter Button */}
         <button
           onClick={() => setShowFilterPanel(!showFilterPanel)}
-          className={`relative p-2.5 rounded-lg transition-all duration-200 flex items-center gap-2 ${
+          className={`relative p-2 rounded-lg transition-all duration-200 flex items-center gap-1.5 ${
             showFilterPanel 
               ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg' 
               : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-blue-300'
           }`}
           title="Filter Leads"
         >
-          <Filter className="w-5 h-5" />
+          <Filter className="w-4 h-4" />
           {Object.values(enabledFilters).some(Boolean) && (
             <span className="absolute -top-1 -right-1 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-gradient-to-r from-blue-500 to-purple-500 rounded-full shadow-lg">
               {Object.values(enabledFilters).filter(Boolean).length}
@@ -2213,7 +2244,7 @@ const LeadsSimplified = () => {
         selectedLeadIds={selectedLeadIds}
         isLeadAssigned={isLeadAssigned}
         isValueAssigned={isValueAssigned}
-        getStatusBadge={getStatusBadge}
+        getStatusBadge={getStatusBadgeUtil}
         toggleSelectAll={toggleSelectAll}
         toggleSelectOne={toggleSelectOne}
         onEdit={handleEdit}
@@ -2230,10 +2261,13 @@ const LeadsSimplified = () => {
         onColumnFilterChange={(key, value) => setColumnFilters(prev => ({ ...prev, [key]: value }))}
         showColumnFilterRow={showColumnFilterRow}
         onToggleColumnFilterRow={() => setShowColumnFilterRow(prev => !prev)}
+        onFollowUpStatusChange={(id, status) => handleStatusChange(id, 'followUpStatus', status)}
+        onSalesStatusChange={(id, status) => handleStatusChange(id, 'salesStatus', status)}
+        onAppointmentChange={handleAppointmentChange}
       />
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 p-3 sm:p-4 border-t border-gray-200 bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="flex items-center space-x-2 text-sm text-gray-600">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 p-2 sm:p-3 border-t border-gray-200 bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="flex items-center space-x-2 text-xs text-gray-600">
           <span>Rows per page:</span>
           <select
             value={showAll ? 'all' : limit}
@@ -2249,7 +2283,7 @@ const LeadsSimplified = () => {
               }
             }}
             disabled={paginationDisabled}
-            className={`border border-gray-300 rounded px-2 py-1 text-sm ${paginationDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+            className={`border border-gray-300 rounded px-1.5 py-0.5 text-xs ${paginationDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
           >
             <option value={10}>10</option>
             <option value={20}>20</option>
