@@ -214,12 +214,14 @@ export default function SalespersonLayout({ onLogout }) {
   const handleNavigation = (page, id) => {
     // Handle customer(s) paths: '/customers' (list) and '/customer/{id}' or '/customers/{id}' (detail)
     if (typeof page === 'string' && (page.startsWith('/customer') || page.startsWith('/customers'))) {
-      const parts = page.split('/').filter(Boolean) // ['customer'|'customers', '123']
+      const [pathPart, queryPart] = page.split('?')
+      const parts = pathPart.split('/').filter(Boolean)
       const plural = parts[0] === 'customers'
       const cid = parts[1] || id || null
       setCurrentPage('customers')
       setSelectedCustomerId(cid)
-      const url = cid ? `/${plural ? 'customers' : 'customer'}/${cid}` : `/${plural ? 'customers' : 'customer'}`
+      let url = cid ? `/${plural ? 'customers' : 'customer'}/${cid}` : `/${plural ? 'customers' : 'customer'}`
+      if (queryPart) url += '?' + queryPart
       window.history.pushState({}, '', url)
       return
     }
@@ -332,7 +334,7 @@ export default function SalespersonLayout({ onLogout }) {
             ) : (
               // Salesperson Pages
               <>
-                {currentPage === 'dashboard' && <DashboardContent isDarkMode={isDarkMode} />}
+                {currentPage === 'dashboard' && <DashboardContent isDarkMode={isDarkMode} onNavigate={handleNavigation} />}
                 {currentPage === 'customers' && <CustomerListContent isDarkMode={isDarkMode} selectedCustomerId={selectedCustomerId} />}
                 {currentPage === 'stock' && <StockManagement isDarkMode={isDarkMode} />}
                 {currentPage === 'rfp-requests' && <SalespersonRfpRequests isDarkMode={isDarkMode} />}

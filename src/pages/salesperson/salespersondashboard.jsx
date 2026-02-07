@@ -8,6 +8,7 @@ import proformaInvoiceService from '../../api/admin_api/proformaInvoiceService'
 import departmentUserService from '../../api/admin_api/departmentUserService'
 import { useAuth } from '../../hooks/useAuth'
 import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton'
+import MyPerformancePanel from '../../components/dashboard/MyPerformancePanel'
 import { toDateOnly } from '../../utils/dateOnly'
 import {
   QuotationTrendsChart,
@@ -63,7 +64,7 @@ function CardContent({ className, children }) {
 }
 
 
-export default function DashboardContent({ isDarkMode = false }) {
+export default function DashboardContent({ isDarkMode = false, onNavigate }) {
   const { user } = useAuth()
   const [overviewDateFilter, setOverviewDateFilter] = useState('')
   const [leads, setLeads] = useState([])
@@ -121,7 +122,9 @@ export default function DashboardContent({ isDarkMode = false }) {
         name: lead.name,
         sales_status: lead.sales_status || lead.salesStatus || 'pending',
         source: lead.lead_source || lead.leadSource || 'Unknown',
-        created_at: lead.created_at || lead.createdAt || lead.date || new Date().toISOString()
+        created_at: lead.created_at || lead.createdAt || lead.date || new Date().toISOString(),
+        follow_up_date: lead.follow_up_date || lead.followUpDate || null,
+        lead_priority: (lead.lead_priority || lead.leadPriority || 'LOW').toUpperCase()
       }))
       setLeads(transformedLeads)
       setError(null)
@@ -551,7 +554,9 @@ export default function DashboardContent({ isDarkMode = false }) {
         name: lead.name,
         sales_status: lead.sales_status || lead.salesStatus || 'pending',
         source: lead.lead_source || lead.leadSource || 'Unknown',
-        created_at: lead.created_at || lead.createdAt || lead.date || new Date().toISOString()
+        created_at: lead.created_at || lead.createdAt || lead.date || new Date().toISOString(),
+        follow_up_date: lead.follow_up_date || lead.followUpDate || null,
+        lead_priority: (lead.lead_priority || lead.leadPriority || 'LOW').toUpperCase()
       }))
       setLeads(transformedLeads)
       // Fetch target and metrics
@@ -1572,21 +1577,7 @@ export default function DashboardContent({ isDarkMode = false }) {
           </div>
         </div>
       )}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 sm:gap-0 mb-4 sm:mb-6 flex-wrap">
-        <div className={`flex flex-wrap items-center gap-3 sm:gap-4 px-3 py-2 rounded-lg border ${isDarkMode ? 'bg-gray-800/50 border-gray-600' : 'bg-white/80 border-gray-200'}`}>
-          <span className={`text-xs sm:text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-            Revenue: {formatCr(revenueCurrent)} / {revenueTarget >= 1e7 ? `₹${(revenueTarget / 1e7).toFixed(2).replace(/\.?0+$/, '')} Cr` : `₹${revenueTarget.toLocaleString('en-IN')}`}
-          </span>
-          <span className={`text-xs sm:text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-            Progress: {targetProgress}%
-          </span>
-          <span className={`text-xs sm:text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-            Days Left: {daysLeftInTarget}
-          </span>
-          <span className={`text-xs sm:text-sm font-semibold ${targetStatusOnTrack ? (isDarkMode ? 'text-green-400' : 'text-green-600') : (isDarkMode ? 'text-red-400' : 'text-red-600')}`}>
-            {targetStatusOnTrack ? '✅ On Track' : '⛔ Off Track'}
-          </span>
-        </div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 sm:gap-4 mb-4 sm:mb-6 flex-wrap">
         <button
           onClick={refreshDashboard}
           disabled={refreshing}
@@ -1597,7 +1588,6 @@ export default function DashboardContent({ isDarkMode = false }) {
           <span>Refresh</span>
         </button>
         <div className="relative flex items-center gap-2">
-          <Calendar className={`h-4 w-4 sm:h-5 sm:w-5 ${overviewDateFilter ? (isDarkMode ? 'text-purple-400' : 'text-purple-600') : (isDarkMode ? 'text-gray-400' : 'text-gray-500')}`} />
           <input
             type="date"
             value={overviewDateFilter}
@@ -1753,27 +1743,17 @@ export default function DashboardContent({ isDarkMode = false }) {
         <div className={cx("rounded-xl border overflow-hidden", isDarkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200 shadow-md")}>
           <div className={cx("px-4 py-3 border-b", isDarkMode ? "border-gray-600" : "border-gray-200")}>
             <h2 className={cx("text-base font-semibold", isDarkMode ? "text-white" : "text-gray-900")}>My Performance</h2>
-            <p className={cx("text-xs mt-0.5", isDarkMode ? "text-gray-400" : "text-gray-500")}>Received & orders</p>
+            <p className={cx("text-xs mt-0.5", isDarkMode ? "text-gray-400" : "text-gray-500")}>Target, activity, conversion & today&apos;s focus</p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className={cx("border-b", isDarkMode ? "border-gray-600 bg-gray-800" : "border-gray-200 bg-gray-50")}>
-                  <th className={cx("text-left py-3 px-4 font-semibold", isDarkMode ? "text-gray-300" : "text-gray-700")}>Metric</th>
-                  <th className={cx("text-right py-3 px-4 font-semibold", isDarkMode ? "text-gray-300" : "text-gray-700")}>Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className={cx("border-b", isDarkMode ? "border-gray-700 hover:bg-gray-700/50" : "border-gray-100 hover:bg-gray-50")}>
-                  <td className={cx("py-2.5 px-4", isDarkMode ? "text-white" : "text-gray-900")}>Received Payment</td>
-                  <td className={cx("py-2.5 px-4 text-right font-medium", isDarkMode ? "text-green-400" : "text-green-600")}>₹{(businessMetrics.totalReceivedPayment || 0).toLocaleString('en-IN')}</td>
-                </tr>
-                <tr className={cx("border-b", isDarkMode ? "border-gray-700 hover:bg-gray-700/50" : "border-gray-100 hover:bg-gray-50")}>
-                  <td className={cx("py-2.5 px-4", isDarkMode ? "text-white" : "text-gray-900")}>Sale Orders</td>
-                  <td className={cx("py-2.5 px-4 text-right", isDarkMode ? "text-gray-300" : "text-gray-600")}>{businessMetrics.totalSaleOrder ?? 0}</td>
-                </tr>
-              </tbody>
-            </table>
+          <div className="p-4">
+            <MyPerformancePanel
+              isDarkMode={isDarkMode}
+              onNavigate={onNavigate}
+              userTarget={userTarget}
+              businessMetrics={businessMetrics}
+              leads={leads}
+              allPayments={allPayments}
+            />
           </div>
         </div>
 

@@ -48,6 +48,7 @@ export function mapApiRowToLead(r) {
     assigned_at: r.assigned_at || null,
     assignedAt: r.assigned_at || null,
     first_worked_at: r.first_worked_at || null,
-    last_activity_at: r.last_activity_at || null
+    last_activity_at: r.last_activity_at || null,
+    created_at: r.created_at ? new Date(r.created_at).toISOString().split('T')[0] : null
   }
 }
