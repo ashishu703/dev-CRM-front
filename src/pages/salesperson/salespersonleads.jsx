@@ -164,6 +164,14 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
 
   const leadsHook = useSalespersonLeads(customers)
   const activeCustomerId = viewingCustomer?.id || viewingCustomerForQuotation?.id
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const createdToday = params.get('createdToday') === 'true'
+    if (leadsHook.setFilterCreatedToday) {
+      leadsHook.setFilterCreatedToday(createdToday)
+    }
+  }, [])
   const quotationHook = useQuotationFlow(activeCustomerId, isRefreshing)
   const piHook = usePIFlow(viewingCustomer, viewingCustomerForQuotation, selectedBranch)
 

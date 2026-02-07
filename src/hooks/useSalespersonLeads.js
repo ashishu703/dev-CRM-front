@@ -17,6 +17,7 @@ export function useSalespersonLeads(initialCustomers = []) {
     tag: false, followUpStatus: false, salesStatus: false, state: false, leadSource: false, productType: false, dateRange: false
   })
   const [filters, setFilters] = useState({ salesStatus: '' })
+  const [filterCreatedToday, setFilterCreatedToday] = useState(false)
   const [sortBy, setSortBy] = useState('none')
   const [sortOrder, setSortOrder] = useState('asc')
   const [currentPage, setCurrentPage] = useState(1)
@@ -96,8 +97,20 @@ export function useSalespersonLeads(initialCustomers = []) {
     }
   }, [customers])
 
+  const todayLocal = useMemo(() => {
+    const d = new Date()
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+  }, [])
+
   const filteredCustomers = useMemo(() => {
     let filtered = customers
+    if (filterCreatedToday) {
+      filtered = filtered.filter(c => {
+        const created = c.created_at || c.date || ''
+        const createdStr = created ? (typeof created === 'string' && created.length >= 10 ? created.split('T')[0] : new Date(created).toISOString().split('T')[0]) : ''
+        return createdStr === todayLocal
+      })
+    }
     if (debouncedSearchQuery && debouncedSearchQuery.trim()) {
       const query = debouncedSearchQuery.toLowerCase().trim()
       filtered = filtered.filter(c => {
@@ -183,7 +196,7 @@ export function useSalespersonLeads(initialCustomers = []) {
     })
 
     return filtered
-  }, [customers, debouncedSearchQuery, selectedTag, filters, advancedFilters, enabledFilters, sortBy, sortOrder])
+  }, [customers, debouncedSearchQuery, selectedTag, filters, advancedFilters, enabledFilters, sortBy, sortOrder, filterCreatedToday, todayLocal])
 
   const paginatedCustomers = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage
@@ -233,6 +246,7 @@ export function useSalespersonLeads(initialCustomers = []) {
 
   return {
     customers, setCustomers, searchQuery, setSearchQuery, selectedTag, setSelectedTag,
+    filterCreatedToday, setFilterCreatedToday,
     showFilterPanel, setShowFilterPanel, advancedFilters, setAdvancedFilters, enabledFilters, setEnabledFilters, filters,
     tags, getUniqueFilterOptions, filteredCustomers, paginatedCustomers,
     currentPage, setCurrentPage, itemsPerPage, setItemsPerPage,
