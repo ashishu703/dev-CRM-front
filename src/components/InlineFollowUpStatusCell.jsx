@@ -79,7 +79,7 @@ const InlineFollowUpStatusCell = ({
           onClick={() => !disabled && setOpen((p) => !p)}
           disabled={disabled}
           className={`
-            inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-medium
+            inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium
             ${badgeClasses}
             ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:ring-2 hover:ring-offset-0.5 hover:ring-gray-300'}
           `}

@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle, Clock, FilePlus2, RefreshCw, Trash2, XCircle, X } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
-import apiClient from '../../utils/apiClient';
 import rfpService from '../../services/RfpService';
 import productPriceService from '../../services/ProductPriceService';
+import * as DhPriceListService from '../../services/DhPriceListService';
 import { getProducts } from '../../constants/products';
 import Toast from '../../utils/Toast';
 
@@ -11,6 +11,15 @@ const formatCurrency = (value) => {
   const amount = Number(value || 0);
   return `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 };
+
+function hasCalculator(productSpec) {
+  const s = (productSpec || '').toUpperCase();
+  if (s.includes('AAAC')) return true;
+  if (s.includes('ACSR')) return true;
+  if (s.includes('AB CABLE') || s.includes('AERIAL BUNCHED')) return true;
+  if ((s.includes('MULTI CORE') && s.includes('XLPE') && s.includes('ARMOURED')) || (s.includes('XLPE') && s.includes('ALUMINIUM ARMOURED'))) return true;
+  return false;
+}
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
@@ -224,6 +233,9 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
     setShowOperations(false);
     setShowPriceListModal(false);
     setShowRfpApprovalModal(false);
+    setShowCustomPriceModal(false);
+    setCustomPriceProduct(null);
+    setPriceListBySpec({});
     setSelectedRfp(null);
     setRejectionReason('');
   };
@@ -249,16 +261,24 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
     try {
       let calculatorTotalPrice = null;
       let calculatorDetail = null;
-      try {
-        const raw = window.localStorage.getItem('rfpCalculatorResult');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && (parsed.rfpId === selectedRfp?.rfp_id || parsed.rfpRequestId === selectedRfp?.id)) {
-            calculatorTotalPrice = parsed.totalPrice ?? null;
-            calculatorDetail = parsed;
+      // For multi-product: use sum of all products' target_price (calculator + custom)
+      if (selectedRfp?.products?.length > 0) {
+        const sum = selectedRfp.products.reduce((acc, p) => acc + (Number(p.target_price) || 0), 0);
+        if (Number.isFinite(sum)) calculatorTotalPrice = sum;
+        calculatorDetail = { fromProducts: selectedRfp.products.length, total: sum };
+      }
+      if (calculatorTotalPrice == null) {
+        try {
+          const raw = window.localStorage.getItem('rfpCalculatorResult');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && (parsed.rfpId === selectedRfp?.rfp_id || parsed.rfpRequestId === selectedRfp?.id)) {
+              calculatorTotalPrice = parsed.totalPrice ?? null;
+              calculatorDetail = parsed;
+            }
           }
+        } catch {
         }
-      } catch {
       }
 
       const response = await rfpService.approve(rfpId, {
@@ -299,6 +319,20 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
         setShowRfpApprovalModal(true);
         setRejectionReason('');
         setError('');
+        const products = rfpData.products || [];
+        const bySpec = {};
+        await Promise.all(
+          products.map(async (p) => {
+            if (hasCalculator(p.product_spec)) return;
+            try {
+              const res = await DhPriceListService.getByProductSpec(p.product_spec);
+              if (res?.data) bySpec[(p.product_spec || '').trim()] = res.data;
+            } catch {
+              // not in price list
+            }
+          })
+        );
+        setPriceListBySpec(bySpec);
       }
     } catch (error) {
       setError(error.message || 'Failed to load RFP details');
@@ -354,6 +388,11 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
   })();
 
   const [clearingProductSpec, setClearingProductSpec] = useState(null);
+  const [showCustomPriceModal, setShowCustomPriceModal] = useState(false);
+  const [customPriceProduct, setCustomPriceProduct] = useState(null);
+  const [customPriceForm, setCustomPriceForm] = useState({ price: '', priceDate: new Date().toISOString().split('T')[0] });
+  const [priceListBySpec, setPriceListBySpec] = useState({});
+  const [applyingFromList, setApplyingFromList] = useState(null);
 
   const handleClearProductPrice = async (rfpId, productSpec) => {
     if (!productSpec || !rfpId) return;
@@ -373,6 +412,66 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       Toast.error(err?.message || 'Failed to remove price');
     } finally {
       setClearingProductSpec(null);
+    }
+  };
+
+  const openCustomPriceModal = (product) => {
+    setCustomPriceProduct(product);
+    setCustomPriceForm({
+      price: product.target_price != null && product.target_price !== '' ? String(product.target_price) : '',
+      priceDate: new Date().toISOString().split('T')[0]
+    });
+    setShowCustomPriceModal(true);
+    setError('');
+  };
+
+  const handleSetCustomPrice = async () => {
+    if (!selectedRfp?.id || !customPriceProduct) return;
+    const price = parseFloat(customPriceForm.price);
+    if (!Number.isFinite(price) && price !== 0) {
+      setError('Enter a valid price');
+      return;
+    }
+    setError('');
+    try {
+      await rfpService.setProductCustomPrice(selectedRfp.id, {
+        productSpec: customPriceProduct.product_spec,
+        price: customPriceForm.price,
+        priceDate: customPriceForm.priceDate || new Date().toISOString().split('T')[0]
+      });
+      const res = await rfpService.getById(selectedRfp.id);
+      if (res.success && res.data) {
+        const rfpData = res.data.rfp || res.data;
+        setSelectedRfp(rfpData);
+        setShowCustomPriceModal(false);
+        setCustomPriceProduct(null);
+        Toast.success('Custom price saved.');
+      }
+    } catch (err) {
+      setError(err?.message || 'Failed to save custom price');
+      Toast.error(err?.message || 'Failed to save custom price');
+    }
+  };
+
+  const handleUseFromPriceList = async (rfpId, productSpec, price, priceDate) => {
+    setApplyingFromList(productSpec);
+    setError('');
+    try {
+      await rfpService.setProductCalculatorPrice(rfpId, {
+        productSpec,
+        totalPrice: price,
+        calculatorDetail: { source: 'price_list', priceDate: priceDate || null }
+      });
+      const res = await rfpService.getById(rfpId);
+      if (res.success && res.data) {
+        setSelectedRfp(res.data.rfp || res.data);
+        Toast.success('Price from list applied.');
+      }
+    } catch (err) {
+      setError(err?.message || 'Failed to apply price');
+      Toast.error(err?.message || 'Failed to apply price');
+    } finally {
+      setApplyingFromList(null);
     }
   };
 
@@ -1142,19 +1241,44 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex flex-wrap items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    openCalculatorForProduct(selectedRfp, product.product_spec, {
-                                      quantity: product.quantity,
-                                      length: product.length
-                                    })
-                                  }
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 text-white"
-                                >
-                                  <Clock className="w-3 h-3" />
-                                  Calculate Price
-                                </button>
+                                {hasCalculator(product.product_spec) && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openCalculatorForProduct(selectedRfp, product.product_spec, {
+                                        quantity: product.quantity,
+                                        length: product.length
+                                      })
+                                    }
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  >
+                                    <Clock className="w-3 h-3" />
+                                    Calculate Price
+                                  </button>
+                                )}
+                                {!hasCalculator(product.product_spec) && priceListBySpec[(product.product_spec || '').trim()] && !(product.target_price != null && product.target_price !== '' && Number.isFinite(Number(product.target_price))) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const row = priceListBySpec[(product.product_spec || '').trim()];
+                                      if (row) handleUseFromPriceList(selectedRfp.id, product.product_spec, row.price, row.price_date);
+                                    }}
+                                    disabled={applyingFromList === product.product_spec}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+                                  >
+                                    {applyingFromList === product.product_spec ? 'Applying…' : `Use from list (${formatCurrency(priceListBySpec[(product.product_spec || '').trim()]?.price)})`}
+                                  </button>
+                                )}
+                                {!hasCalculator(product.product_spec) && !priceListBySpec[(product.product_spec || '').trim()] && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openCustomPriceModal(product)}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-violet-600 hover:bg-violet-700 text-white"
+                                    title="Not in calculator or price list — enter manually"
+                                  >
+                                    Custom Price
+                                  </button>
+                                )}
                                 {(product.target_price != null && product.target_price !== '' && Number.isFinite(Number(product.target_price))) ||
                                 (product.calculator_log && typeof product.calculator_log === 'object') ? (
                                   <button
@@ -1162,7 +1286,7 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                                     onClick={() => handleClearProductPrice(selectedRfp.id, product.product_spec)}
                                     disabled={clearingProductSpec === product.product_spec}
                                     className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-rose-100 text-rose-700 hover:bg-rose-200 disabled:opacity-50"
-                                    title="Remove calculated price"
+                                    title="Remove price"
                                   >
                                     <Trash2 className="w-3 h-3" />
                                     {clearingProductSpec === product.product_spec ? 'Removing…' : 'Remove price'}
@@ -1183,7 +1307,7 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                 )}
               </div>
 
-              {/* Per-product Pricing Log: scrollable list of calculated prices with details (up to 10 products) */}
+              {/* Per-product Pricing Log */}
               {selectedRfp.products && selectedRfp.products.length > 0 && (() => {
                 const rateTypeLabelMap = {
                   alu_per_mtr: 'Aluminium / Mtr',
@@ -1325,8 +1449,13 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                             ) : (
                               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4 text-center">
                                 <p className="text-sm text-slate-500 italic">
-                                  Price set manually — No calculator data available
+                                  {(detail.source === 'custom' || detail.source === 'custom_excel') ? 'Custom price' : 'Price set manually'} — No calculator data
                                 </p>
+                                {(detail.source === 'custom' || detail.source === 'custom_excel') && detail.priceDate && (
+                                  <p className="text-sm text-slate-700 mt-2">
+                                    <span className="font-medium">Price date (kis date ki price):</span> {detail.priceDate}
+                                  </p>
+                                )}
                                 {product.quantity && (
                                   <p className="text-sm text-slate-700 mt-2">
                                     <span className="font-medium">Quantity:</span> {product.quantity} {product.length_unit || 'Mtr'}
@@ -1441,6 +1570,38 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
               </div>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCustomPriceModal && customPriceProduct && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
+            <h2 className="text-lg font-semibold">Set Custom Price (not in calculator / price list)</h2>
+            <p className="text-sm text-slate-600">Product: <span className="font-semibold">{customPriceProduct.product_spec}</span></p>
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-slate-700">Price (₹)</label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                placeholder="Enter price"
+                value={customPriceForm.price}
+                onChange={(e) => setCustomPriceForm((prev) => ({ ...prev, price: e.target.value }))}
+              />
+              <label className="block text-sm font-medium text-slate-700">Price Date</label>
+              <input
+                type="date"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                value={customPriceForm.priceDate}
+                onChange={(e) => setCustomPriceForm((prev) => ({ ...prev, priceDate: e.target.value }))}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => { setShowCustomPriceModal(false); setCustomPriceProduct(null); }} className="px-4 py-2 text-sm border rounded-lg">Cancel</button>
+              <button onClick={handleSetCustomPrice} className="px-4 py-2 text-sm text-white bg-violet-600 rounded-lg">Save Price</button>
             </div>
           </div>
         </div>

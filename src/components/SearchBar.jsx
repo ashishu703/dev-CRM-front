@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Plus, Upload, RefreshCw, Download, Trash2, FileSpreadsheet } from 'lucide-react';
+import { Search, Plus, Upload, RefreshCw, Trash2, FileSpreadsheet, UserPlus } from 'lucide-react';
 
 const SearchBar = ({ 
   searchTerm, 
@@ -61,7 +61,7 @@ const SearchBar = ({
           className={iconButtonStyles.assign}
           title={selectedCount > 0 ? `Assign ${selectedCount} selected lead(s)` : 'Select leads to assign'}
         >
-          <Upload className="w-5 h-5" />
+          <UserPlus className="w-5 h-5" />
         </button>
 
         {onDeleteSelected && (

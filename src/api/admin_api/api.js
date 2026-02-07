@@ -77,6 +77,7 @@ export const API_ENDPOINTS = {
   RFP_APPROVE: (id) => `${API_BASE_URL}/api/rfps/${id}/approve`,
   RFP_PRODUCT_CALCULATOR_PRICE: (id) => `${API_BASE_URL}/api/rfps/${id}/product-calculator-price`,
   RFP_PRODUCT_CALCULATOR_PRICE_CLEAR: (id) => `${API_BASE_URL}/api/rfps/${id}/product-calculator-price/clear`,
+  RFP_CUSTOM_PRICE: (id) => `${API_BASE_URL}/api/rfps/${id}/custom-price`,
   RFP_REJECT: (id) => `${API_BASE_URL}/api/rfps/${id}/reject`,
   RFP_PRICES: (id) => `${API_BASE_URL}/api/rfps/${id}/prices`,
   RFP_ADD_PRICE: (id) => `${API_BASE_URL}/api/rfps/${id}/prices`,
@@ -88,6 +89,11 @@ export const API_ENDPOINTS = {
   // Product prices
   PRODUCT_PRICE_GET: (productSpec) => `${API_BASE_URL}/api/prices/${encodeURIComponent(productSpec)}`,
   PRODUCT_PRICE_CREATE: () => `${API_BASE_URL}/api/prices`,
+
+  DH_PRICE_LIST: (q) => `${API_BASE_URL}/api/dh-price-list${q ? `?${q}` : ''}`,
+  DH_PRICE_LIST_TEMPLATE: () => `${API_BASE_URL}/api/dh-price-list/template`,
+  DH_PRICE_LIST_BY_SPEC: (spec) => `${API_BASE_URL}/api/dh-price-list/${encodeURIComponent(spec)}`,
+  DH_PRICE_LIST_UPLOAD: () => `${API_BASE_URL}/api/dh-price-list/upload`,
 
   // Pricing & RFP Decisions
   PRICING_RFP_DECISION_CREATE: () => `${API_BASE_URL}/api/pricing-rfp-decisions`,

@@ -39,13 +39,13 @@ const InlineStatusDropdown = ({
         onClick={() => !disabled && setOpen((p) => !p)}
         disabled={disabled}
         className={`
-          inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-medium
+          inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium
           ${badgeClasses}
-          ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-gray-300'}
+          ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:ring-2 hover:ring-offset-0.5 hover:ring-gray-300'}
         `}
       >
         {(displayValue || 'PENDING').toUpperCase().replace(/_/g, ' ')}
-        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-2.5 h-2.5 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (

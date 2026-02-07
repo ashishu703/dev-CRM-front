@@ -55,7 +55,7 @@ export const getStatusBadge = (status, type) => {
   return React.createElement(
     'span',
     {
-      className: `inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${config.bg} ${config.text}`
+      className: `inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${config.bg} ${config.text}`
     },
     config.label
   );

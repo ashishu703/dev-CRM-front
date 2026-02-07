@@ -202,8 +202,8 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
       case 'leads':
         return {
           icon: <Users className="w-5 h-5 text-white" />,
-          title: "Leads Management",
-          subtitle: "View and manage all leads"
+          title: "",
+          subtitle: ""
         };
       case 'all-leads':
         return {
@@ -546,25 +546,27 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
               {pageContent.icon}
             </div>
           </div>
-          <div 
-            className="min-w-0 flex flex-col justify-center"
-            style={isSalesHeadTheme ? { borderLeft: '3px solid #6366F1', paddingLeft: 14 } : undefined}
-          >
-            <h1 
-              className={`truncate ${!isSalesHeadTheme ? (headerIsDark ? 'text-white' : 'text-gray-900') + ' text-sm sm:text-base lg:text-lg font-bold' : ''}`}
-              style={isSalesHeadTheme ? { fontFamily: 'Poppins, sans-serif', fontSize: 17, fontWeight: 600, letterSpacing: '0.3px', color: '#F8FAFC', margin: 0 } : { fontFamily: 'Poppins, sans-serif' }}
+          {(pageContent.title || pageContent.subtitle) && (
+            <div 
+              className="min-w-0 flex flex-col justify-center"
+              style={isSalesHeadTheme ? { borderLeft: '3px solid #6366F1', paddingLeft: 14 } : undefined}
             >
-              {pageContent.title}
-            </h1>
-            {pageContent.subtitle && (
-              <p 
-                className={`truncate hidden sm:block ${!isSalesHeadTheme ? (headerIsDark ? 'text-slate-300' : 'text-gray-600') + ' text-[10px] sm:text-xs mt-0 sm:mt-0.5' : ''}`}
-                style={isSalesHeadTheme ? { fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 400, color: '#94A3B8', margin: '1px 0 0' } : { fontFamily: 'Inter, sans-serif' }}
+              <h1 
+                className={`truncate ${!isSalesHeadTheme ? (headerIsDark ? 'text-white' : 'text-gray-900') + ' text-sm sm:text-base lg:text-lg font-bold' : ''}`}
+                style={isSalesHeadTheme ? { fontFamily: 'Poppins, sans-serif', fontSize: 17, fontWeight: 600, letterSpacing: '0.3px', color: '#F8FAFC', margin: 0 } : { fontFamily: 'Poppins, sans-serif' }}
               >
-                {pageContent.subtitle}
-              </p>
-            )}
-          </div>
+                {pageContent.title}
+              </h1>
+              {pageContent.subtitle && (
+                <p 
+                  className={`truncate hidden sm:block ${!isSalesHeadTheme ? (headerIsDark ? 'text-slate-300' : 'text-gray-600') + ' text-[10px] sm:text-xs mt-0 sm:mt-0.5' : ''}`}
+                  style={isSalesHeadTheme ? { fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 400, color: '#94A3B8', margin: '1px 0 0' } : { fontFamily: 'Inter, sans-serif' }}
+                >
+                  {pageContent.subtitle}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center space-x-1 sm:space-x-2 lg:space-x-3 flex-shrink-0">
