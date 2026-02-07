@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, User, Building2, MapPin, FileText, Package, Users, Edit, Trash2, RefreshCw, Settings } from 'lucide-react';
+import { Calendar, User, Building2, MapPin, FileText, Package, Users, Edit, Trash2, RefreshCw, Settings, Hash } from 'lucide-react';
 
 const EnquiryTable = ({ enquiries, loading, groupedByDate, onRefresh, onEdit, onDelete, visibleColumns = {}, onToggleColumnVisibility }) => {
   if (loading) {
@@ -21,13 +21,18 @@ const EnquiryTable = ({ enquiries, loading, groupedByDate, onRefresh, onEdit, on
     return (
       <div className="space-y-6">
         {sortedDates.map((date) => (
-          <div key={date} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div
+            key={date}
+            className="bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden"
+          >
             {/* Date Header */}
-            <div className="bg-blue-50 px-3 sm:px-6 py-2 sm:py-3 border-b border-gray-200">
+            <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 px-3 sm:px-6 py-2 sm:py-3 border-b border-gray-200">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2">
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-800">
+                  <span className="inline-flex items-center justify-center rounded-full bg-white/70 text-blue-600 shadow-sm w-7 h-7 sm:w-8 sm:h-8">
+                    <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </span>
+                  <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">
                     {new Date(date).toLocaleDateString('en-IN', { 
                       weekday: 'long', 
                       year: 'numeric', 
@@ -36,7 +41,7 @@ const EnquiryTable = ({ enquiries, loading, groupedByDate, onRefresh, onEdit, on
                     })}
                   </h3>
                 </div>
-                <span className="text-xs sm:text-sm text-gray-600 sm:ml-auto">
+                <span className="text-xs sm:text-sm text-gray-700 sm:ml-auto">
                   {groupedByDate[date].length} enquiry{groupedByDate[date].length !== 1 ? 'ies' : ''}
                 </span>
               </div>
@@ -49,27 +54,42 @@ const EnquiryTable = ({ enquiries, loading, groupedByDate, onRefresh, onEdit, on
                   <tr>
                     {(visibleColumns.customer_name !== false) && (
                       <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[90px] sm:min-w-[120px]">
-                        Customer
+                        <div className="flex items-center gap-1.5">
+                          <User className="w-3 h-3 sm:w-4 sm:h-4 text-blue-500" />
+                          <span>Customer</span>
+                        </div>
                       </th>
                     )}
                     {(visibleColumns.business !== false) && (
                       <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px] sm:min-w-[150px]">
-                        Business
+                        <div className="flex items-center gap-1.5">
+                          <Building2 className="w-3 h-3 sm:w-4 sm:h-4 text-purple-500" />
+                          <span>Business</span>
+                        </div>
                       </th>
                     )}
                     {(visibleColumns.address !== false) && (
                       <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px] sm:min-w-[120px]">
-                        Address
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="w-3 h-3 sm:w-4 sm:h-4 text-red-500" />
+                          <span>Address</span>
+                        </div>
                       </th>
                     )}
                     {(visibleColumns.state !== false) && (
                       <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        State
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="w-3 h-3 sm:w-4 sm:h-4 text-indigo-500" />
+                          <span>State</span>
+                        </div>
                       </th>
                     )}
                     {(visibleColumns.division !== false) && (
                       <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Division
+                        <div className="flex items-center gap-1.5">
+                          <Users className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-500" />
+                          <span>Division</span>
+                        </div>
                       </th>
                     )}
                     {(visibleColumns.follow_up_status === true) && (
@@ -89,17 +109,26 @@ const EnquiryTable = ({ enquiries, loading, groupedByDate, onRefresh, onEdit, on
                     )}
                     {(visibleColumns.enquired_product !== false) && (
                       <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Enquired Product
+                        <div className="flex items-center gap-1.5">
+                          <Package className="w-3 h-3 sm:w-4 sm:h-4 text-blue-500" />
+                          <span>Enquired Product</span>
+                        </div>
                       </th>
                     )}
                     {(visibleColumns.product_quantity !== false) && (
                       <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Quantity
+                        <div className="flex items-center gap-1.5">
+                          <Hash className="w-3 h-3 sm:w-4 sm:h-4 text-slate-500" />
+                          <span>Quantity</span>
+                        </div>
                       </th>
                     )}
                     {(visibleColumns.product_remark !== false) && (
                       <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Product Remark
+                        <div className="flex items-center gap-1.5">
+                          <FileText className="w-3 h-3 sm:w-4 sm:h-4 text-amber-500" />
+                          <span>Product Remark</span>
+                        </div>
                       </th>
                     )}
                     {(visibleColumns.salesperson === true) && (
@@ -249,39 +278,57 @@ const EnquiryTable = ({ enquiries, loading, groupedByDate, onRefresh, onEdit, on
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
       <div className="overflow-x-auto w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
         <table className="w-full min-w-[700px] sm:min-w-0" style={{ tableLayout: 'auto' }}>
           <thead className="bg-gray-50 sticky top-0 z-10">
             <tr>
               {(visibleColumns.enquiry_date === true) && (
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-3 h-3 sm:w-4 sm:h-4 text-blue-500" />
+                    <span>Date</span>
+                  </div>
                 </th>
               )}
               {(visibleColumns.customer_name !== false) && (
                 <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[90px] sm:min-w-[120px]">
-                  Customer
+                  <div className="flex items-center gap-1.5">
+                    <User className="w-3 h-3 sm:w-4 sm:h-4 text-blue-500" />
+                    <span>Customer</span>
+                  </div>
                 </th>
               )}
               {(visibleColumns.business !== false) && (
                 <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px] sm:min-w-[150px]">
-                  Business
+                  <div className="flex items-center gap-1.5">
+                    <Building2 className="w-3 h-3 sm:w-4 sm:h-4 text-purple-500" />
+                    <span>Business</span>
+                  </div>
                 </th>
               )}
               {(visibleColumns.address !== false) && (
                 <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Address
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="w-3 h-3 sm:w-4 sm:h-4 text-red-500" />
+                    <span>Address</span>
+                  </div>
                 </th>
               )}
               {(visibleColumns.state !== false) && (
                 <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  State
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="w-3 h-3 sm:w-4 sm:h-4 text-indigo-500" />
+                    <span>State</span>
+                  </div>
                 </th>
               )}
               {(visibleColumns.division !== false) && (
                 <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Division
+                  <div className="flex items-center gap-1.5">
+                    <Users className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-500" />
+                    <span>Division</span>
+                  </div>
                 </th>
               )}
               {(visibleColumns.follow_up_status === true) && (
@@ -301,17 +348,26 @@ const EnquiryTable = ({ enquiries, loading, groupedByDate, onRefresh, onEdit, on
               )}
               {(visibleColumns.enquired_product !== false) && (
                 <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Enquired Product
+                  <div className="flex items-center gap-1.5">
+                    <Package className="w-3 h-3 sm:w-4 sm:h-4 text-blue-500" />
+                    <span>Enquired Product</span>
+                  </div>
                 </th>
               )}
               {(visibleColumns.product_quantity !== false) && (
                 <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Quantity
+                  <div className="flex items-center gap-1.5">
+                    <Hash className="w-3 h-3 sm:w-4 sm:h-4 text-slate-500" />
+                    <span>Quantity</span>
+                  </div>
                 </th>
               )}
               {(visibleColumns.product_remark !== false) && (
                 <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Product Remark
+                  <div className="flex items-center gap-1.5">
+                    <FileText className="w-3 h-3 sm:w-4 sm:h-4 text-amber-500" />
+                    <span>Product Remark</span>
+                  </div>
                 </th>
               )}
               {(visibleColumns.salesperson === true) && (
@@ -435,7 +491,7 @@ const EnquiryTable = ({ enquiries, loading, groupedByDate, onRefresh, onEdit, on
                             onDelete(enquiry.id);
                           }
                         }}
-                        disabled={deletingId === enquiry.id}
+                        disabled={loading}
                         className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 disabled:opacity-50"
                         title="Delete"
                       >
