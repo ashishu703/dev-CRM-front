@@ -1,519 +1,215 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Eye, Edit, Mail, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCcw, Clock, Calendar, MessageSquare, TrendingUp, FileText, Package, CalendarDays, MoreHorizontal, User, Building2, MapPin, Globe } from 'lucide-react';
+import React, { useState, useMemo, useRef } from 'react';
+import { Eye, Edit, Mail, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCcw, Clock, Calendar, Package, MoreHorizontal, User, Building2, MapPin } from 'lucide-react';
 import apiClient from '../../utils/apiClient';
 import { API_ENDPOINTS } from '../../api/admin_api/api';
 import SalespersonCustomerTimeline from '../../components/SalespersonCustomerTimeline';
 import { useAuth } from '../../hooks/useAuth';
 import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton';
 import { getProducts } from '../../constants/products';
+import { useClickOutside } from '../../hooks/useClickOutside';
 
-// Edit Lead Status Modal Component
+const parseEnquiredProducts = (lead) => {
+  const raw = lead?.enquired_products;
+  if (!raw) return [];
+  try {
+    const parsed = Array.isArray(raw) ? raw : JSON.parse(raw || '[]');
+    return parsed.map(item =>
+      typeof item === 'string'
+        ? { product: item, quantity: '', remark: '' }
+        : { product: item.product || item.name || '', quantity: item.quantity || '', remark: item.remark || '' }
+    );
+  } catch {
+    return [];
+  }
+};
+
 export const EditLeadStatusModal = ({ lead, onClose, onSave }) => {
-  const parseEnquiredProducts = () => {
-    if (!lead?.enquired_products) return [];
-    
-    try {
-      const parsed = Array.isArray(lead.enquired_products) 
-        ? lead.enquired_products 
-        : JSON.parse(lead.enquired_products || '[]');
-      
-      // Convert old format (strings) to new format (objects)
-      return parsed.map(item => {
-        if (typeof item === 'string') {
-          return { product: item, quantity: '', remark: '' };
-        }
-        return { product: item.product || item.name || '', quantity: item.quantity || '', remark: item.remark || '' };
-      });
-    } catch {
-      return [];
-    }
-  };
-  
-  const initialEnquiredProducts = parseEnquiredProducts();
-  
-  const [formData, setFormData] = useState({
-    sales_status: lead?.sales_status || '',
-    sales_status_remark: lead?.sales_status_remark || '',
-    follow_up_status: lead?.follow_up_status || '',
-    follow_up_remark: lead?.follow_up_remark || '',
-    follow_up_date: lead?.follow_up_date || '',
-    follow_up_time: lead?.follow_up_time || '',
-    enquired_products: initialEnquiredProducts,
-    other_product: lead?.other_product || ''
-  });
-  
-  const [products] = useState(() => getProducts());
-  const [showOtherInput, setShowOtherInput] = useState(
-    initialEnquiredProducts.some(p => {
-      const isInList = getProducts().some(prod => prod.name.toLowerCase() === p.product.toLowerCase());
-      return p.product === 'Other' || (!isInList && p.product);
-    })
-  );
+  const initialProducts = useMemo(() => parseEnquiredProducts(lead), [lead?.id]);
+  const products = useMemo(() => getProducts(), []);
+
+  const [enquiredProducts, setEnquiredProducts] = useState(initialProducts);
+  const [otherProduct, setOtherProduct] = useState(lead?.other_product ?? lead?.otherProduct ?? '');
   const [productSearch, setProductSearch] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const comboboxRef = useRef(null);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
+  const showOtherInput = useMemo(() =>
+    enquiredProducts.some(p =>
+      p.product === 'Other' || !products.some(prod => prod.name.toLowerCase() === p.product.toLowerCase())
+    ),
+    [enquiredProducts, products]
+  );
 
-  const handleProductSelect = (e) => {
-    const selectedProduct = e.target.value;
-    if (!selectedProduct || selectedProduct === '') return;
-    
-    // Don't add if already exists (exact match)
-    if (formData.enquired_products.some(p => p.product.toLowerCase() === selectedProduct.toLowerCase())) {
-      e.target.value = ''; // Reset dropdown
-      return;
-    }
-    
-    // Show other input if "Other" is selected
-    if (selectedProduct === 'Other') {
-      setShowOtherInput(true);
-    }
-    
-    setFormData(prev => ({
-      ...prev,
-      enquired_products: [...prev.enquired_products, { product: selectedProduct, quantity: '', remark: '' }]
-    }));
-    
-    e.target.value = ''; // Reset dropdown after selection
-  };
-
-  // Filter products based on search
-  const filteredProducts = React.useMemo(() => {
-    if (!productSearch.trim()) {
-      return products;
-    }
-    const searchLower = productSearch.toLowerCase();
-    return products.filter(p => p.name.toLowerCase().includes(searchLower));
+  const filteredProducts = useMemo(() => {
+    if (!productSearch.trim()) return products;
+    const q = productSearch.toLowerCase();
+    return products.filter(p => p.name.toLowerCase().includes(q));
   }, [productSearch, products]);
 
-  // Handle adding product from search input or dropdown
-  const handleAddProduct = (productName = null) => {
-    const productToAdd = productName || productSearch.trim();
-    if (!productToAdd) return;
-    
-    // Don't add if already exists (exact match)
-    if (formData.enquired_products.some(p => 
-      p.product.toLowerCase() === productToAdd.toLowerCase()
-    )) {
+  useClickOutside(
+    comboboxRef,
+    () => setShowProductDropdown(false),
+    showProductDropdown
+  );
+
+  const addProduct = (name = null) => {
+    const toAdd = (name || productSearch.trim());
+    if (!toAdd) return;
+    if (enquiredProducts.some(p => p.product.toLowerCase() === toAdd.toLowerCase())) {
       setProductSearch('');
       setShowProductDropdown(false);
       return;
     }
-    
-    // Check if it's in the products list
-    const isInProductsList = products.some(p => p.name.toLowerCase() === productToAdd.toLowerCase());
-    
-    // Add the product directly - allow multiple custom products
-    setFormData(prev => ({
-      ...prev,
-      enquired_products: [...prev.enquired_products, { product: productToAdd, quantity: '', remark: '' }]
-    }));
-    
-    // Show other input if any custom product (not in list) is added
-    if (!isInProductsList) {
-      setShowOtherInput(true);
-    }
-    
+    setEnquiredProducts(prev => [...prev, { product: toAdd, quantity: '', remark: '' }]);
     setProductSearch('');
     setShowProductDropdown(false);
   };
 
-  const handleProductSearchKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleAddProduct();
-    } else if (e.key === 'Escape') {
-      setShowProductDropdown(false);
-    }
+  const removeProduct = (idx) => {
+    setEnquiredProducts(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const handleProductSearchChange = (e) => {
-    setProductSearch(e.target.value);
-    setShowProductDropdown(true);
-  };
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showProductDropdown && !event.target.closest('.product-combobox-container')) {
-        setShowProductDropdown(false);
-      }
-    };
-    
-    if (showProductDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [showProductDropdown]);
-
-  const handleRemoveProduct = (indexToRemove) => {
-    const updatedProducts = formData.enquired_products.filter((_, index) => index !== indexToRemove);
-    const hasOther = updatedProducts.some(p => p.product === 'Other');
-    setShowOtherInput(hasOther);
-    
-    setFormData(prev => ({
-      ...prev,
-      enquired_products: updatedProducts
-    }));
-  };
-
-  const handleProductQuantityChange = (index, quantity) => {
-    setFormData(prev => ({
-      ...prev,
-      enquired_products: prev.enquired_products.map((item, i) => 
-        i === index ? { ...item, quantity } : item
-      )
-    }));
-  };
-
-  const handleProductRemarkChange = (index, remark) => {
-    setFormData(prev => ({
-      ...prev,
-      enquired_products: prev.enquired_products.map((item, i) => 
-        i === index ? { ...item, remark } : item
-      )
-    }));
+  const updateProduct = (idx, field, value) => {
+    setEnquiredProducts(prev =>
+      prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))
+    );
   };
 
   const handleSave = async () => {
+    const payload = {
+      sales_status: lead?.sales_status ?? '',
+      sales_status_remark: lead?.sales_status_remark ?? '',
+      follow_up_status: lead?.follow_up_status ?? '',
+      follow_up_remark: lead?.follow_up_remark ?? '',
+      follow_up_date: lead?.follow_up_date ?? '',
+      follow_up_time: lead?.follow_up_time ?? '',
+      enquired_products: enquiredProducts,
+      other_product: otherProduct
+    };
     try {
-      await onSave(lead.id, formData);
+      await onSave(lead.id, payload);
       onClose();
-    } catch (error) {
-      console.error('Error updating lead status:', error);
-      alert('Failed to update lead status');
+    } catch (err) {
+      console.error('Error updating enquiry:', err);
+      alert('Failed to update enquiry');
     }
   };
 
-  const statusOptions = [
-    { value: '', label: 'Select Lead Status' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'running', label: 'Running' },
-    { value: 'converted', label: 'Converted' },
-    { value: 'interested', label: 'Interested' },
-    { value: 'loose', label: 'Loose' },
-    { value: 'win/closed', label: 'Win/Closed' },
-    { value: 'lost', label: 'Lost' },
-    { value: 'closed', label: 'Closed' }
-  ];
-
-  const followUpOptions = [
-    { value: '', label: 'Select Follow Up Status' },
-    { value: 'appointment scheduled', label: 'Appointment Scheduled' },
-    { value: 'not interested', label: 'Not Interested' },
-    { value: 'interested', label: 'Interested' },
-    { value: 'quotation sent', label: 'Quotation Sent' },
-    { value: 'negotiation', label: 'Negotiation' },
-    { value: 'close order', label: 'Close Order' },
-    { value: 'closed/lost', label: 'Closed/Lost' },
-    { value: 'call back request', label: 'Call Back Request' },
-    { value: 'unreachable/call not connected', label: 'Unreachable/Call Not Connected' },
-    { value: 'currently not required', label: 'Currently Not Required' },
-    { value: 'not relevant', label: 'Not Relevant' }
-  ];
-
-  // Check if date/time fields should be shown
-  const showDateTimeFields = ['appointment scheduled', 'interested', 'negotiation', 'call back request'].includes(formData.follow_up_status);
-
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[110] overflow-y-auto p-3 sm:p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          onClose();
-        }
-      }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-auto my-4 max-h-[95vh] overflow-hidden flex flex-col">
         <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 p-4 sm:p-5 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-              <Edit className="h-5 w-5 text-white" />
+              <Package className="h-5 w-5 text-white" />
             </div>
-            <h3 className="text-base sm:text-lg font-bold text-white">Update Lead Status & Follow Up</h3>
+            <h3 className="text-base sm:text-lg font-bold text-white">Update Enquiry</h3>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors text-white hover:text-gray-100"
-          >
+          <button onClick={onClose} className="p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors text-white">
             <X className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
         </div>
-        
+
         <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-          <div className="space-y-4 sm:space-y-5">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-blue-500" />
-              Follow Up Status
-            </label>
-            <select
-              name="follow_up_status"
-              value={formData.follow_up_status}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white text-gray-900 transition-all duration-200 hover:border-purple-300"
-            >
-              {followUpOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-purple-500" />
-              Follow Up Remark
-            </label>
-            <textarea
-              name="follow_up_remark"
-              value={formData.follow_up_remark}
-              onChange={handleInputChange}
-              rows={3}
-              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white text-gray-900 transition-all duration-200 hover:border-purple-300 resize-none"
-              placeholder="Enter any remarks about the follow up..."
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-pink-500" />
-              Lead Status <span className="text-red-500">*</span>
-            </label>
-            <select
-              name="sales_status"
-              value={formData.sales_status}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 bg-white text-gray-900 transition-all duration-200 hover:border-pink-300"
-            >
-              {statusOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-              <FileText className="h-4 w-4 text-indigo-500" />
-              Lead Status Remark
-            </label>
-            <textarea
-              name="sales_status_remark"
-              value={formData.sales_status_remark}
-              onChange={handleInputChange}
-              rows={3}
-              className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-900 transition-all duration-200 hover:border-indigo-300 resize-none"
-              placeholder="Enter any remarks about the lead status..."
-            />
-          </div>
-
-          <div>
+          <div ref={comboboxRef} className="relative product-combobox-container">
             <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
               <Package className="h-4 w-4 text-emerald-500" />
               Enquired Products
             </label>
-            
-            {/* Combobox: Input + Dropdown */}
-            <div className="relative product-combobox-container">
-              <div className="flex gap-2">
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    value={productSearch}
-                    onChange={handleProductSearchChange}
-                    onFocus={() => setShowProductDropdown(true)}
-                    onKeyDown={handleProductSearchKeyPress}
-                    className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-gray-900 transition-all duration-200 hover:border-emerald-300"
-                    placeholder="Type to search or add custom product..."
-                  />
-                  
-                  {/* Dropdown List */}
-                  {showProductDropdown && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border-2 border-gray-300 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                      {filteredProducts.length > 0 ? (
-                        <div className="py-1">
-                          {filteredProducts.map((product) => (
-                            <button
-                              key={product.name}
-                              type="button"
-                              onClick={() => handleAddProduct(product.name)}
-                              className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 hover:text-emerald-700 transition-colors text-sm text-gray-900"
-                            >
-                              {product.name}
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="px-4 py-2.5 text-sm text-gray-500">
-                          No products found. Press Enter to add as custom product.
-                        </div>
-                      )}
-                      {productSearch.trim() && !filteredProducts.some(p => p.name.toLowerCase() === productSearch.toLowerCase()) && (
-                        <div className="border-t border-gray-200 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => handleAddProduct()}
-                            className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 hover:text-emerald-700 transition-colors text-sm text-emerald-600 font-medium"
-                          >
-                            + Add "{productSearch}" as custom product
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={productSearch}
+                  onChange={(e) => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
+                  onFocus={() => setShowProductDropdown(true)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addProduct(); } else if (e.key === 'Escape') setShowProductDropdown(false); }}
+                  className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-gray-900"
+                  placeholder="Type to search or add custom product..."
+                />
+                {showProductDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border-2 border-gray-300 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                    {filteredProducts.length > 0 ? (
+                      <div className="py-1">
+                        {filteredProducts.map((p) => (
+                          <button key={p.name} type="button" onClick={() => addProduct(p.name)}
+                            className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 hover:text-emerald-700 text-sm text-gray-900">
+                            {p.name}
                           </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleAddProduct()}
-                  disabled={!productSearch.trim()}
-                  className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg hover:from-emerald-600 hover:to-teal-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium whitespace-nowrap"
-                >
-                  Add
-                </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-4 py-2.5 text-sm text-gray-500">No products found. Press Enter to add custom.</div>
+                    )}
+                    {productSearch.trim() && !filteredProducts.some(p => p.name.toLowerCase() === productSearch.toLowerCase()) && (
+                      <div className="border-t border-gray-200 pt-1">
+                        <button type="button" onClick={() => addProduct()}
+                          className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 text-emerald-600 font-medium text-sm">
+                          + Add &quot;{productSearch}&quot; as custom product
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
+              <button type="button" onClick={() => addProduct()} disabled={!productSearch.trim()}
+                className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium whitespace-nowrap">
+                Add
+              </button>
             </div>
-            
-            {/* Display selected products */}
-            {formData.enquired_products.length > 0 && (
+
+            {enquiredProducts.length > 0 && (
               <div className="mt-3 max-h-64 overflow-y-auto space-y-3 pr-1">
-                {formData.enquired_products.map((item, index) => (
-                  <div key={index} className="bg-gradient-to-br from-emerald-50 to-teal-50 px-4 py-4 rounded-lg border-2 border-emerald-200 shadow-sm">
+                {enquiredProducts.map((item, idx) => (
+                  <div key={idx} className="bg-gradient-to-br from-emerald-50 to-teal-50 px-4 py-4 rounded-lg border-2 border-emerald-200 shadow-sm">
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-sm font-semibold text-gray-800 flex-1 break-words pr-2">
-                        {item.product === 'Other' ? (formData.other_product || 'Other') : item.product}
+                        {item.product === 'Other' ? (otherProduct || 'Other') : item.product}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveProduct(index)}
-                        className="px-3 py-1 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-md transition-colors flex-shrink-0"
-                      >
+                      <button type="button" onClick={() => removeProduct(idx)}
+                        className="px-3 py-1 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-md flex-shrink-0">
                         Remove
                       </button>
                     </div>
                     <div className="space-y-2">
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Quantity</label>
-                        <input
-                          type="text"
-                          value={item.quantity}
-                          onChange={(e) => handleProductQuantityChange(index, e.target.value)}
-                          className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
-                          placeholder="Enter quantity..."
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">Remark</label>
-                        <textarea
-                          value={item.remark}
-                          onChange={(e) => handleProductRemarkChange(index, e.target.value)}
-                          rows={2}
-                          className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white resize-none"
-                          placeholder="Enter remark..."
-                        />
-                      </div>
+                      <input type="text" value={item.quantity} onChange={(e) => updateProduct(idx, 'quantity', e.target.value)}
+                        className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        placeholder="Quantity..." />
+                      <textarea value={item.remark} onChange={(e) => updateProduct(idx, 'remark', e.target.value)} rows={2}
+                        className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                        placeholder="Remark..." />
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            
+
             {showOtherInput && (
               <div className="mt-3">
-                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                  <Package className="h-4 w-4 text-emerald-500" />
-                  Other Product Name
-                </label>
-                <input
-                  type="text"
-                  name="other_product"
-                  value={formData.other_product}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white transition-all duration-200 hover:border-emerald-300"
-                  placeholder="Enter other product name..."
-                />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Other Product Name</label>
+                <input type="text" value={otherProduct} onChange={(e) => setOtherProduct(e.target.value)}
+                  className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  placeholder="Enter other product name..." />
               </div>
             )}
           </div>
-
-          {showDateTimeFields && (
-            <>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                  <CalendarDays className="h-4 w-4 text-cyan-500" />
-                  Follow Up Date <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  name="follow_up_date"
-                  value={formData.follow_up_date}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 bg-white transition-all duration-200 hover:border-cyan-300"
-                  required={showDateTimeFields}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-cyan-500" />
-                  Follow Up Time <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="time"
-                  name="follow_up_time"
-                  value={formData.follow_up_time}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 bg-white transition-all duration-200 hover:border-cyan-300"
-                  required={showDateTimeFields}
-                />
-                <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  Time will be saved in Indian Standard Time (IST)
-                </p>
-              </div>
-            </>
-          )}
-          </div>
         </div>
 
-        <div className="p-4 sm:p-6 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100 flex flex-col sm:flex-row justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="w-full sm:w-auto px-5 py-2.5 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 transition-all duration-200"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="w-full sm:w-auto px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 hover:from-blue-700 hover:via-purple-700 hover:to-pink-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-lg hover:shadow-xl transition-all duration-200"
-          >
-            Update Status & Follow Up
+        <div className="p-4 sm:p-6 border-t border-gray-200 bg-gray-50 flex justify-end">
+          <button onClick={handleSave}
+            className="px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-lg">
+            Update Enquiry
           </button>
         </div>
       </div>
     </div>
   );
 };
-
-// Tooltip component for action buttons
-const Tooltip = ({ children, text }) => (
-  <div className="relative group">
-    {children}
-    <span className="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-200 absolute z-10 left-1/2 transform -translate-x-1/2 -translate-y-8 px-2 py-1 text-xs text-white bg-gray-800 rounded whitespace-nowrap">
-      {text}
-    </span>
-  </div>
-);
 
 export default function LeadStatusPage() {
   const [leads, setLeads] = useState([]);
@@ -887,7 +583,7 @@ export default function LeadStatusPage() {
           )
         );
         
-        alert('Lead status updated successfully!');
+        alert('Enquiry updated successfully!');
       }
     } catch (error) {
       console.error('Error updating lead status:', error);

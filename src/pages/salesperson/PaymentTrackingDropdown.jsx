@@ -1,5 +1,3 @@
-"use client"
-
 import React, { useState } from 'react'
 import { CreditCard, ChevronDown, ChevronRight, DollarSign, Clock } from 'lucide-react'
 
@@ -15,13 +13,12 @@ export default function PaymentTrackingDropdown({ currentPage, onNavigate, sideb
   return (
     <li>
       <div>
-        {/* Main Payment Tracking Button */}
         <div
           className={cx(
             "flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200",
             isPaymentTrackingActive
-              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/30'
-              : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'
+              ? 'bg-indigo-600 text-white'
+              : 'hover:bg-slate-800/60 text-slate-400 hover:text-white'
           )}
           onClick={() => {
             if (isOpen) {
@@ -53,8 +50,6 @@ export default function PaymentTrackingDropdown({ currentPage, onNavigate, sideb
             </div>
           )}
         </div>
-
-        {/* Dropdown Menu */}
         {isOpen && sidebarOpen && (
           <ul className="ml-8 mt-1 space-y-1">
             <li>
@@ -63,7 +58,7 @@ export default function PaymentTrackingDropdown({ currentPage, onNavigate, sideb
                   "flex items-center px-3 py-2 rounded-lg cursor-pointer transition-colors text-sm",
                   currentPage === "products"
                     ? 'bg-slate-700/70 text-white'
-                    : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'
+                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-white'
                 )}
                 onClick={() => onNavigate("products")}
               >
@@ -79,7 +74,7 @@ export default function PaymentTrackingDropdown({ currentPage, onNavigate, sideb
                   "flex items-center px-3 py-2 rounded-lg cursor-pointer transition-colors text-sm",
                   currentPage === "due-payment"
                     ? 'bg-slate-700/70 text-white'
-                    : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'
+                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-white'
                 )}
                 onClick={() => onNavigate("due-payment")}
               >
@@ -95,7 +90,7 @@ export default function PaymentTrackingDropdown({ currentPage, onNavigate, sideb
                   "flex items-center px-3 py-2 rounded-lg cursor-pointer transition-colors text-sm",
                   currentPage === "advance-payment"
                     ? 'bg-slate-700/70 text-white'
-                    : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'
+                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-white'
                 )}
                 onClick={() => onNavigate("advance-payment")}
               >

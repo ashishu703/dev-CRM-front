@@ -1,5 +1,5 @@
 import React from 'react'
-import { X, Eye, Package, Trash2, FileText, Receipt, Pencil, User, Phone, Mail, Building2, MapPin, Globe, Hash, Tag, Clock, CheckCircle, MessageSquare, Calendar, Ban } from 'lucide-react'
+import { X, Eye, Package, Trash2, FileText, Receipt, Pencil, User, Phone, Mail, Building2, MapPin, Globe, Hash, Tag, Clock, CheckCircle, MessageSquare, Ban } from 'lucide-react'
 import { QuotationHelper } from '../../utils/QuotationHelper'
 import Toast from '../../utils/Toast'
 import apiClient from '../../utils/apiClient'
@@ -8,7 +8,7 @@ import DateFormatter from '../../utils/DateFormatter'
 
 export default function CustomerDetailSidebar({ 
   customer, onClose, onEdit, onQuotation, quotations, 
-  onViewQuotation, onEditQuotation, onSendQuotation, onDeleteQuotation, 
+  onViewQuotation, onEditQuotation, onDeleteQuotation, 
   onCreatePI, quotationPIs, piHook, onViewPI 
 }) {
   if (!customer) return null
@@ -16,25 +16,36 @@ export default function CustomerDetailSidebar({
   const isApprovedQuotation = QuotationHelper.isApproved
   const isPaymentCompleted = QuotationHelper.isPaymentCompleted
 
-  // State for follow up history
   const [followUpHistory, setFollowUpHistory] = React.useState([])
   const [loadingHistory, setLoadingHistory] = React.useState(false)
-  // State for order cancel requests (lead details)
   const [orderCancelRequests, setOrderCancelRequests] = React.useState([])
   const [loadingOrderCancel, setLoadingOrderCancel] = React.useState(false)
+  const [isVisible, setIsVisible] = React.useState(false)
 
-  // Fetch PIs for quotations when component mounts or quotations change
   React.useEffect(() => {
-    if (quotations && quotations.length > 0 && piHook?.fetchPIsForQuotation) {
-      quotations.forEach(q => {
-        if (q.id && !quotationPIs?.[q.id]) {
-          piHook.fetchPIsForQuotation(q.id)
-        }
-      })
+    const frame = requestAnimationFrame(() => setIsVisible(true))
+    return () => cancelAnimationFrame(frame)
+  }, [])
+
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = originalOverflow
     }
+  }, [])
+
+  React.useEffect(() => {
+    if (!quotations || quotations.length === 0 || !piHook?.fetchPIsForQuotation) return
+
+    quotations.forEach((q) => {
+      if (q.id && !quotationPIs?.[q.id]) {
+        piHook.fetchPIsForQuotation(q.id)
+      }
+    })
   }, [quotations?.length, customer?.id])
 
-  // Fetch follow up history when customer changes
   React.useEffect(() => {
     const fetchFollowUpHistory = async () => {
       const customerId = customer?.id || customer?._id
@@ -42,18 +53,12 @@ export default function CustomerDetailSidebar({
         setFollowUpHistory([])
         return
       }
-      
+
       setLoadingHistory(true)
       try {
         const response = await apiClient.get(API_ENDPOINTS.SALESPERSON_LEAD_HISTORY(customerId))
         const history = response?.data?.data || response?.data || []
-        // Sort by date, most recent first
-        const sortedHistory = [...history].sort((a, b) => {
-          const dateA = new Date(a.follow_up_date || a.created_at || 0)
-          const dateB = new Date(b.follow_up_date || b.created_at || 0)
-          return dateB - dateA
-        })
-        setFollowUpHistory(sortedHistory)
+        setFollowUpHistory(Array.isArray(history) ? history : [])
       } catch (error) {
         console.warn('Failed to fetch follow up history:', error)
         setFollowUpHistory([])
@@ -65,15 +70,16 @@ export default function CustomerDetailSidebar({
     fetchFollowUpHistory()
   }, [customer?.id, customer?._id])
 
-  // Fetch order cancel requests for this lead
   React.useEffect(() => {
     const customerId = customer?.id || customer?._id
     if (!customerId) {
       setOrderCancelRequests([])
       return
     }
+
     setLoadingOrderCancel(true)
-    apiClient.get(API_ENDPOINTS.ORDER_CANCEL_BY_CUSTOMER(customerId))
+    apiClient
+      .get(API_ENDPOINTS.ORDER_CANCEL_BY_CUSTOMER(customerId))
       .then((res) => {
         const data = res?.data?.data || res?.data || []
         setOrderCancelRequests(Array.isArray(data) ? data : [])
@@ -82,56 +88,31 @@ export default function CustomerDetailSidebar({
       .finally(() => setLoadingOrderCancel(false))
   }, [customer?.id, customer?._id])
 
-  const getPIsForQuotation = (quotationId) => {
-    return quotationPIs?.[quotationId] || []
+  const getPIsForQuotation = (quotationId) => quotationPIs?.[quotationId] || []
+
+  const formatPiDate = (pi) => {
+    const dateStr = pi?.pi_date || pi?.piDate || pi?.created_at
+    if (!dateStr) return 'N/A'
+    const date = typeof dateStr === 'string' && dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr)
+    return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
   }
 
-  // Get customer created date
   const getCustomerCreatedDate = () => {
     const createdDate = customer.created_at || customer.createdAt || customer.date
     if (!createdDate) return 'N/A'
     return DateFormatter.formatDate(createdDate)
   }
 
-  // Group follow ups by date
-  const groupedFollowUps = React.useMemo(() => {
-    if (!followUpHistory || followUpHistory.length === 0) return {}
-    
-    const groups = {}
-    followUpHistory.forEach((followUp) => {
-      const dateInput = followUp.follow_up_date || followUp.created_at || Date.now()
-      const dateKey = DateFormatter.formatDate(dateInput)
-      if (!groups[dateKey]) groups[dateKey] = []
-      groups[dateKey].push(followUp)
+  const sortedFollowUps = React.useMemo(() => {
+    if (!followUpHistory || followUpHistory.length === 0) return []
+
+    return [...followUpHistory].sort((a, b) => {
+      const dateA = new Date(a.follow_up_date || a.created_at || 0)
+      const dateB = new Date(b.follow_up_date || b.created_at || 0)
+      return dateB - dateA
     })
-    
-    // Sort each group by time (most recent first)
-    Object.keys(groups).forEach(key => {
-      groups[key].sort((a, b) => {
-        const dateA = new Date(a.follow_up_date || a.created_at || 0)
-        const dateB = new Date(b.follow_up_date || b.created_at || 0)
-        return dateB - dateA
-      })
-    })
-    
-    return groups
   }, [followUpHistory])
 
-  // Get sorted date keys for display (most recent first)
-  const sortedDateKeys = React.useMemo(() => {
-    return Object.keys(groupedFollowUps).sort((a, b) => {
-      // Parse date strings like "15 Jan 2024" back to Date objects for comparison
-      try {
-        const dateA = new Date(groupedFollowUps[a][0]?.follow_up_date || groupedFollowUps[a][0]?.created_at || 0)
-        const dateB = new Date(groupedFollowUps[b][0]?.follow_up_date || groupedFollowUps[b][0]?.created_at || 0)
-        return dateB - dateA // Most recent first
-      } catch {
-        return 0
-      }
-    })
-  }, [groupedFollowUps])
-
-  // Format follow up date and time
   const formatFollowUpDateTime = (followUp) => {
     if (!followUp) return 'N/A'
     const dateInput = followUp.follow_up_date || followUp.created_at
@@ -140,7 +121,6 @@ export default function CustomerDetailSidebar({
     return DateFormatter.formatDateTime(dateInput, timeInput)
   }
 
-  // Get status badge color class
   const getStatusBadgeClass = (salesStatus) => {
     const status = String(salesStatus || '').toLowerCase()
     if (status === 'running') return 'bg-gradient-to-r from-yellow-400 to-orange-400'
@@ -151,15 +131,20 @@ export default function CustomerDetailSidebar({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={onClose}></div>
+      <div
+        className={`fixed inset-0 bg-black/50 z-[140] transition-opacity duration-300 ease-out ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+        onClick={onClose}
+      ></div>
       
-      <div className="fixed right-0 top-12 sm:top-14 h-[calc(100vh-3rem)] sm:h-[calc(100vh-3.5rem)] w-full max-w-full sm:w-96 lg:max-w-lg bg-white shadow-2xl z-50 flex flex-col overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 pt-6 pb-3 px-3 sm:pt-8 sm:pb-4 sm:px-4 flex items-center justify-between shadow-lg flex-shrink-0 gap-2 sm:gap-3 overflow-hidden">
-          <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 leading-none overflow-hidden">
-            <User className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
-            <span className="truncate">Customer Details</span>
+      <div
+        className={`fixed inset-y-0 right-0 h-screen w-full sm:w-[360px] lg:w-[420px] bg-white shadow-2xl z-[150] flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <div className="bg-slate-800 pt-6 pb-3 px-4 sm:pt-8 sm:pb-4 flex items-center justify-between flex-shrink-0 gap-2 overflow-hidden">
+          <h2 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2 min-w-0 flex-1 truncate">
+            <User className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0 text-indigo-300" />
+            <span>Customer Details</span>
           </h2>
-          <button onClick={onClose} className="text-white hover:text-gray-200 p-1.5 rounded-lg hover:bg-white/20 transition-colors flex-shrink-0 flex items-center justify-center" aria-label="Close">
+          <button onClick={onClose} className="p-2 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition-colors flex-shrink-0" aria-label="Close">
             <X className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
         </div>
@@ -237,7 +222,6 @@ export default function CustomerDetailSidebar({
             </div>
           </div>
 
-          {/* Order Cancel Details Section */}
           {(orderCancelRequests?.length > 0 || loadingOrderCancel) && (
             <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-red-50 rounded-lg p-4 mb-4 border border-amber-200 shadow-sm mt-4">
               <h3 className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-orange-600 mb-3 flex items-center gap-2">
@@ -281,71 +265,42 @@ export default function CustomerDetailSidebar({
             </div>
           )}
 
-          {/* Follow Up Information Section - All Follow Ups */}
-          {Object.keys(groupedFollowUps).length > 0 && (
-            <div className="bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 rounded-lg p-4 mb-4 border border-purple-200 shadow-sm mt-4">
-              <h3 className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 mb-3 flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-purple-600" />
+          {sortedFollowUps.length > 0 && (
+            <div className="bg-white rounded-lg p-4 mb-4 border border-gray-200 shadow-sm mt-4">
+              <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-indigo-600" />
                 Follow Up History
               </h3>
-              
               {loadingHistory ? (
-                <div className="text-center py-4">
-                  <div className="animate-pulse text-xs text-gray-600">Loading follow ups...</div>
-                </div>
+                <div className="text-center py-4 text-xs text-gray-500">Loading...</div>
               ) : (
-                <div className="space-y-4">
-                  {sortedDateKeys.map((dateKey) => (
-                      <div key={dateKey} className="mb-3">
-                        <div className="flex justify-center mb-2">
-                          <span className="text-[10px] font-semibold bg-gradient-to-r from-cyan-500 to-blue-500 text-white px-3 py-1 rounded-full shadow-md">
-                            {dateKey}
-                          </span>
-                        </div>
-                        <div className="space-y-2">
-                          {groupedFollowUps[dateKey].map((followUp, idx) => (
-                            <div
-                              key={`follow-up-${followUp.id || idx}`}
-                              className="max-w-full rounded-lg rounded-tl-none bg-gradient-to-br from-white to-gray-50 border-2 border-gray-300 p-3 shadow-sm"
-                            >
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <div className="p-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full">
-                                  <MessageSquare className="h-3 w-3 text-white" />
-                                </div>
-                                <span className="text-[10px] font-bold text-gray-900">
-                                  Follow Up
-                                </span>
-                                {followUp.sales_status && (
-                                  <span className={`ml-auto px-2 py-0.5 text-[9px] font-semibold rounded-full bg-gradient-to-r ${getStatusBadgeClass(followUp.sales_status)} text-white shadow-sm`}>
-                                    {String(followUp.sales_status).toUpperCase()}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-[11px] text-gray-800 ml-7 space-y-1">
-                                {followUp.follow_up_status && (
-                                  <div>
-                                    <span className="font-semibold text-blue-700">Status:</span>{' '}
-                                    <span className="text-gray-800">{followUp.follow_up_status}</span>
-                                  </div>
-                                )}
-                                {followUp.follow_up_remark && (
-                                  <div>
-                                    <span className="font-semibold text-purple-700">Remark:</span>{' '}
-                                    <span className="text-gray-700 italic">{followUp.follow_up_remark}</span>
-                                  </div>
-                                )}
-                                {(followUp.follow_up_date || followUp.follow_up_time || followUp.created_at) && (
-                                  <div className="flex items-center gap-1 text-[9px] text-gray-600">
-                                    <Clock className="h-2.5 w-2.5 text-pink-600" />
-                                    {formatFollowUpDateTime(followUp)}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                <div className="space-y-2">
+                  {sortedFollowUps.map((followUp, idx) => (
+                    <div
+                      key={`follow-up-${followUp.id || idx}`}
+                      className="flex gap-3 p-2.5 rounded-lg border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex-shrink-0 w-10 flex flex-col items-center text-[10px] font-medium text-gray-600">
+                        <Clock className="h-3 w-3 text-indigo-500 mb-0.5" />
+                        {formatFollowUpDateTime(followUp)}
                       </div>
-                    ))}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {followUp.follow_up_status && (
+                            <span className="text-xs font-medium text-gray-800">{followUp.follow_up_status}</span>
+                          )}
+                          {followUp.sales_status && (
+                            <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded ${getStatusBadgeClass(followUp.sales_status)} text-white`}>
+                              {String(followUp.sales_status).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        {followUp.follow_up_remark && (
+                          <p className="text-[11px] text-gray-600 mt-0.5 italic">{followUp.follow_up_remark}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -422,7 +377,6 @@ export default function CustomerDetailSidebar({
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          {/* Quotation approval is not required anymore (pricing decided upstream) */}
                           {isApprovedQuotation(quotation) && !isPaymentCompleted(quotation) && (
                             <button 
                               onClick={() => {
@@ -471,11 +425,7 @@ export default function CustomerDetailSidebar({
                                   )}
                                   <span className="flex items-center gap-0.5 text-xs text-gray-600">
                                     <Clock className="h-3 w-3 text-pink-600" />
-                                    {pi.pi_date || pi.piDate || pi.created_at ? (() => {
-                                      const dateStr = pi.pi_date || pi.piDate || pi.created_at
-                                      const date = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr)
-                                      return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
-                                    })() : 'N/A'}
+                                    {formatPiDate(pi)}
                                   </span>
                                   <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shadow-sm ${
                                     pi.status === 'approved' ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' :

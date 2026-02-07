@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { FileText, Package, RefreshCw, Filter, Phone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Activity, Users } from 'lucide-react';
+import { FileText, Package, RefreshCw, Filter, Phone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Activity } from 'lucide-react';
 import AddCustomerModal from './AddCustomerModal';
 import QuotationPreview from '../../components/QuotationPreview';
 import PIPreview from '../../components/PIPreview';

@@ -188,9 +188,7 @@ const SalesHeadDashboard = ({ setActiveView, isDarkMode = false }) => {
         return empty
       }
       
-      // Get department head data
       const response = await departmentHeadService.getHeadById(user.id)
-      // Handle different response structures: {user: {...}} or {data: {user: {...}}} or direct data
       let headData = null
       if (response?.data?.user) {
         headData = response.data.user

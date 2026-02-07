@@ -27,8 +27,8 @@ export default function LeadStatusDropdown({ currentPage, onNavigate, sidebarOpe
           className={cx(
             "flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200",
             isLeadStatusActive
-              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/30'
-              : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'
+              ? 'bg-indigo-600 text-white'
+              : 'hover:bg-slate-800/60 text-slate-400 hover:text-white'
           )}
           onClick={() => {
             if (isOpen) {

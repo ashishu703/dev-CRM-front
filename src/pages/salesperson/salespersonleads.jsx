@@ -1,5 +1,3 @@
-"use client"
-
 import React from 'react'
 import { useSharedData } from './SharedDataContext'
 import { useSalespersonLeads } from '../../hooks/useSalespersonLeads'
@@ -21,7 +19,7 @@ import CreateQuotationForm from './salespersoncreatequotation.jsx'
 import CreatePIForm from './CreatePIForm.jsx'
 import Toast from '../../utils/Toast'
 import { QuotationHelper } from '../../utils/QuotationHelper'
-import { Search, RefreshCw, Plus, Filter, Eye, Pencil, FileText, Upload, Settings, Tag, X, User, Mail, Building2, Package, Hash, MapPin, Globe, Users, TrendingUp, Calendar, Clock, MoreHorizontal, ShieldCheck, Copy, Check } from 'lucide-react'
+import { Search, RefreshCw, Plus, Filter, Eye, Pencil, FileText, Upload, Settings, Tag, X, User, Mail, Building2, Package, Hash, MapPin, Globe, Users, TrendingUp, Calendar, Clock, MoreHorizontal, ShieldCheck, Copy } from 'lucide-react'
 import { apiClient, API_ENDPOINTS, quotationService } from '../../utils/globalImports'
 import rfpService from '../../services/RfpService'
 import productPriceService from '../../services/ProductPriceService'
@@ -33,6 +31,8 @@ import EnquiryTable from '../../components/EnquiryTable'
 import { useAuth } from '../../hooks/useAuth'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { getProducts } from '../../constants/products'
+import { getDisplayPriority } from '../../utils/leadPriorityUtils'
+import { mapApiRowToLead } from '../../utils/leadMapping'
 
 const getUserData = () => {
   try {
@@ -47,11 +47,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   const { customers, setCustomers, loading } = useSharedData()
   const [initialLoading, setInitialLoading] = React.useState(true)
   const user = getUserData()
-  
-  // Active tab state
   const [activeTab, setActiveTab] = React.useState('leads')
-  
-  // Enquiry state
   const { user: authUser } = useAuth()
   const [enquiries, setEnquiries] = React.useState([])
   const [enquiriesGroupedByDate, setEnquiriesGroupedByDate] = React.useState({})
@@ -70,8 +66,6 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   })
   const [enquirySortBy, setEnquirySortBy] = React.useState('none')
   const [enquirySortOrder, setEnquirySortOrder] = React.useState('asc')
-  
-  // Modal states
   const [viewingCustomer, setViewingCustomer] = React.useState(null)
   const [viewingCustomerForQuotation, setViewingCustomerForQuotation] = React.useState(null)
   const [showAddCustomer, setShowAddCustomer] = React.useState(false)
@@ -106,9 +100,9 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   const [showRfpIdValidationModal, setShowRfpIdValidationModal] = React.useState(false)
   const [validationError, setValidationError] = React.useState('')
   const [rfpValidationErrors, setRfpValidationErrors] = React.useState({
-    products: {}, // { index: { quantity: 'error', targetPrice: 'error' } }
+    products: {},
     deliveryTimeline: '',
-    general: '' // General form-level errors
+    general: ''
   })
 
   React.useEffect(() => {
@@ -121,7 +115,6 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   const [selectedBranch, setSelectedBranch] = React.useState('')
   const [companyBranches, setCompanyBranches] = React.useState({})
 
-  // Tag management
   const [showCreateTagModal, setShowCreateTagModal] = React.useState(false)
   const [newTagName, setNewTagName] = React.useState('')
   const [selectedLeadsForTag, setSelectedLeadsForTag] = React.useState([])
@@ -130,15 +123,10 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   const [bulkActionType, setBulkActionType] = React.useState('tag') // 'tag' or 'sku'
   const [bulkTagValue, setBulkTagValue] = React.useState('')
   const [bulkSkuValue, setBulkSkuValue] = React.useState('')
-  
-  // Duplicate lead modal state
   const [showDuplicateModal, setShowDuplicateModal] = React.useState(false)
   const [duplicateLeadInfo, setDuplicateLeadInfo] = React.useState(null)
 
-  // Import leads modal
   const [showImportModal, setShowImportModal] = React.useState(false)
-
-  // Edit Lead Status Modal
   const [showEditLeadStatusModal, setShowEditLeadStatusModal] = React.useState(false)
   const [selectedCustomerForLeadStatus, setSelectedCustomerForLeadStatus] = React.useState(null)
   const [actionMenuOpen, setActionMenuOpen] = React.useState(null)
@@ -170,19 +158,15 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
 
   const handleImportSuccess = async () => {
     setShowImportModal(false)
-    // Add a small delay to ensure backend has processed the import
     await new Promise(resolve => setTimeout(resolve, 500))
-    // Refresh leads to show the newly imported data
     await handleRefresh()
   }
 
-  // Use custom hooks
   const leadsHook = useSalespersonLeads(customers)
   const activeCustomerId = viewingCustomer?.id || viewingCustomerForQuotation?.id
   const quotationHook = useQuotationFlow(activeCustomerId, isRefreshing)
   const piHook = usePIFlow(viewingCustomer, viewingCustomerForQuotation, selectedBranch)
 
-  // Load company branches
   React.useEffect(() => {
     const loadBranches = async () => {
       try {
@@ -197,8 +181,6 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     }
     loadBranches()
   }, [])
-
-  // Initial data load on mount
   const initialLoadRef = React.useRef(false)
   React.useEffect(() => {
     if (!initialLoadRef.current) {
@@ -207,15 +189,10 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     }
   }, [])
 
-  // If parent requested opening a specific customer, find and open it
   React.useEffect(() => {
     if (!selectedCustomerId) return
-    // If customers not loaded yet, wait for them (handleRefresh sets customers)
     const found = (customers || []).find(c => String(c.id) === String(selectedCustomerId))
-    if (found) {
-      setViewingCustomer(found)
-      // scroll or focus logic could go here
-    }
+    if (found) setViewingCustomer(found)
   }, [selectedCustomerId, customers])
 
   const refreshingRef = React.useRef(false)
@@ -230,22 +207,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
       setIsRefreshing(true)
       const res = await apiClient.get(API_ENDPOINTS.SALESPERSON_ASSIGNED_LEADS_ME())
       const rows = res?.data || []
-      const mapped = rows.map((r) => ({
-        id: r.id, name: r.name, phone: r.phone, email: r.email || 'N/A', business: r.business || 'N/A',
-        address: r.address || 'N/A', gstNo: r.gst_no || 'N/A', productName: r.product_type || 'N/A',
-        state: r.state || 'N/A', division: r.division || null, enquiryBy: r.lead_source || 'N/A', customerType: r.customer_type || 'N/A',
-        date: r.date ? new Date(r.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        salesStatus: r.sales_status || 'pending', salesStatusRemark: r.sales_status_remark || null,
-        salesStatusDate: new Date(r.updated_at || r.created_at || Date.now()).toLocaleString(),
-        whatsapp: r.whatsapp ? `+91${String(r.whatsapp).replace(/\D/g, '').slice(-10)}` : null,
-        transferredTo: r.transferred_to || null, callDurationSeconds: r.call_duration_seconds || null,
-        quotationUrl: r.quotation_url || null, proformaInvoiceUrl: r.proforma_invoice_url || null,
-        paymentReceiptUrl: r.payment_receipt_url || null, quotationCount: typeof r.quotation_count === 'number' ? r.quotation_count : (parseInt(r.quotation_count) || 0),
-        paymentStatusDb: r.payment_status || null, paymentModeDb: r.payment_mode || null,
-        followUpStatus: r.follow_up_status || null, followUpRemark: r.follow_up_remark || null,
-        followUpDate: r.follow_up_date ? new Date(r.follow_up_date).toISOString().split('T')[0] : null,
-        followUpTime: r.follow_up_time || null,
-      }))
+      const mapped = rows.map(mapApiRowToLead)
       leadsHook.setCustomers(mapped)
       setCustomers(mapped)
     } catch (err) {
@@ -257,7 +219,6 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     }
   }
 
-  // Handlers
   const handleEdit = (customer) => {
     setEditingCustomer(customer)
     setShowAddCustomer(true)
@@ -269,7 +230,6 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
 
   const handleQuotation = (customer) => {
     setViewingCustomerForQuotation(customer)
-    // First show RFP ID validation modal
     setRfpIdInput('')
     setValidatedRfpDecision(null)
     setValidationError('')
@@ -914,12 +874,12 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
         leadsHook.setCustomers(updatedCustomers)
         setCustomers(updatedCustomers)
         
-        Toast.success('Lead status updated successfully!')
+        Toast.success('Enquiry updated successfully!')
         setShowEditLeadStatusModal(false)
         setSelectedCustomerForLeadStatus(null)
       }
     } catch (error) {
-        Toast.error('Failed to update lead status')
+        Toast.error('Failed to update enquiry')
       throw error
     }
   }
@@ -1111,10 +1071,6 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     } finally {
       setIsCreatingTag(false)
     }
-  }
-
-  const handleTagSelect = (tag) => {
-    leadsHook.setSelectedTag(tag)
   }
 
   // Save customer handler (create or update)
@@ -1929,51 +1885,6 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
             )}
           </div>
         </div>
-
-        {/* Tags */}
-        <div className="mt-4 flex items-center gap-1.5 flex-wrap">
-          <button 
-            onClick={() => handleTagSelect('all')} 
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
-              leadsHook.selectedTag === 'all' 
-                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md' 
-                : isDarkMode 
-                  ? 'bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700' 
-                  : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            All
-          </button>
-          {(() => {
-            const tagMap = new Map()
-            leadsHook.customers.forEach(c => {
-              if (c.customerType && c.customerType !== 'N/A') {
-                const lowerTag = c.customerType.toLowerCase()
-                if (!tagMap.has(lowerTag)) {
-                  tagMap.set(lowerTag, c.customerType)
-                }
-              }
-            })
-            return leadsHook.tags.map(tag => {
-              const displayTag = tagMap.get(tag) || tag
-              return (
-                <button 
-                  key={tag} 
-                  onClick={() => handleTagSelect(tag)} 
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
-                    leadsHook.selectedTag.toLowerCase() === tag
-                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md' 
-                      : isDarkMode 
-                        ? 'bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700' 
-                        : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  {displayTag}
-                </button>
-              )
-            })
-          })()}
-        </div>
       </div>
 
       {/* Filters */}
@@ -2146,16 +2057,51 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   isDarkMode ? 'hover:bg-gray-700/50' : 'hover:bg-blue-50/50'
                 }`}>
                   <td className="px-2 py-2">
-                    <input
-                      type="checkbox"
-                      checked={selectedLeadsForTag.includes(customer.id)}
-                      onChange={() => handleToggleLeadForTag(customer.id)}
-                      className={`w-4 h-4 rounded border-2 focus:ring-2 focus:ring-blue-500 ${
-                        isDarkMode 
-                          ? 'text-blue-500 bg-gray-700 border-gray-600' 
-                          : 'text-blue-600 bg-white border-gray-300'
-                      }`}
-                    />
+                    {(() => {
+                      const priority = getDisplayPriority(customer)
+                      return (
+                    <label className={`cursor-pointer inline-flex items-center justify-center select-none ${priority === 'CRITICAL' ? 'animate-pulse' : ''}`} title={
+                      priority === 'CRITICAL' ? 'Critical – act first' : priority === 'HIGH' ? 'High priority' : priority === 'MEDIUM' ? 'Medium priority' : priority === 'LOW' ? 'Low priority' : 'Lead'
+                    }>
+                      <input
+                        type="checkbox"
+                        checked={selectedLeadsForTag.includes(customer.id)}
+                        onChange={() => handleToggleLeadForTag(customer.id)}
+                        className="sr-only peer"
+                      />
+                      <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-offset-1 ${
+                        priority === 'CRITICAL'
+                          ? selectedLeadsForTag.includes(customer.id)
+                            ? 'bg-red-600 border-red-700 ring-2 ring-red-400'
+                            : 'bg-red-100 border-red-600 ring-2 ring-red-400 text-red-800'
+                          : selectedLeadsForTag.includes(customer.id)
+                            ? priority === 'HIGH'
+                              ? 'bg-green-500 border-green-600'
+                              : priority === 'MEDIUM'
+                                ? 'bg-amber-500 border-amber-600'
+                                : priority === 'LOW'
+                                  ? 'bg-red-500 border-red-600'
+                                  : isDarkMode
+                                    ? 'bg-blue-500 border-blue-400'
+                                    : 'bg-blue-500 border-blue-600'
+                            : priority === 'HIGH'
+                              ? 'bg-green-100 border-green-500 text-green-700'
+                              : priority === 'MEDIUM'
+                                ? 'bg-amber-100 border-amber-500 text-amber-700'
+                                : priority === 'LOW'
+                                  ? 'bg-red-100 border-red-500 text-red-700'
+                                  : isDarkMode
+                                    ? 'bg-gray-700 border-gray-600 text-gray-300'
+                                    : 'bg-gray-100 border-gray-400 text-gray-600'
+                      }`}>
+                        {selectedLeadsForTag.includes(customer.id) && (
+                          <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </span>
+                    </label>
+                      ); })()}
                   </td>
                   {columnVisibility.leadId && (
                     <td className={`px-2 py-2 text-xs font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={`Lead ID: ${customer.id}`}>
@@ -2624,8 +2570,31 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
         </>
       )}
 
-      {/* Modals */}
-      {viewingCustomer && <CustomerDetailSidebar customer={viewingCustomer} onClose={() => setViewingCustomer(null)} onEdit={() => { setEditingCustomer(viewingCustomer); setViewingCustomer(null); setShowAddCustomer(true) }} onQuotation={handleQuotation} quotations={quotationHook.quotations} onViewQuotation={handleViewQuotation} onEditQuotation={handleEditQuotation} onSendQuotation={quotationHook.handleSendQuotation} onDeleteQuotation={quotationHook.handleDeleteQuotation} onCreatePI={(quotation, customer) => { setSelectedQuotationForPI(quotation); setViewingCustomerForQuotation(customer); setShowCreatePIModal(true); setViewingCustomer(null) }} quotationPIs={piHook.quotationPIs} piHook={piHook} onViewPI={piHook.handleViewPI} />}
+      {viewingCustomer && (
+        <CustomerDetailSidebar
+          customer={viewingCustomer}
+          onClose={() => setViewingCustomer(null)}
+          onEdit={() => {
+            setEditingCustomer(viewingCustomer)
+            setViewingCustomer(null)
+            setShowAddCustomer(true)
+          }}
+          onQuotation={handleQuotation}
+          quotations={quotationHook.quotations}
+          onViewQuotation={handleViewQuotation}
+          onEditQuotation={handleEditQuotation}
+          onDeleteQuotation={quotationHook.handleDeleteQuotation}
+          onCreatePI={(quotation, customer) => {
+            setSelectedQuotationForPI(quotation)
+            setViewingCustomerForQuotation(customer)
+            setShowCreatePIModal(true)
+            setViewingCustomer(null)
+          }}
+          quotationPIs={piHook.quotationPIs}
+          piHook={piHook}
+          onViewPI={piHook.handleViewPI}
+        />
+      )}
       {showAddCustomer && <AddCustomerForm onClose={() => { setShowAddCustomer(false); setEditingCustomer(null) }} onSave={handleSaveCustomer} editingCustomer={editingCustomer} />}
       
       {/* Duplicate Lead Modal */}

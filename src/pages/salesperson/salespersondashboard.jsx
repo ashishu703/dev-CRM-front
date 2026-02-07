@@ -1,5 +1,3 @@
-"use client"
-
 import { TrendingUp, CheckCircle, Clock, CreditCard, UserPlus, CalendarCheck, ArrowUp, XCircle, PhoneOff, Target, BarChart3, PieChart as PieChartIcon, Activity, Award, TrendingDown, ArrowRightLeft, Calendar, FileText, FileCheck, FileX, Receipt, ShoppingCart, DollarSign, RefreshCw } from "lucide-react"
 import React, { useState, useEffect, useMemo, useCallback } from "react"
 import apiClient from '../../utils/apiClient'
@@ -78,8 +76,6 @@ export default function DashboardContent({ isDarkMode = false }) {
   const [allPIs, setAllPIs] = useState([])
   const [monthlyHighlight, setMonthlyHighlight] = useState(null)
   const [showMonthlyHighlight, setShowMonthlyHighlight] = useState(false)
-  
-  // User target state
   const [userTarget, setUserTarget] = useState({
     target: 0,
     achievedTarget: 0,
@@ -87,8 +83,6 @@ export default function DashboardContent({ isDarkMode = false }) {
     targetEndDate: null,
     targetDurationDays: null
   })
-  
-  // New metrics state
   const [businessMetrics, setBusinessMetrics] = useState({
     totalQuotation: 0,
     approvedQuotation: 0,
@@ -114,7 +108,6 @@ export default function DashboardContent({ isDarkMode = false }) {
     return Math.max(0, Math.round(diffTime / MS_IN_DAY))
   }
 
-  // Fetch real leads from API - with cache busting to ensure fresh data
   const fetchLeads = useCallback(async () => {
     try {
       setLoading(true)
@@ -123,7 +116,6 @@ export default function DashboardContent({ isDarkMode = false }) {
       const leadsResponse = await apiClient.get(url)
       const assignedLeads = leadsResponse?.data || []
       
-      // Transform API data to match our format
       const transformedLeads = assignedLeads.map(lead => ({
         id: lead.id,
         name: lead.name,
@@ -131,7 +123,6 @@ export default function DashboardContent({ isDarkMode = false }) {
         source: lead.lead_source || lead.leadSource || 'Unknown',
         created_at: lead.created_at || lead.createdAt || lead.date || new Date().toISOString()
       }))
-      
       setLeads(transformedLeads)
       setError(null)
     } catch (err) {
@@ -555,7 +546,6 @@ export default function DashboardContent({ isDarkMode = false }) {
       const leadsResponse = await apiClient.get(url)
       const assignedLeads = leadsResponse?.data || []
       
-      // Transform API data to match our format
       const transformedLeads = assignedLeads.map(lead => ({
         id: lead.id,
         name: lead.name,
@@ -563,10 +553,8 @@ export default function DashboardContent({ isDarkMode = false }) {
         source: lead.lead_source || lead.leadSource || 'Unknown',
         created_at: lead.created_at || lead.createdAt || lead.date || new Date().toISOString()
       }))
-      
       setLeads(transformedLeads)
-      
-      // Fetch target first and use it to filter metrics (avoid stale state / all-time totals)
+      // Fetch target and metrics
       const targetWindow = await fetchUserTarget()
       await fetchBusinessMetrics(transformedLeads, targetWindow)
     } catch (err) {

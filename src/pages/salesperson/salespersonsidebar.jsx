@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
-import { LayoutDashboard, Users, Menu, X, Package, Box, Wrench, BarChart3, CreditCard, Bell, HelpCircle, FileText } from "lucide-react"
+import { useRef, useEffect } from "react"
+import { LayoutDashboard, Menu, X, Package, Wrench, HelpCircle, FileText } from "lucide-react"
 import LeadStatusDropdown from './LeadStatusDropdown'
 import PaymentTrackingDropdown from './PaymentTrackingDropdown'
 
@@ -85,15 +85,6 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen
     setSidebarOpen(newState);
   };
 
-  // Prevent mouse events on button from triggering sidebar auto-expand/collapse
-  const handleButtonMouseEnter = (e) => {
-    e.stopPropagation();
-  };
-
-  const handleButtonMouseLeave = (e) => {
-    e.stopPropagation();
-  };
-
   return (
     <>
       {/* Hover trigger zone when sidebar is collapsed - makes it easier to expand */}
@@ -108,44 +99,34 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen
       {/* Sidebar */}
       <div
         className={cx(
-          "fixed top-0 left-0 h-screen z-50 shadow-2xl border-r transition-all duration-300 flex flex-col",
-          "bg-gradient-to-b from-slate-800 via-slate-900 to-slate-950 border-slate-700/50",
+          "fixed top-0 left-0 h-screen z-50 flex flex-col transition-all duration-300 ease-out",
+          "bg-slate-900 border-r border-slate-800/80",
           isMobileView 
-            ? (sidebarOpen ? "w-64" : "-translate-x-full w-64")
-            : (sidebarOpen ? "w-64" : "w-16"),
+            ? (sidebarOpen ? "w-60" : "-translate-x-full w-60")
+            : (sidebarOpen ? "w-60" : "w-[72px]"),
         )}
         onMouseEnter={!isMobileView ? handleMouseEnter : undefined}
         onMouseLeave={!isMobileView ? handleMouseLeave : undefined}
-        style={{
-          background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
-          boxShadow: '4px 0 20px rgba(0, 0, 0, 0.3)'
-        }}
       >
-        <div className="p-4 border-b border-slate-700/50 bg-gradient-to-r from-blue-600/20 to-purple-600/20">
-          <div className="flex items-center justify-between">
+        <div className="p-4 border-b border-slate-800/80 min-h-[64px]">
+          <div className="flex items-center justify-between gap-2">
             {sidebarOpen ? (
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 p-1.5 shadow-lg">
-                  <img
-                    src="https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png"
-                    alt="ANOCAB Logo"
-                    className="w-full h-full object-contain rounded-lg"
-                  />
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  <img src="https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png" alt="Logo" className="w-6 h-6 object-contain" />
                 </div>
-                <div>
-                  <h1 className="font-bold text-white text-lg tracking-tight" style={{ fontFamily: 'Poppins, sans-serif' }}>ANOCAB</h1>
-                  <p className="text-xs text-slate-400">Salesperson</p>
+                <div className="min-w-0">
+                  <h1 className="font-semibold text-white text-base truncate">ANOCAB</h1>
+                  <p className="text-[11px] text-slate-400 truncate">Salesperson</p>
                 </div>
               </div>
-            ) : null}
-            <button
-              onClick={handleToggle}
-              onMouseEnter={handleButtonMouseEnter}
-              onMouseLeave={handleButtonMouseLeave}
-              className={`p-2 hover:bg-slate-700/50 rounded-lg transition-all duration-200 text-slate-300 hover:text-white ${!sidebarOpen ? 'mx-auto' : ''}`}
-              type="button"
-            >
-              {sidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-5 h-5 sm:w-6 sm:h-6" />}
+            ) : (
+              <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                <img src="https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png" alt="Logo" className="w-5 h-5 object-contain" />
+              </div>
+            )}
+            <button onClick={handleToggle} className="p-2 hover:bg-slate-800/60 rounded-lg transition-colors text-slate-400 hover:text-white flex-shrink-0" type="button" aria-label="Toggle sidebar">
+              {sidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
@@ -156,15 +137,12 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen
             <li>
               <div
                 className={cx(
-                  "flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors",
                   currentPage === "dashboard"
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/30'
-                    : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'
+                    ? 'bg-indigo-600 text-white'
+                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-white'
                 )}
                 onClick={() => onNavigate("dashboard")}
-                style={{
-                  transform: currentPage === "dashboard" ? 'translateX(4px)' : 'none',
-                }}
               >
                 <div className="flex items-center space-x-3">
                   <div className={currentPage === "dashboard" ? 'text-white' : 'text-slate-400'}>
@@ -192,15 +170,12 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen
             <li>
               <div
                 className={cx(
-                  "flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors",
                   currentPage === "toolbox"
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/30'
-                    : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'
+                    ? 'bg-indigo-600 text-white'
+                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-white'
                 )}
                 onClick={() => onNavigate("toolbox")}
-                style={{
-                  transform: currentPage === "toolbox" ? 'translateX(4px)' : 'none',
-                }}
               >
                 <div className="flex items-center space-x-3">
                   <div className={currentPage === "toolbox" ? 'text-white' : 'text-slate-400'}>
@@ -215,15 +190,12 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen
             <li>
               <div
                 className={cx(
-                  "flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors",
                   currentPage === "stock"
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/30'
-                    : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'
+                    ? 'bg-indigo-600 text-white'
+                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-white'
                 )}
                 onClick={() => onNavigate("stock")}
-                style={{
-                  transform: currentPage === "stock" ? 'translateX(4px)' : 'none',
-                }}
               >
                 <div className="flex items-center space-x-3">
                   <div className={currentPage === "stock" ? 'text-white' : 'text-slate-400'}>
@@ -238,15 +210,12 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen
             <li>
               <div
                 className={cx(
-                  "flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors",
                   currentPage === "rfp-requests"
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/30'
-                    : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'
+                    ? 'bg-indigo-600 text-white'
+                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-white'
                 )}
                 onClick={() => onNavigate("rfp-requests")}
-                style={{
-                  transform: currentPage === "rfp-requests" ? 'translateX(4px)' : 'none',
-                }}
               >
                 <div className="flex items-center space-x-3">
                   <div className={currentPage === "rfp-requests" ? 'text-white' : 'text-slate-400'}>
@@ -262,10 +231,10 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen
         </nav>
         
         {/* Support */}
-        <div className="p-3 border-t border-slate-700/50 bg-slate-800/30">
+        <div className="p-2 border-t border-slate-800/80">
           <button 
             onClick={() => window.location.href = '/support'}
-            className="w-full flex items-center space-x-3 px-3 py-2.5 text-slate-300 hover:bg-slate-700/50 hover:text-white rounded-xl transition-all duration-200"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800/60 hover:text-white transition-colors"
           >
             <HelpCircle className="w-5 h-5" />
             {sidebarOpen && <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Support</span>}
