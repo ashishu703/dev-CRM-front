@@ -21,6 +21,8 @@ const CustomerTimeline = ({
   const [quotations, setQuotations] = useState([]);
   const [pisByQuotationId, setPisByQuotationId] = useState({});
   const [payments, setPayments] = useState([]);
+  const [customerLedger, setCustomerLedger] = useState([]);
+  const [customerFinalBalance, setCustomerFinalBalance] = useState(null);
   const [transferInfo, setTransferInfo] = useState(null);
   const [cancelRequests, setCancelRequests] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -39,6 +41,10 @@ const CustomerTimeline = ({
         setQuotations(data.quotations || []);
         setPisByQuotationId(data.pisByQuotationId || {});
         setPayments(data.payments || []);
+        setCustomerLedger(data.customerLedger || []);
+        setCustomerFinalBalance(
+          data.customerFinalBalance === undefined ? null : data.customerFinalBalance
+        );
         setTransferInfo(data.transferInfo || null);
         setCancelRequests(data.cancelRequests || []);
       } catch (e) {
@@ -853,6 +859,75 @@ const CustomerTimeline = ({
                           );
                         })}
                     </div>
+                </div>
+              </div>
+            )}
+
+            {Array.isArray(customerLedger) && customerLedger.length > 0 && (
+              <div className="mb-3">
+                <div className="flex justify-center mb-2">
+                  <span className="text-[10px] font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-3 py-1 rounded-full shadow-md">
+                    Ledger
+                  </span>
+                </div>
+                <div className="rounded-lg bg-white border-2 border-indigo-200 p-3 shadow-md">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-1 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full">
+                      <Receipt className="h-3 w-3 text-white" />
+                    </div>
+                    <span className="text-[11px] font-bold text-gray-900">Customer Ledger</span>
+                    {customerFinalBalance !== null && (
+                      <span className="text-[9px] text-gray-700 ml-auto font-semibold">
+                        Balance: ₹{Number(customerFinalBalance || 0).toLocaleString('en-IN')}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[9px]">
+                      <thead>
+                        <tr className="text-gray-700">
+                          <th className="text-left py-1 pr-2">Date</th>
+                          <th className="text-left py-1 pr-2">Type</th>
+                          <th className="text-right py-1 pr-2">Debit</th>
+                          <th className="text-right py-1 pr-2">Credit</th>
+                          <th className="text-right py-1">Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-gray-800">
+                        {customerLedger
+                          .slice()
+                          .sort((a, b) => new Date(a.payment_date || a.order_date || 0) - new Date(b.payment_date || b.order_date || 0))
+                          .slice(-30)
+                          .map((row, idx) => {
+                            const dateInput = row.payment_date || row.order_date;
+                            return (
+                              <tr key={`${row.quotation_id || 'na'}-${row.transaction_type || 't'}-${idx}`} className="border-t border-gray-100">
+                                <td className="py-1 pr-2 whitespace-nowrap">
+                                  {dateInput ? DateFormatter.formatDate(dateInput) : 'N/A'}
+                                </td>
+                                <td className="py-1 pr-2 whitespace-nowrap">
+                                  {row.transaction_type === 'Order' ? (row.quotation_number || 'Order') : 'Payment'}
+                                </td>
+                                <td className="py-1 pr-2 text-right text-rose-700 font-semibold">
+                                  {row.transaction_type === 'Order'
+                                    ? `₹${Number(row.debit_amount || 0).toLocaleString('en-IN')}`
+                                    : '-'}
+                                </td>
+                                <td className="py-1 pr-2 text-right text-emerald-700 font-semibold">
+                                  {row.transaction_type === 'Payment'
+                                    ? `₹${Number(row.credit_amount || 0).toLocaleString('en-IN')}`
+                                    : '-'}
+                                </td>
+                                <td className="py-1 text-right font-bold">
+                                  ₹{Number(row.balance || 0).toLocaleString('en-IN')}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}

@@ -31,6 +31,7 @@ export const API_ENDPOINTS = {
   // Department users
   DEPARTMENT_USERS_BASE: DEPT_USERS_BASE,
   DEPARTMENT_USERS_LIST: (query = '') => `${DEPT_USERS_BASE}${query ? `?${query}` : ''}`,
+  DEPARTMENT_USERS_SUMMARY: (query = '') => `${DEPT_USERS_BASE}/summary${query ? `?${query}` : ''}`,
   DEPARTMENT_USERS_CREATE: () => `${DEPT_USERS_BASE}`,
   DEPARTMENT_USERS_STATS: () => `${DEPT_USERS_BASE}/stats`,
   DEPARTMENT_USERS_BY_HEAD: (headUserId) => `${DEPT_USERS_BASE}/by-head/${encodeURIComponent(headUserId)}`,
@@ -40,6 +41,7 @@ export const API_ENDPOINTS = {
   // Leads
   LEADS_BASE: LEADS_BASE,
   LEADS_LIST: (query = '') => `${LEADS_BASE}${query ? `?${query}` : ''}`,
+  LEADS_ALL_PHONES: () => `${LEADS_BASE}/all-phones`,
   LEADS_CREATE: () => `${LEADS_BASE}`,
   LEADS_IMPORT: () => `${LEADS_BASE}/import`,
   LEADS_BATCH_UPDATE: () => `${LEADS_BASE}/batch`,
@@ -51,7 +53,17 @@ export const API_ENDPOINTS = {
   SALESPERSON_ASSIGNED_LEADS_ME: () => `${LEADS_BASE}/assigned/salesperson`,
   SALESPERSON_ASSIGNED_LEADS_BY_USERNAME: (username) => `${LEADS_BASE}/assigned/salesperson/${encodeURIComponent(username)}`,
   SALESPERSON_LEAD_BY_ID: (id) => `${LEADS_BASE}/assigned/salesperson/lead/${id}`,
-  SALESPERSON_LEAD_HISTORY: (id) => `${LEADS_BASE}/assigned/salesperson/lead/${id}/history`,
+  SALESPERSON_LEAD_HISTORY: (id, query = '') => `${LEADS_BASE}/assigned/salesperson/lead/${id}/history${query ? `?${query}` : ''}`,
+  LEAD_TASKS_BY_LEAD: (leadId) => `${LEADS_BASE}/assigned/salesperson/lead/${leadId}/tasks`,
+  LEAD_TASKS_MY: () => `${LEADS_BASE}/assigned/salesperson/tasks`,
+  LEAD_TASK_CREATE: (leadId) => `${LEADS_BASE}/assigned/salesperson/lead/${leadId}/tasks`,
+  LEAD_TASK_UPDATE: (leadId, taskId) => `${LEADS_BASE}/assigned/salesperson/lead/${leadId}/tasks/${taskId}`,
+  LEAD_TASK_COMPLETE: (leadId, taskId) => `${LEADS_BASE}/assigned/salesperson/lead/${leadId}/tasks/${taskId}/complete`,
+  LEAD_REMINDERS_BY_LEAD: (leadId, query = '') => `${LEADS_BASE}/assigned/salesperson/lead/${leadId}/reminders${query ? `?${query}` : ''}`,
+  LEAD_REMINDER_CREATE: (leadId) => `${LEADS_BASE}/assigned/salesperson/lead/${leadId}/reminders`,
+  LEAD_REMINDER_UPDATE: (leadId, reminderId) => `${LEADS_BASE}/assigned/salesperson/lead/${leadId}/reminders/${reminderId}`,
+  LEAD_REMINDER_COMPLETE: (leadId, reminderId) => `${LEADS_BASE}/assigned/salesperson/lead/${leadId}/reminders/${reminderId}/complete`,
+  LEAD_REMINDER_DELETE: (leadId, reminderId) => `${LEADS_BASE}/assigned/salesperson/lead/${leadId}/reminders/${reminderId}`,
   SALESPERSON_CREATE_LEAD: () => `${LEADS_BASE}/assigned/salesperson/lead`,
   SALESPERSON_IMPORT_LEADS: () => `${LEADS_BASE}/assigned/salesperson/import`,
   LEAD_TRANSFER: (id) => `${LEADS_BASE}/${id}/transfer`,
@@ -108,6 +120,7 @@ export const API_ENDPOINTS = {
   ORDER_CANCEL_BY_QUOTATION: (quotationId) => `${API_BASE_URL}/api/order-cancel-requests/quotation/${encodeURIComponent(quotationId)}`,
   ORDER_CANCEL_BY_CUSTOMER: (customerId) => `${API_BASE_URL}/api/order-cancel-requests/customer/${encodeURIComponent(customerId)}`,
   ORDER_CANCEL_PENDING: () => `${API_BASE_URL}/api/order-cancel-requests/pending`,
+  ORDER_CANCEL_ALL: () => `${API_BASE_URL}/api/order-cancel-requests/all`,
   ORDER_CANCEL_APPROVE: (id) => `${API_BASE_URL}/api/order-cancel-requests/${id}/approve`,
   ORDER_CANCEL_REJECT: (id) => `${API_BASE_URL}/api/order-cancel-requests/${id}/reject`,
 
@@ -178,6 +191,17 @@ export const API_ENDPOINTS = {
   ORGANIZATIONS_CREATE: () => ORG_BASE,
   ORGANIZATIONS_LIST: (query = '') => `${ORG_BASE}${query ? `?${query}` : ''}`,
   ORGANIZATIONS_ACTIVE: () => `${ORG_BASE}/active`,
+
+  // Email config & send
+  EMAIL_CONFIG: () => `${API_BASE_URL}/api/email-config`,
+  EMAIL_SEND: () => `${API_BASE_URL}/api/emails/send`,
+  EMAILS_BY_LEAD: (leadId) => `${API_BASE_URL}/api/emails/by-lead/${leadId}`,
+
+  // Lead docs (Cloudinary upload + DB)
+  UPLOAD_LEAD_DOC: (leadId) => `${API_BASE_URL}/api/upload/lead-doc?leadId=${leadId}`,
+  LEAD_DOCS: (leadId) => `${API_BASE_URL}/api/leads/assigned/salesperson/lead/${leadId}/docs`,
+  LEAD_PHOTOS: (leadId) => `${API_BASE_URL}/api/leads/assigned/salesperson/lead/${leadId}/photos`,
+  UPLOAD_LEAD_PHOTO: (leadId) => `${API_BASE_URL}/api/upload/lead-photo?leadId=${leadId}`,
 
   // expose base URL for rare direct uses
   API_BASE_URL,

@@ -2,7 +2,7 @@ import departmentHeadService from '../api/admin_api/departmentHeadService';
 import quotationService from '../api/admin_api/quotationService';
 import paymentService from '../api/admin_api/paymentService';
 import proformaInvoiceService from '../api/admin_api/proformaInvoiceService';
-import departmentUserService from '../api/admin_api/departmentUserService';
+import departmentUsersApi from '../api/admin_api/departmentUsersApi';
 import { toDateOnly } from '../utils/dateOnly';
 
 class SalesDataService {
@@ -335,9 +335,9 @@ class SalesDataService {
       params.departmentType = departmentType;
     }
     
-    const firstResponse = await departmentUserService.listUsers(params);
-    const firstPageData = firstResponse?.data?.users || firstResponse?.data || [];
-    const pagination = firstResponse?.pagination || {};
+    const firstResponse = await departmentUsersApi.listUsers(params);
+    const firstPageData = firstResponse?.users ?? [];
+    const pagination = firstResponse?.pagination ?? {};
     const total = pagination.total || firstPageData.length;
     const totalPages = pagination.pages || Math.ceil(total / pageSize);
     
@@ -353,14 +353,14 @@ class SalesDataService {
       if (departmentType) {
         pageParams.departmentType = departmentType;
       }
-      pagePromises.push(departmentUserService.listUsers(pageParams));
+      pagePromises.push(departmentUsersApi.listUsers(pageParams));
     }
     
     const remainingResponses = await Promise.all(pagePromises);
     let allUsers = [...firstPageData];
     
-    remainingResponses.forEach(response => {
-      const usersData = response?.data?.users || response?.data || [];
+    remainingResponses.forEach((response) => {
+      const usersData = response?.users ?? [];
       allUsers = allUsers.concat(usersData);
     });
     

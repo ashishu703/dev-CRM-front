@@ -13,6 +13,7 @@ import CreateOrganisation from './SuperAdmin/CreateOrganisation';
 import ReportsPage from './Reports/ReportsPage';
 import DetailedReportPage from './Reports/DetailedReportPage';
 import RfpWorkflow from './shared/RfpWorkflow';
+import ToolboxInterface from './salesperson/ToolboxInterface';
 
 const MainDashboard = ({ activeView, setActiveView }) => {
   const { selectedCompany } = useCompany();
@@ -54,6 +55,8 @@ const MainDashboard = ({ activeView, setActiveView }) => {
         return <ReportsPage setActiveView={setActiveView} />;
       case 'rfp-workflow':
         return <RfpWorkflow />;
+      case 'toolbox':
+        return <ToolboxInterface />;
       default:
         if (activeView?.startsWith('detailed-report-')) {
           return <DetailedReportPage activeView={activeView} setActiveView={setActiveView} />;

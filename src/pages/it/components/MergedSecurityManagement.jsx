@@ -5,7 +5,7 @@ import AddIntegrationModal from './AddIntegrationModal';
 import MaintenanceBanner from './MaintenanceBanner';
 import apiClient from '../../../utils/apiClient';
 import { API_ENDPOINTS } from '../../../api/admin_api/api';
-import departmentUsersService from '../../../api/admin_api/departmentUsersService';
+import departmentUsersApi from '../../../api/admin_api/departmentUsersApi';
 import toastManager from '../../../utils/ToastManager';
 
 const MergedSecurityManagement = () => {
@@ -53,12 +53,9 @@ const MergedSecurityManagement = () => {
   const fetchItUsers = useCallback(async () => {
     try {
       setLoadingUsers(true);
-      const response = await departmentUsersService.getAll({ departmentType: 'it', isActive: true });
-      if (response.success && Array.isArray(response.data?.users)) {
-        setItUsers(response.data.users);
-      } else {
-        setItUsers([]);
-      }
+      const response = await departmentUsersApi.listUsers({ departmentType: 'it', isActive: true, limit: 100 });
+      const list = response?.users ?? [];
+      setItUsers(Array.isArray(list) ? list : []);
     } catch (error) {
       toastManager.error('Failed to load IT users');
       setItUsers([]);

@@ -7,6 +7,7 @@ import { useClickOutside } from '../hooks/useClickOutside';
 const InlineStatusDropdown = ({
   value,
   onChange,
+  onStatusSelect,
   disabled = false,
   leadId,
   className = ''
@@ -25,7 +26,16 @@ const InlineStatusDropdown = ({
   };
 
   const handleSelect = (opt) => {
-    if (!isSelected(opt)) onChange?.(leadId, opt);
+    if (isSelected(opt)) {
+      setOpen(false);
+      return;
+    }
+    if (onStatusSelect) {
+      onStatusSelect(leadId, opt);
+      setOpen(false);
+      return;
+    }
+    onChange?.(leadId, opt);
     setOpen(false);
   };
 
@@ -39,7 +49,7 @@ const InlineStatusDropdown = ({
         onClick={() => !disabled && setOpen((p) => !p)}
         disabled={disabled}
         className={`
-          inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium
+          inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium
           ${badgeClasses}
           ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:ring-2 hover:ring-offset-0.5 hover:ring-gray-300'}
         `}
@@ -51,7 +61,7 @@ const InlineStatusDropdown = ({
       {open && (
         <div
           className="absolute left-0 top-full mt-0.5 z-50 min-w-[140px] py-0.5
-            bg-white border border-gray-200 rounded shadow-lg"
+            bg-white border border-gray-200 rounded-2xl shadow-lg overflow-hidden"
         >
           {SALES_OPTIONS.map((opt) => (
             <button

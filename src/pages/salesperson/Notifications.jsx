@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import apiClient from '../../utils/apiClient';
 import { Bell, Users, Calendar, CheckCircle, AlertTriangle, ArrowRightLeft } from 'lucide-react';
 
 const typeIcon = (type) => {
@@ -21,8 +22,7 @@ export default function NotificationsPage({ isDarkMode = false }) {
   const load = async () => {
     try {
       setLoading(true); setError(null);
-      const res = await fetch('/api/notifications', { headers: { 'Authorization': localStorage.getItem('token') ? `Bearer ${localStorage.getItem('token')}` : undefined } });
-      const json = await res.json();
+      const json = await apiClient.get('/api/notifications');
       if (!json?.success) throw new Error(json?.message || 'Failed');
       setItems(json.data);
     } catch (e) {

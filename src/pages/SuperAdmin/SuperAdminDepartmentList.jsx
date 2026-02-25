@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, RefreshCw, Edit, Trash2, LogOut, Calendar, Users, Building, User, Mail, Filter, Eye, EyeOff, X } from 'lucide-react';
 import departmentHeadService, { uiToApiDepartment, apiToUiDepartment } from '../../api/admin_api/departmentHeadService';
-import departmentUserService from '../../api/admin_api/departmentUserService';
+import departmentUsersApi from '../../api/admin_api/departmentUsersApi';
 import { useAuth } from '../../hooks/useAuth';
 import organizationService from '../../api/admin_api/organizationService';
 import { SkeletonTable, SkeletonStatCard } from '../../components/dashboard/DashboardSkeleton';
@@ -124,7 +124,7 @@ const DepartmentManagement = () => {
 
   const fetchStats = async () => {
     try {
-      const res = await departmentUserService.getStats();
+      const res = await departmentUsersApi.getStats();
       setStats(res);
     } catch (err) {
     }

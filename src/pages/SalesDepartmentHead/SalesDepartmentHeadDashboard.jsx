@@ -8,6 +8,7 @@ import CalculatorProductList from './CalculatorProductList';
 import ReportsPage from '../Reports/ReportsPage';
 import DetailedReportPage from '../Reports/DetailedReportPage';
 import RfpWorkflow from '../shared/RfpWorkflow';
+import ToolboxInterface from '../salesperson/ToolboxInterface';
 
 const SalesDepartmentHeadDashboard = ({ activeView, setActiveView }) => {
   // Set default view to sales-dashboard if not set (only on initial mount, once)
@@ -49,6 +50,8 @@ const SalesDepartmentHeadDashboard = ({ activeView, setActiveView }) => {
         return <ReportsPage setActiveView={setActiveView} />;
       case 'rfp-workflow':
         return <RfpWorkflow setActiveView={setActiveView} />;
+      case 'toolbox':
+        return <ToolboxInterface />;
       default:
         // Handle default case - if it's 'dashboard' or empty, show sales dashboard
         // Otherwise show sales dashboard as fallback

@@ -4,7 +4,7 @@ import CreateUserModal from './CreateUserModal';
 import EditUserModal from './EditUserModal';
 import apiClient from '../../../utils/apiClient';
 import { API_ENDPOINTS } from '../../../api/admin_api/api';
-import departmentUsersService from '../../../api/admin_api/departmentUsersService';
+import departmentUsersApi from '../../../api/admin_api/departmentUsersApi';
 import toastManager from '../../../utils/ToastManager';
 import { useAuth } from '../../../hooks/useAuth';
 
@@ -25,7 +25,7 @@ const UserAccessManagement = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await departmentUsersService.listUsers({ page: 1, limit: 100 });
+      const response = await departmentUsersApi.listUsers({ page: 1, limit: 100 });
       const data = response.data || response;
       const usersList = (data.users || []).map(user => {
         const isActive = user.isActive !== undefined ? user.isActive : (user.is_active !== undefined ? user.is_active : true);
@@ -77,7 +77,7 @@ const UserAccessManagement = () => {
         return;
       }
       const newStatus = !user.isActive;
-      await departmentUsersService.updateStatus(userId, newStatus);
+      await departmentUsersApi.updateStatus(userId, newStatus);
     setUsers(prev => prev.map(u => 
         u.id === userId ? { ...u, status: newStatus ? 'Active' : 'Inactive', isActive: newStatus } : u
       ));
@@ -94,7 +94,7 @@ const UserAccessManagement = () => {
 
     try {
       setDeletingUserId(userId);
-      await departmentUsersService.deleteUser(userId);
+      await departmentUsersApi.deleteUser(userId);
       toastManager.success('User deleted successfully');
       await fetchUsers();
     } catch (error) {
@@ -123,7 +123,7 @@ const UserAccessManagement = () => {
         headUserEmail: currentUser.email
       };
       
-      await departmentUsersService.createUser(payload);
+      await departmentUsersApi.createUser(payload);
       toastManager.success('User created successfully');
       setShowCreateModal(false);
       await fetchUsers();
@@ -134,7 +134,7 @@ const UserAccessManagement = () => {
 
   const handleEditUser = async (userData) => {
     try {
-      await departmentUsersService.updateUser(userData.id, userData);
+      await departmentUsersApi.updateUser(userData.id, userData);
       toastManager.success('User updated successfully');
       setShowEditModal(false);
       await fetchUsers();

@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { 
-  ChevronDown, 
-  ChevronRight, 
-  BarChart3, 
-  Users, 
-  UserCheck, 
+import {
+  ChevronDown,
+  ChevronRight,
+  BarChart3,
+  Users,
+  UserCheck,
   DollarSign,
   Menu,
   X,
@@ -13,7 +13,8 @@ import {
   Package,
   HelpCircle,
   FileText,
-  Calculator
+  Calculator,
+  Wrench,
 } from 'lucide-react';
 
 const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, setSidebarOpen }) => {
@@ -37,25 +38,13 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
   const collapseTimerRef = useRef(null);
   const isManuallyToggledRef = useRef(false);
 
-  // Auto-collapse on mouse leave
+  // Disable hover auto-expand; sidebar only opens/closes manually
   const handleMouseEnter = () => {
-    if (collapseTimerRef.current) {
-      clearTimeout(collapseTimerRef.current);
-      collapseTimerRef.current = null;
-    }
-    if (!isManuallyToggledRef.current) {
-      updateExpanded(true);
-    }
+    // No auto-expand on hover
   };
 
   const handleMouseLeave = () => {
-    // Only auto-collapse if not manually toggled
-    if (!isManuallyToggledRef.current) {
-      collapseTimerRef.current = setTimeout(() => {
-        updateExpanded(false);
-        setExpandedDropdowns({});
-      }, 2000); // Collapse after 2 seconds
-    }
+    // No auto-collapse on hover
   };
 
   // Cleanup timer on unmount
@@ -119,6 +108,12 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
       id: 'stock-update',
       label: 'Stock Update',
       icon: <Package className="w-5 h-5" />,
+      hasDropdown: false
+    },
+    {
+      id: 'toolbox',
+      label: 'Toolbox Interface',
+      icon: <Wrench className="w-5 h-5" />,
       hasDropdown: false
     },
     {

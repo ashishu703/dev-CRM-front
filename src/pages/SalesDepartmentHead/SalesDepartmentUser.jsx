@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, UserPlus, Edit, LogOut, Trash2, Hash, User, Mail, Shield, Building, Target, Calendar, MoreHorizontal, TrendingUp, AlertTriangle, LogIn, Info } from 'lucide-react';
-import departmentUserService, { apiToUiDepartment } from '../../api/admin_api/departmentUserService';
+import departmentUsersApi, { apiToUiDepartment } from '../../api/admin_api/departmentUsersApi';
 import departmentHeadService from '../../api/admin_api/departmentHeadService';
 import { useAuth } from '../../hooks/useAuth';
 import toastManager from '../../utils/ToastManager';
@@ -108,7 +108,7 @@ const SalesDepartmentUser = ({ setActiveView }) => {
           
           // Calculate remaining target
           const headTarget = parseFloat(headData.target || 0);
-          const existingUsers = await departmentUserService.listUsers({
+          const existingUsers = await departmentUsersApi.listUsers({
             headUserId: currentUser.id
           });
           const users = existingUsers?.data?.users || existingUsers?.users || [];
@@ -187,7 +187,7 @@ const SalesDepartmentUser = ({ setActiveView }) => {
   const { impersonate } = useAuth();
   const handleDelete = async (userId) => {
     try {
-      await departmentUserService.deleteUser(userId);
+      await departmentUsersApi.deleteUser(userId);
       setUsers(prev => prev.filter(u => u.id !== userId));
     } catch (err) {
       setError(err.message || 'Failed to delete user');
@@ -199,7 +199,7 @@ const SalesDepartmentUser = ({ setActiveView }) => {
     const nextStatus = !user.isActive;
     setStatusUpdating(prev => ({ ...prev, [user.id]: true }));
     try {
-      await departmentUserService.updateStatus(user.id, nextStatus);
+      await departmentUsersApi.updateStatus(user.id, nextStatus);
       setUsers(prev =>
         prev.map(u => (u.id === user.id ? { ...u, isActive: nextStatus } : u))
       );
@@ -227,7 +227,7 @@ const SalesDepartmentUser = ({ setActiveView }) => {
       setError(null);
       const params = { page, limit };
       if (searchTerm.trim()) params.search = searchTerm.trim();
-      const res = await departmentUserService.listUsers(params);
+      const res = await departmentUsersApi.listUsers(params);
       const payload = res.data || res;
       const items = (payload.users || []).map(u => {
         const target = Number(u.target || 0);
@@ -721,7 +721,7 @@ const SalesDepartmentUser = ({ setActiveView }) => {
 
                   }
                   
-                  await departmentUserService.createUser(payload);
+                  await departmentUsersApi.createUser(payload);
                   await fetchUsers();
                   setShowAddModal(false);
                   setNewUser({ username: '', email: '', password: '', target: '', targetStartDate: '' });
@@ -922,7 +922,7 @@ const SalesDepartmentUser = ({ setActiveView }) => {
 
                   }
                   
-                  await departmentUserService.updateUser(editingUser.id, payload);
+                  await departmentUsersApi.updateUser(editingUser.id, payload);
                   await fetchUsers();
                   
                   // If current logged-in user's username/email was updated, refresh auth context

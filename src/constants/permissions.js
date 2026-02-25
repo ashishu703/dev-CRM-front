@@ -33,11 +33,11 @@ export const RolePermissions = {
   ],
 };
 
-export const hasPermission = (user, permission, departmentTypeFilter = 'production') => {
+export const hasPermission = (user, permission, departmentTypeFilter = 'sales') => {
   if (!user) return false;
   const allowed = RolePermissions[user.role] || [];
   const roleOk = allowed.includes(permission);
-  const deptOk = !departmentTypeFilter || user.departmentType === departmentTypeFilter || user.departmentType === 'Production Department';
+  const deptOk = !departmentTypeFilter || user.departmentType === departmentTypeFilter;
   return roleOk && deptOk;
 };
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Search, Filter, RefreshCw, Eye, X, FileText, Phone, Clock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import LeadTable from '../../components/LeadTable';
-import CustomerTimeline from '../../components/CustomerTimeline';
+import CustomerDetailSidebar from '../../components/salesperson/CustomerDetailSidebar';
 import ColumnFilterModal from '../../components/ColumnFilterModal';
 import EnquiryTable from '../../components/EnquiryTable';
 import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton';
@@ -1210,7 +1210,6 @@ const AllLeads = () => {
           onEdit={handleEdit}
           onViewTimeline={handleViewTimeline}
           onAssign={handleAssign}
-          showCustomerTimeline={showCustomerTimeline}
           setShowColumnFilter={setShowColumnFilter}
           allLeadsData={allLeadsData}
           assignedSalespersonFilter={assignedSalespersonFilter}
@@ -1224,15 +1223,41 @@ const AllLeads = () => {
           onToggleColumnFilterRow={() => setShowColumnFilterRow(prev => !prev)}
         />
         
-        {/* Customer Timeline */}
+        {/* Customer Detail Sidebar */}
         {showCustomerTimeline && timelineLead && (
-          <CustomerTimeline
-            lead={timelineLead}
+          <CustomerDetailSidebar
+            customer={timelineLead}
             onClose={() => {
               setShowCustomerTimeline(false);
               setTimelineLead(null);
-          }}
-        />
+            }}
+            onEdit={() => {
+              toastManager.info('Lead editing is handled by department heads');
+            }}
+            onQuotation={() => {
+              toastManager.info('Quotation creation is handled by salespersons');
+            }}
+            quotations={[]}
+            onViewQuotation={() => {}}
+            onEditQuotation={() => {}}
+            onDeleteQuotation={() => {}}
+            onCreatePI={() => {}}
+            quotationPIs={{}}
+            piHook={{
+              fetchPIsForQuotation: () => {},
+              handleDeletePI: () => {}
+            }}
+            onViewPI={() => {}}
+            onUpdateStatus={() => {}}
+            onPricingRfp={() => {}}
+            onSendEmail={() => {}}
+            onDocs={() => {}}
+            renderUpdateStatusContent={null}
+            renderRfpContent={null}
+            renderSendEmailContent={null}
+            renderDocsContent={null}
+          />
+        )}
       )}
               </div>
               
@@ -1505,14 +1530,39 @@ const AllLeads = () => {
             </div>
           )}
           
-          {/* Customer Timeline */}
+          {/* Customer Detail Sidebar */}
           {showCustomerTimeline && timelineLead && (
-            <CustomerTimeline
-              lead={timelineLead}
+            <CustomerDetailSidebar
+              customer={timelineLead}
               onClose={() => {
                 setShowCustomerTimeline(false);
                 setTimelineLead(null);
               }}
+              onEdit={() => {
+                toastManager.info('Lead editing is handled by department heads');
+              }}
+              onQuotation={() => {
+                toastManager.info('Quotation creation is handled by salespersons');
+              }}
+              quotations={[]}
+              onViewQuotation={() => {}}
+              onEditQuotation={() => {}}
+              onDeleteQuotation={() => {}}
+              onCreatePI={() => {}}
+              quotationPIs={{}}
+              piHook={{
+                fetchPIsForQuotation: () => {},
+                handleDeletePI: () => {}
+              }}
+              onViewPI={() => {}}
+              onUpdateStatus={() => {}}
+              onPricingRfp={() => {}}
+              onSendEmail={() => {}}
+              onDocs={() => {}}
+              renderUpdateStatusContent={null}
+              renderRfpContent={null}
+              renderSendEmailContent={null}
+              renderDocsContent={null}
             />
           )}
             </>

@@ -5,12 +5,19 @@ import { API_ENDPOINTS } from '../../api/admin_api/api';
 import Toast from '../../utils/Toast';
 
 export default function CancelOrderModal({ item, onClose, onCancelRequested }) {
-  const [reason, setReason] = useState('');
+  const isPartial = !!item?.partial;
+  const productName = item?.productName || item?.product_name || '';
+  const defaultReason = isPartial && productName ? `Partial: ${productName}` : '';
+  const [reason, setReason] = useState(defaultReason);
   const [loading, setLoading] = useState(false);
   const [existingRequest, setExistingRequest] = useState(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
 
   const quotationId = item?.quotationData?.id ?? item?.quotationData?.quotationId ?? null;
+
+  useEffect(() => {
+    setReason(isPartial && productName ? `Partial: ${productName}` : '');
+  }, [item, isPartial, productName]);
 
   useEffect(() => {
     if (!quotationId) {
@@ -53,7 +60,10 @@ export default function CancelOrderModal({ item, onClose, onCancelRequested }) {
     try {
       const res = await apiClient.post(API_ENDPOINTS.ORDER_CANCEL_REQUEST(), {
         quotationId,
-        reason: reason.trim() || undefined
+        reason: (reason || defaultReason).trim() || undefined,
+        partial: isPartial || undefined,
+        productName: isPartial ? productName : undefined,
+        deliveryStatus: item?.deliveryStatus || undefined,
       });
       if (res?.data?.success) {
         Toast.success(res.data.message || 'Cancel request submitted. Pending department head approval.');
@@ -63,7 +73,7 @@ export default function CancelOrderModal({ item, onClose, onCancelRequested }) {
         Toast.error(res?.data?.message || 'Failed to submit cancel request.');
       }
     } catch (err) {
-      const msg = err?.data?.message ?? err?.message ?? 'Failed to submit cancel request.';
+      const msg = err?.response?.data?.message ?? err?.data?.message ?? err?.message ?? 'Failed to submit cancel request.';
       Toast.error(msg);
     } finally {
       setLoading(false);
@@ -80,7 +90,7 @@ export default function CancelOrderModal({ item, onClose, onCancelRequested }) {
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-amber-50 to-orange-50">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-600" />
-            Cancel Order
+            {isPartial ? 'Cancel this product' : 'Cancel full order'}
           </h3>
           <button
             type="button"
@@ -118,7 +128,9 @@ export default function CancelOrderModal({ item, onClose, onCancelRequested }) {
           {quotationId && !isApproved && !isPending && (
             <form onSubmit={handleSubmit} className="mt-4 space-y-4">
               <p className="text-sm text-gray-600">
-                Order cancel requires approval from the department head. Submit the reason below.
+                {isPartial
+                  ? `Cancel only this product${productName ? `: ${productName}` : ''}. Request will be sent to department head.`
+                  : 'Full order cancel requires approval from the department head. Submit the reason below.'}
               </p>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>

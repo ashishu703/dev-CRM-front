@@ -287,7 +287,11 @@ const LeadTable = ({
               filteredLeads.map((lead, index) => {
                 const uniqueKey = lead.id != null ? `lead-${lead.id}-${index}${lead._renderIndex != null ? `-${lead._renderIndex}` : ''}` : `lead-no-id-${index}`;
                 return (
-                  <tr key={uniqueKey} className="hover:bg-blue-50/40 border-b border-gray-100 transition-colors">
+                  <tr 
+                    key={uniqueKey} 
+                    className="hover:bg-blue-50/40 border-b border-gray-100 transition-colors cursor-pointer"
+                    onDoubleClick={() => onViewTimeline?.(lead)}
+                  >
                     <td className={TD_CLASS}>
                       <input
                         type="checkbox"

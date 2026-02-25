@@ -114,9 +114,9 @@ class PaymentTrackingService {
   }
 
   /**
-   * Filter quotations to only include those with at least one PI
+   * Filter quotations to only include those with at least one APPROVED PI
    * @param {Array} quotations - Array of quotations
-   * @returns {Promise<Array>} Filtered quotations with PI info
+   * @returns {Promise<Array>} Filtered quotations with approved PI info
    */
   async filterQuotationsWithPI(quotations) {
     if (!Array.isArray(quotations) || quotations.length === 0) return [];
@@ -124,17 +124,19 @@ class PaymentTrackingService {
     const piCheckPromises = quotations.map(async (q) => {
       try {
         const response = await this.proformaInvoiceService.getPIsByQuotation(q.id);
-        const pis = DataExtractor.extractArray(response);
-        return { quotation: q, hasPI: pis.length > 0, pis };
+        const allPis = DataExtractor.extractArray(response);
+        // Filter to only approved PIs
+        const approvedPis = allPis.filter(pi => (pi.status || '').toLowerCase() === 'approved');
+        return { quotation: q, hasApprovedPI: approvedPis.length > 0, pis: approvedPis };
       } catch (error) {
         console.warn(`Failed to check PI for quotation ${q.id}:`, error);
-        return { quotation: q, hasPI: false, pis: [] };
+        return { quotation: q, hasApprovedPI: false, pis: [] };
       }
     });
 
     const results = await Promise.allSettled(piCheckPromises);
     return results
-      .filter(r => r.status === 'fulfilled' && r.value.hasPI)
+      .filter(r => r.status === 'fulfilled' && r.value.hasApprovedPI)
       .map(r => ({
         ...r.value.quotation,
         pis: r.value.pis
@@ -247,11 +249,12 @@ class PaymentTrackingService {
       ? await this.proformaInvoiceService.getBulkPIsByQuotations(quotationIds).catch(() => ({ data: [] }))
       : { data: [] };
 
-    // Build PI map by quotation ID
+    // Build PI map by quotation ID - only approved PIs
     const pisByQuotationId = new Map();
     const allPIs = DataExtractor.extractArray(bulkPIsResult);
     allPIs.forEach(pi => {
-      if (pi.quotation_id) {
+      // Only include approved PIs
+      if (pi.quotation_id && (pi.status || '').toLowerCase() === 'approved') {
         if (!pisByQuotationId.has(pi.quotation_id)) {
           pisByQuotationId.set(pi.quotation_id, []);
         }
@@ -261,10 +264,10 @@ class PaymentTrackingService {
 
     // Process each quotation with pre-fetched data
     for (const { quotation, lead, payments } of quotationEntries) {
-      // Get PIs from pre-fetched map
+      // Get PIs from pre-fetched map (only approved PIs)
       const pis = pisByQuotationId.get(quotation.id) || [];
 
-      // Only include if PI exists
+      // Only include if APPROVED PI exists
       if (pis.length === 0) {
         continue;
       }

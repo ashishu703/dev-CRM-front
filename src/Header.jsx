@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, Users, X, TrendingUp, Calendar, CheckCircle, MapPin, Award, Package, DollarSign, Moon, Sun, BarChart3, Clock, User, Factory, Wrench, HelpCircle, Activity, Server, Settings, Shield, Link, CheckCheck, Circle, FileText, Menu, ToggleLeft, ToggleRight, CheckSquare, Calculator } from 'lucide-react';
+import { Bell, Users, X, TrendingUp, Calendar, CheckCircle, MapPin, Award, Package, DollarSign, Moon, Sun, BarChart3, Clock, User, Factory, Wrench, HelpCircle, Activity, Server, Settings, Shield, Link, CheckCheck, Circle, FileText, Menu, ToggleRight, CheckSquare, Calculator } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
 import { useNotifications } from './hooks/useNotifications';
 import ProfileUpdateModal from './components/ProfileUpdateModal';
@@ -11,11 +11,11 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
   const [showNotifications, setShowNotifications] = useState(false);
   const [expandedNotificationId, setExpandedNotificationId] = useState(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileAnchorRect, setProfileAnchorRect] = useState(null);
+  const profileButtonRef = useRef(null);
   
   const notificationRef = useRef(null);
 
-
-  // Click outside to close dropdowns
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
@@ -116,18 +116,6 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
           icon: <Users className="w-5 h-5 text-white" />,
           title: "Payment Tracking",
           subtitle: "Browse and manage all payment tracking"
-        };
-      case 'due-payment':
-        return {
-          icon: <Clock className="w-6 h-6 text-white" />,
-          title: "Due Payment",
-          subtitle: "Track and manage due payments"
-        };
-      case 'advance-payment':
-        return {
-          icon: <DollarSign className="w-6 h-6 text-white" />,
-          title: "Advance Payment",
-          subtitle: "Track and manage advance payments"
         };
         case 'lead-status':
           return {
@@ -502,17 +490,21 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
   };
 
   const pageContent = getPageHeaderContent();
-
-  // Match sidebar theme for Sales Department Head (dark slate/blue gradient)
-  const isSalesHeadTheme = userType === 'salesdepartmenthead';
-  const headerIsDark = isDarkMode || isSalesHeadTheme;
+  const isSalesHeadTheme = userType === 'salesdepartmenthead' || userType === 'salesperson';
+  const isSalespersonLight = userType === 'salesperson';
+  const headerIsDark = isDarkMode || (isSalesHeadTheme && !isSalespersonLight);
+  const showToggleViewButton = onToggleView && userType !== 'salesperson';
+  const showDarkModeButton = onToggleDarkMode && userType !== 'salesperson';
 
   return (
-    <header className={`sticky top-0 z-[30] border-b shadow-lg transition-all duration-300 backdrop-blur-md ${
+    <header className={`sticky top-0 z-[30] border-b shadow-sm transition-all duration-300 backdrop-blur-md ${
       headerIsDark 
         ? 'border-slate-700/50' 
-        : 'bg-white/95 border-gray-200'
-    }`} style={headerIsDark ? {
+        : 'border-slate-200'
+    }`} style={isSalespersonLight ? {
+      background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #f1f5f9 100%)',
+      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(15, 23, 42, 0.04)'
+    } : headerIsDark ? {
       background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)',
       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1)'
     } : {
@@ -530,37 +522,35 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
             <button
               onClick={onToggleSidebar}
               className={`p-1.5 sm:p-2 rounded-lg transition-colors flex-shrink-0 ${
-                headerIsDark 
-                  ? 'hover:bg-slate-700 text-slate-200' 
-                  : 'hover:bg-gray-100 text-gray-600'
+                (headerIsDark && !isSalespersonLight)
+                  ? 'hover:bg-slate-700 text-slate-200'
+                  : 'hover:bg-slate-100 text-slate-600'
               }`}
               title="Toggle Menu"
             >
               <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
           )}
-          <div className="w-6 h-6 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg flex-shrink-0" style={{
-            boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.3), 0 4px 6px -2px rgba(99, 102, 241, 0.2)'
-          }}>
-            <div className="text-white text-xs sm:text-sm">
+          <div className="w-6 h-6 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-lg sm:rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center shadow-md flex-shrink-0" style={isSalespersonLight ? { boxShadow: '0 2px 8px rgba(15, 23, 42, 0.15)' } : { boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.3), 0 4px 6px -2px rgba(99, 102, 241, 0.2)' }}>
+            <div className={`text-xs sm:text-sm ${isSalespersonLight ? 'text-white' : 'text-white'}`}>
               {pageContent.icon}
             </div>
           </div>
           {(pageContent.title || pageContent.subtitle) && (
             <div 
               className="min-w-0 flex flex-col justify-center"
-              style={isSalesHeadTheme ? { borderLeft: '3px solid #6366F1', paddingLeft: 14 } : undefined}
+              style={isSalesHeadTheme && !isSalespersonLight ? { borderLeft: '3px solid #6366F1', paddingLeft: 14 } : isSalespersonLight ? { borderLeft: '3px solid #64748b', paddingLeft: 14 } : undefined}
             >
               <h1 
                 className={`truncate ${!isSalesHeadTheme ? (headerIsDark ? 'text-white' : 'text-gray-900') + ' text-sm sm:text-base lg:text-lg font-bold' : ''}`}
-                style={isSalesHeadTheme ? { fontFamily: 'Poppins, sans-serif', fontSize: 17, fontWeight: 600, letterSpacing: '0.3px', color: '#F8FAFC', margin: 0 } : { fontFamily: 'Poppins, sans-serif' }}
+                style={isSalespersonLight ? { fontFamily: 'Poppins, sans-serif', fontSize: 17, fontWeight: 600, letterSpacing: '0.3px', color: '#0f172a', margin: 0 } : isSalesHeadTheme ? { fontFamily: 'Poppins, sans-serif', fontSize: 17, fontWeight: 600, letterSpacing: '0.3px', color: '#F8FAFC', margin: 0 } : { fontFamily: 'Poppins, sans-serif' }}
               >
                 {pageContent.title}
               </h1>
               {pageContent.subtitle && (
                 <p 
                   className={`truncate hidden sm:block ${!isSalesHeadTheme ? (headerIsDark ? 'text-slate-300' : 'text-gray-600') + ' text-[10px] sm:text-xs mt-0 sm:mt-0.5' : ''}`}
-                  style={isSalesHeadTheme ? { fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 400, color: '#94A3B8', margin: '1px 0 0' } : { fontFamily: 'Inter, sans-serif' }}
+                  style={isSalespersonLight ? { fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 400, color: '#64748b', margin: '1px 0 0' } : isSalesHeadTheme ? { fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 400, color: '#94A3B8', margin: '1px 0 0' } : { fontFamily: 'Inter, sans-serif' }}
                 >
                   {pageContent.subtitle}
                 </p>
@@ -570,60 +560,38 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
         </div>
 
         <div className="flex items-center space-x-1 sm:space-x-2 lg:space-x-3 flex-shrink-0">
-          {/* Toggle Button for Marketing Salesperson and Salesperson */}
-          {(userType === "marketing-salesperson" || userType === "salesperson") && (
+          {showToggleViewButton && (
             <button
-              onClick={onToggleView || (() => {})}
+              onClick={onToggleView}
               className={`p-1.5 sm:p-2 rounded-lg transition-all flex-shrink-0 shadow-md ${
-                isDarkMode 
-                  ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 hover:text-white' 
-                  : 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700'
+                isDarkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 hover:text-white' : 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700'
               }`}
               title={userType === "marketing-salesperson" ? "Toggle Marketing/Sales View" : "Toggle View"}
             >
               <ToggleRight className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
           )}
-          
-          {/* Toggle Button for other users if onToggleView is provided */}
-          {userType !== "marketing-salesperson" && userType !== "salesperson" && onToggleView && (
-            <button
-              onClick={onToggleView}
-              className={`p-1.5 sm:p-2 rounded-lg transition-all flex-shrink-0 shadow-md ${
-                isDarkMode 
-                  ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 hover:text-white' 
-                  : 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700'
-              }`}
-              title="Toggle View"
-            >
-              <ToggleRight className="w-5 h-5 sm:w-6 sm:h-6" />
-            </button>
-          )}
-          
-          {userType === "salesperson" && onToggleDarkMode && (
+          {showDarkModeButton && (
             <button
               onClick={onToggleDarkMode}
               className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${
-                headerIsDark 
-                  ? 'bg-slate-700 text-yellow-400 hover:bg-slate-600' 
-                  : 'hover:bg-gray-100 text-gray-600'
+                headerIsDark ? 'bg-slate-700 text-yellow-400 hover:bg-slate-600' : 'hover:bg-gray-100 text-gray-600'
               }`}
               title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
               {isDarkMode ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
           )}
-          
           <div className="relative flex-shrink-0" ref={notificationRef}>
             <button 
               onClick={() => setShowNotifications(!showNotifications)}
               className={`relative p-1 sm:p-1.5 rounded-lg transition-colors ${
-                headerIsDark 
-                  ? 'hover:bg-slate-700' 
-                  : 'hover:bg-gray-100'
+                (headerIsDark && !isSalespersonLight)
+                  ? 'hover:bg-slate-700'
+                  : 'hover:bg-slate-100'
               }`}
             >
-              <Bell className={`w-4 h-4 sm:w-5 sm:h-5 ${headerIsDark ? 'text-slate-200' : 'text-gray-600'}`} />
+              <Bell className={`w-4 h-4 sm:w-5 sm:h-5 ${(headerIsDark && !isSalespersonLight) ? 'text-slate-200' : 'text-slate-600'}`} />
               {unreadCount > 0 && (
                 <div className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] sm:min-w-[16px] sm:h-[16px] px-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] leading-[14px] sm:leading-[16px] rounded-full text-center">
                   {Math.min(99, unreadCount)}
@@ -750,21 +718,25 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
 
           <button
             onClick={() => window.location.href = '/support'}
-            className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${
-              headerIsDark 
-                ? 'hover:bg-slate-700' 
-                : 'hover:bg-gray-100'
+className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${
+                (headerIsDark && !isSalespersonLight)
+                  ? 'hover:bg-slate-700'
+                  : 'hover:bg-slate-100'
             }`}
             title="Support & Help"
           >
-            <HelpCircle className={`w-4 h-4 sm:w-5 sm:h-5 ${headerIsDark ? 'text-slate-200' : 'text-gray-600'}`} />
+            <HelpCircle className={`w-4 h-4 sm:w-5 sm:h-5 ${(headerIsDark && !isSalespersonLight) ? 'text-slate-200' : 'text-slate-600'}`} />
           </button>
 
           <button
-            onClick={() => setShowProfileModal(true)}
-            className={`flex items-center space-x-1.5 rounded-lg px-1.5 py-1 transition-colors cursor-pointer flex-shrink-0 ${headerIsDark ? 'hover:bg-slate-700' : 'hover:bg-gray-100'}`}
+            ref={profileButtonRef}
+            onClick={() => {
+              setProfileAnchorRect(profileButtonRef.current?.getBoundingClientRect() ?? null);
+              setShowProfileModal(true);
+            }}
+            className={`flex items-center space-x-1.5 rounded-lg px-1.5 py-1 transition-colors cursor-pointer flex-shrink-0 ${(headerIsDark && !isSalespersonLight) ? 'hover:bg-slate-700' : 'hover:bg-slate-100'}`}
           >
-            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center shadow">
+            <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center shadow ${isSalespersonLight ? 'bg-slate-600' : 'bg-gradient-to-br from-blue-600 to-purple-600'}`}>
               {user?.profile_picture || user?.profilePicture ? (
                 <img 
                   src={user.profile_picture || user.profilePicture} 
@@ -778,10 +750,10 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
               )}
             </div>
             <div className="text-right hidden sm:block">
-              <p className={`text-[11px] font-medium truncate max-w-[90px] ${headerIsDark ? 'text-white' : 'text-gray-900'}`}>
-                {user?.email ? `${user.email.split('@')[0]}@${user.email.split('@')[1]?.substring(0, 2) || ''}...` : 'user'}
+<p className={`text-[11px] font-medium truncate max-w-[90px] ${(headerIsDark && !isSalespersonLight) ? 'text-white' : 'text-slate-900'}`}>
+              {user?.email ? `${user.email.split('@')[0]}@${user.email.split('@')[1]?.substring(0, 2) || ''}...` : 'user'}
               </p>
-              <p className={`text-[9px] truncate ${headerIsDark ? 'text-slate-400' : 'text-gray-500'}`}>
+              <p className={`text-[9px] truncate ${(headerIsDark && !isSalespersonLight) ? 'text-slate-400' : 'text-slate-500'}`}>
                 {user?.role ? user.role.toUpperCase().replace('_', ' ') : userType.toUpperCase()}
               </p>
             </div>
@@ -792,6 +764,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
       <ProfileUpdateModal
         isOpen={showProfileModal}
         onClose={() => setShowProfileModal(false)}
+        anchorRect={profileAnchorRect}
         user={user}
         onUpdate={async (updatedUser) => {
           if (updatedUser) {

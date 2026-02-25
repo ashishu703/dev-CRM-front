@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar, Clock } from 'lucide-react';
 import apiClient from '../../../utils/apiClient';
 import { API_ENDPOINTS } from '../../../api/admin_api/api';
-import departmentUsersService from '../../../api/admin_api/departmentUsersService';
+import departmentUsersApi from '../../../api/admin_api/departmentUsersApi';
 
 const ScheduleMaintenanceModal = ({ show, onClose, onSchedule, editingSchedule }) => {
   const [formData, setFormData] = useState({
@@ -104,7 +104,7 @@ const ScheduleMaintenanceModal = ({ show, onClose, onSchedule, editingSchedule }
       console.error('Failed to fetch users:', error);
       // If admin API fails, try department users API as fallback
       try {
-        const deptResponse = await departmentUsersService.listUsers({ isActive: true, limit: 100 });
+        const deptResponse = await departmentUsersApi.listUsers({ isActive: true, limit: 100 });
         if (deptResponse?.success && Array.isArray(deptResponse.data?.users)) {
           setUsers(deptResponse.data.users);
         } else {

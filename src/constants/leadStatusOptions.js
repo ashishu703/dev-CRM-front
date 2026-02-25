@@ -1,5 +1,3 @@
-/** Shared status options for lead/sales UI components */
-
 export const FOLLOW_UP_OPTIONS = [
   'APPOINTMENT SCHEDULED',
   'NOT INTERESTED',

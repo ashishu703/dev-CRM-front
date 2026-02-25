@@ -79,6 +79,8 @@ const COL_CONFIG = [
 export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpContext: rfpContextProp }) {
   const [loading, setLoading] = useState(true);
   const [engine, setEngine] = useState(null);
+  const engineRef = useRef(null);
+  const [engineVersion, setEngineVersion] = useState(0);
   const [groups, setGroups] = useState([]);
   const [rates, setRates] = useState(null);
   const [wireStripCoveringPct, setWireStripCoveringPct] = useState(
@@ -89,6 +91,11 @@ export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpCon
   const [rfpContextFromStorage, setRfpContextFromStorage] = useState(null);
   const tableBodyRef = useRef(null);
   const hasAutoSelectedRef = useRef(false);
+  
+  // Additional charges modal state
+  const [showChargesModal, setShowChargesModal] = useState(false);
+  const [chargesRows, setChargesRows] = useState([{ label: 'Drum', amount: '' }]);
+  const [hasExtraCharges, setHasExtraCharges] = useState(true);
 
   const rfpContext = rfpContextProp || rfpContextFromStorage;
 
@@ -102,7 +109,7 @@ export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpCon
         area: String(readRowAsObject(engine, rowIndex)["CROSS-SECTIONAL AREA (SQ MM)"] ?? "").trim(),
       }))
     );
-  }, [engine, groups]);
+  }, [engine, engineVersion, groups]);
 
   const selectedRowData = selectedRowIndex != null
     ? flatDataRows.find((d) => d.rowIndex === selectedRowIndex)
@@ -123,8 +130,10 @@ export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpCon
       const buf = await res.arrayBuffer();
       const eng = await loadMcXlpeArmouredEngineFromArrayBuffer(buf);
       const gs = buildMcXlpeArmouredGroups(eng);
+      engineRef.current = eng;
       setEngine(eng);
       setGroups(gs);
+      setEngineVersion((v) => v + 1);
     } finally {
       setLoading(false);
     }
@@ -213,29 +222,31 @@ export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpCon
   // Inject account rates into all data rows
   useEffect(() => {
     if (!engine || !rates) return;
+    if (!engineRef.current) return;
     groups.forEach((g) => {
       g.dataIndices.forEach((rowIndex) => {
         MC_XLPE_ARMOURED_RATE_HEADERS.forEach((header) => {
           const v = rates[header];
           if (v != null && v !== "") {
-            setRowCellByHeader(engine, rowIndex, header, parseFloat(v));
+            setRowCellByHeader(engineRef.current, rowIndex, header, parseFloat(v));
           }
         });
       });
     });
-    setEngine({ ...engine });
+    setEngineVersion((v) => v + 1);
   }, [rates, engine, groups]);
 
   // Apply Wire/Strip Covering %: global default + per-row overrides (so default 90 applies after load)
   useEffect(() => {
     if (!engine || !groups.length) return;
+    if (!engineRef.current) return;
     groups.forEach((g) => {
       g.dataIndices.forEach((rowIndex) => {
         const pct = perRowCovering[rowIndex] ?? wireStripCoveringPct;
-        setWireStripCoveringForRow(engine, rowIndex, pct);
+        setWireStripCoveringForRow(engineRef.current, rowIndex, pct);
       });
     });
-    setEngine({ ...engine });
+    setEngineVersion((v) => v + 1);
   }, [wireStripCoveringPct, perRowCovering, groups.length]);
 
   useEffect(() => {
@@ -256,13 +267,44 @@ export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpCon
       Toast.error("Please select a specification (radio) first");
       return;
     }
+    // Show charges modal instead of saving directly
+    setShowChargesModal(true);
+  };
+  
+  // Charges modal functions
+  const updateChargeRow = (index, key, value) => {
+    setChargesRows((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, [key]: value } : row))
+    );
+  };
+
+  const addChargeRow = () => {
+    setChargesRows((rows) => [...rows, { label: '', amount: '' }]);
+  };
+
+  const removeChargeRow = (index) => {
+    setChargesRows((rows) => rows.filter((_, i) => i !== index));
+  };
+
+  const handleSaveCharges = async () => {
+    if (!rfpContext || selectedRowData == null) {
+      setShowChargesModal(false);
+      return;
+    }
     const basePerUnit = Number(selectedFinalRate) || 0;
     const lengthKm = parseFloat(rfpContext.length ?? rfpContext.quantity ?? 0) || 0;
-    const totalPrice = basePerUnit * lengthKm;
+    const baseTotal = basePerUnit * lengthKm;
+    
+    // Calculate extra charges
+    const extraRows = hasExtraCharges ? chargesRows : [];
+    const extraCharges = extraRows
+      .map((row) => Number.parseFloat(row.amount) || 0)
+      .reduce((sum, amt) => sum + amt, 0);
+    const totalPrice = baseTotal + extraCharges;
+    
     const productSpec =
       `${selectedRowData.cores} Core ${selectedRowData.area} MC XLPE Armoured`.trim() || rfpContext.productSpec;
 
-    const baseTotal = totalPrice;
     const row = selectedRowData.row || {};
     const fullRowData = {};
     Object.entries(row).forEach(([k, v]) => {
@@ -281,6 +323,8 @@ export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpCon
       quantityUnit: rfpContext.lengthUnit || rfpContext.quantityUnit || "Km",
       basePerUnit,
       baseTotal,
+      extraCharges,
+      extraChargesBreakdown: extraRows,
       totalPrice,
       family: "MC_XLPE_ARMOURED"
     };
@@ -300,6 +344,8 @@ export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpCon
       quantityUnit: rfpContext.lengthUnit || rfpContext.quantityUnit || "Km",
       basePerUnit,
       baseTotal,
+      extraCharges,
+      extraChargesBreakdown: extraRows,
       totalPrice,
     };
 
@@ -328,6 +374,7 @@ export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpCon
       }
     }
     Toast.success("Pricing saved. Returning to RFP Workflow — Approve will enable when all products are priced.");
+    setShowChargesModal(false);
     if (setActiveView) setActiveView("rfp-workflow");
   };
 
@@ -543,6 +590,91 @@ export default function McXlpeArmouredCalculator({ setActiveView, onBack, rfpCon
           </span>
         </div>
       </div>
+      
+      {/* Additional Charges Modal */}
+      {showChargesModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+            <h2 className="text-lg font-semibold">Additional Charges</h2>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-700">Any other charges (drum, transportation, others)?</span>
+                <div className="flex items-center gap-2 text-sm">
+                  <label className="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      checked={hasExtraCharges === false}
+                      onChange={() => setHasExtraCharges(false)}
+                    />
+                    No
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      checked={hasExtraCharges === true}
+                      onChange={() => setHasExtraCharges(true)}
+                    />
+                    Yes
+                  </label>
+                </div>
+              </div>
+              {hasExtraCharges && (
+                <div className="space-y-3 max-h-64 overflow-y-auto border-t border-gray-200 pt-3">
+                  {chargesRows.map((row, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                        placeholder="Charge label (e.g. Drum, Transportation)"
+                        value={row.label}
+                        onChange={(e) => updateChargeRow(idx, 'label', e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        className="w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                        placeholder="Amount"
+                        value={row.amount}
+                        onChange={(e) => updateChargeRow(idx, 'amount', e.target.value)}
+                      />
+                      {chargesRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeChargeRow(idx)}
+                          className="px-2 py-1 text-xs text-rose-600 hover:text-rose-700"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addChargeRow}
+                    className="text-xs text-blue-600 hover:text-blue-700"
+                  >
+                    + Add another charge
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowChargesModal(false)}
+                className="px-4 py-2 text-sm border rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCharges}
+                className="px-4 py-2 text-sm text-white bg-emerald-600 rounded-lg"
+              >
+                Save & Return to RFP
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

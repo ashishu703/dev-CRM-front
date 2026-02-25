@@ -1,5 +1,15 @@
-// FINAL_SCORE = FollowUpWeight + SalesStatusWeight + WorkStatusWeight + DelayPenalty
-// 10+ CRITICAL, 8-9 HIGH, 5-7 MEDIUM, 1-4 LOW, 0 IGNORE
+
+
+const PRIORITY_CONFIG = {
+  workStatus: { NOT_STARTED: 3, WORKING: 2, DONE: 0 },
+  scoreCap: 20,
+  normalizationThreshold: 15,
+  normalizationFactor: 0.5,
+  tierCriticalMin: 10,
+  tierHighMin: 8,
+  tierMediumMin: 5,
+  tierLowMin: 1
+}
 
 function norm(s) {
   if (s == null || typeof s !== 'string') return ''
@@ -14,6 +24,7 @@ const FOLLOW_UP_WEIGHTS = {
   'CALL BACK REQUEST': 3,
   'FOLLOW UP': 3,
   'IN PROGRESS': 3,
+  'FOLLOW UP / IN PROGRESS': 3,
   'PENDING': 2,
   'CURRENTLY NOT REQUIRED': 1,
   'NOT INTERESTED': 0,
@@ -42,7 +53,7 @@ const SALES_WEIGHTS = {
   'PENDING': 2
 }
 
-const WORK_STATUS_WEIGHTS = { NOT_STARTED: 4, WORKING: 2, DONE: 0 }
+const WORK_STATUS_WEIGHTS = { ...PRIORITY_CONFIG.workStatus }
 
 function getFollowUpWeight(followUpStatus) {
   const key = norm(followUpStatus)
@@ -78,6 +89,11 @@ export function getSalesWeight(salesStatus) {
   return 0
 }
 
+/** True when lead has high engagement (e.g. Negotiation/Appointment); used so delay boost is not applied. */
+export function isHighEngagementLead(followWeight, salesWeight) {
+  return followWeight > 3 || salesWeight > 3
+}
+
 function isSalesClosed(salesStatus) {
   const k = norm(salesStatus)
   const lower = k.toLowerCase()
@@ -86,12 +102,12 @@ function isSalesClosed(salesStatus) {
 
 function getWorkStatusWeight(lead) {
   if (!lead) return WORK_STATUS_WEIGHTS.NOT_STARTED
-  if (isSalesClosed(lead.salesStatus || '')) return WORK_STATUS_WEIGHTS.DONE
+  if (isSalesClosed(lead.salesStatus || lead.sales_status || '')) return WORK_STATUS_WEIGHTS.DONE
   if (lead.first_worked_at) return WORK_STATUS_WEIGHTS.WORKING
   return WORK_STATUS_WEIGHTS.NOT_STARTED
 }
 
-function getDelayPenalty(assignedAt) {
+function getDelayEscalationBoost(assignedAt) {
   if (!assignedAt) return 0
   const assigned = new Date(assignedAt)
   const now = new Date()
@@ -102,7 +118,16 @@ function getDelayPenalty(assignedAt) {
   return 3
 }
 
+function normalizeScore(score) {
+  if (score <= PRIORITY_CONFIG.normalizationThreshold) return score
+  const compressed = PRIORITY_CONFIG.normalizationThreshold +
+    (score - PRIORITY_CONFIG.normalizationThreshold) * PRIORITY_CONFIG.normalizationFactor
+  return Math.min(PRIORITY_CONFIG.scoreCap, Math.round(compressed * 100) / 100)
+}
+
 export function getLeadPriorityFromStatuses(salesStatus, followUpStatus) {
+  const s = norm(salesStatus)
+  if (!s || s === 'PENDING') return { priority: 'LOW', score: 2 }
   const fw = getFollowUpWeight(followUpStatus)
   const sw = getSalesWeight(salesStatus)
   const score = Math.min(10, fw + sw)
@@ -112,34 +137,45 @@ export function getLeadPriorityFromStatuses(salesStatus, followUpStatus) {
   return { priority: 'IGNORE', score: 0 }
 }
 
-export function getDisplayPriority(lead) {
-  const sales = lead.salesStatus || ''
-  const followUp = lead.followUpStatus || ''
-  const baseScore = getFollowUpWeight(followUp) + getSalesWeight(sales)
-  const workWeight = getWorkStatusWeight(lead)
-  const delayPenalty = getDelayPenalty(lead.assigned_at || lead.assignedAt)
-  const score = Math.min(20, baseScore + workWeight + delayPenalty)
+function computeDisplayScore(lead) {
+  const sales = lead.salesStatus || lead.sales_status || ''
+  const followUp = lead.followUpStatus || lead.follow_up_status || ''
+  const s = norm(sales)
+  if (!s || s === 'PENDING') {
+    let lowScore = getWorkStatusWeight(lead) + getFollowUpWeight(followUp)
+    lowScore = normalizeScore(Math.min(PRIORITY_CONFIG.scoreCap, lowScore))
+    return Math.min(5, lowScore)
+  }
+  const fw = getFollowUpWeight(followUp)
+  const sw = getSalesWeight(sales)
+  const work = getWorkStatusWeight(lead)
+  const rawBoost = getDelayEscalationBoost(lead.assigned_at || lead.assignedAt)
+  const delayBoost = isHighEngagementLead(fw, sw) ? 0 : rawBoost
+  let score = fw + sw + work + delayBoost
+  score = normalizeScore(score)
+  return Math.min(PRIORITY_CONFIG.scoreCap, score)
+}
 
-  if ((score < 5 || score >= 10) && lead.followUpDate) {
+export function getDisplayPriority(lead) {
+  const sales = lead.salesStatus || lead.sales_status || ''
+  if (!norm(sales) || norm(sales) === 'PENDING') return 'LOW'
+  const score = computeDisplayScore(lead)
+
+  if (score < 5 && lead.followUpDate) {
     const d = new Date(lead.followUpDate)
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     d.setHours(0, 0, 0, 0)
-    if (!Number.isNaN(d.getTime()) && d < today && score < 5) return 'MEDIUM'
+    if (!Number.isNaN(d.getTime()) && d < today) return 'MEDIUM'
   }
 
-  if (score >= 10) return 'CRITICAL'
-  if (score >= 8) return 'HIGH'
-  if (score >= 5) return 'MEDIUM'
-  if (score >= 1) return 'LOW'
+  if (score >= PRIORITY_CONFIG.tierCriticalMin) return 'CRITICAL'
+  if (score >= PRIORITY_CONFIG.tierHighMin) return 'HIGH'
+  if (score >= PRIORITY_CONFIG.tierMediumMin) return 'MEDIUM'
+  if (score >= PRIORITY_CONFIG.tierLowMin) return 'LOW'
   return 'IGNORE'
 }
 
 export function getDisplayScore(lead) {
-  const sales = lead.salesStatus || ''
-  const followUp = lead.followUpStatus || ''
-  const base = getFollowUpWeight(followUp) + getSalesWeight(sales)
-  const work = getWorkStatusWeight(lead)
-  const delay = getDelayPenalty(lead.assigned_at || lead.assignedAt)
-  return Math.min(20, base + work + delay)
+  return computeDisplayScore(lead)
 }

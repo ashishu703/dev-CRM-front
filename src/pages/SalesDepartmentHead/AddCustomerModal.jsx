@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import departmentUserService from '../../api/admin_api/departmentUserService';
+import departmentUsersApi from '../../api/admin_api/departmentUsersApi';
 import { findIndiaStateByName, getIndiaDivisionsForStateIso, getIndiaStates } from '../../utils/indiaLocation';
 
 const TagInput = ({ values, onAdd, onRemove, placeholder }) => {
@@ -83,8 +83,8 @@ export default function AddCustomerModal({ onClose, onSave, editingCustomer }) {
       try {
         setLoadingUsers(true);
         setUsersError('');
-        const res = await departmentUserService.listUsers({ page: 1, limit: 100 });
-        const payload = res.data || res;
+        const res = await departmentUsersApi.listUsers({ page: 1, limit: 100 });
+        const payload = res?.users ? res : (res?.data || res);
         const names = (payload.users || []).map(u => u.username).filter(Boolean);
         setUsernames(names);
       } catch (err) {

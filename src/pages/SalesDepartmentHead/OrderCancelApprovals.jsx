@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Ban, CheckCircle, XCircle, RefreshCw, AlertTriangle, User, FileText } from 'lucide-react';
+import { Ban, CheckCircle, XCircle, RefreshCw, AlertTriangle, User, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 import apiClient from '../../utils/apiClient';
 import { API_ENDPOINTS } from '../../api/admin_api/api';
 import Toast from '../../utils/Toast';
@@ -11,15 +11,19 @@ export default function OrderCancelApprovals({ setActiveView }) {
   const [rejectReason, setRejectReason] = useState('');
   const [rejectModalId, setRejectModalId] = useState(null);
   const [approvingId, setApprovingId] = useState(null);
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
 
   const fetchPending = async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get(API_ENDPOINTS.ORDER_CANCEL_PENDING());
-      setList(res?.data?.data ?? []);
+      const res = await apiClient.get(API_ENDPOINTS.ORDER_CANCEL_ALL());
+      setList(res?.data ?? []);
     } catch (err) {
-      console.error('Failed to fetch pending cancel requests:', err);
-      Toast.error(err?.response?.data?.message || 'Failed to load pending requests');
+      console.error('Failed to fetch cancel requests:', err);
+      Toast.error(err?.response?.data?.message || 'Failed to load cancel requests');
       setList([]);
     } finally {
       setLoading(false);
@@ -36,12 +40,15 @@ export default function OrderCancelApprovals({ setActiveView }) {
       const res = await apiClient.post(API_ENDPOINTS.ORDER_CANCEL_APPROVE(id));
       if (res?.data?.success) {
         Toast.success(res.data.message || 'Order cancel approved.');
-        fetchPending();
+        await fetchPending(); // Refresh the list
       } else {
         Toast.error(res?.data?.message || 'Failed to approve');
+        await fetchPending(); // Refresh even on error to remove stale data
       }
     } catch (err) {
-      Toast.error(err?.response?.data?.message || 'Failed to approve');
+      const errorMsg = err?.response?.data?.message || 'Failed to approve';
+      Toast.error(errorMsg);
+      await fetchPending(); // Refresh to sync state
     } finally {
       setApprovingId(null);
     }
@@ -57,19 +64,32 @@ export default function OrderCancelApprovals({ setActiveView }) {
         Toast.success(res.data.message || 'Request rejected.');
         setRejectModalId(null);
         setRejectReason('');
-        fetchPending();
+        await fetchPending(); // Refresh the list
       } else {
         Toast.error(res?.data?.message || 'Failed to reject');
+        await fetchPending(); // Refresh even on error
       }
     } catch (err) {
-      Toast.error(err?.response?.data?.message || 'Failed to reject');
+      const errorMsg = err?.response?.data?.message || 'Failed to reject';
+      Toast.error(errorMsg);
+      await fetchPending(); // Refresh to sync state
     } finally {
       setRejectingId(null);
     }
   };
 
+  // Pagination calculations
+  const totalPages = Math.ceil(list.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentItems = list.slice(startIndex, endIndex);
+
+  const goToPage = (page) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
+
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-amber-100 text-amber-700">
@@ -97,65 +117,205 @@ export default function OrderCancelApprovals({ setActiveView }) {
       ) : list.length === 0 ? (
         <div className="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 p-12 text-center">
           <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto mb-3" />
-          <p className="text-gray-600 font-medium">No pending order cancel requests</p>
+          <p className="text-gray-600 font-medium">No order cancel requests</p>
           <p className="text-sm text-gray-500 mt-1">When a salesperson requests to cancel an order, it will appear here.</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {list.map((req) => (
-            <div
-              key={req.id}
-              className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
-            >
-              <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <FileText className="h-5 w-5 text-blue-600 flex-shrink-0" />
-                    <span className="font-semibold text-gray-900">{req.quotation_number || `Quotation ${req.quotation_id}`}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
-                    <User className="h-4 w-4 text-gray-400" />
-                    <span>{req.customer_name || `Customer ${req.customer_id}`}</span>
-                  </div>
-                  {req.total_amount != null && (
-                    <p className="text-sm text-gray-600">Total: ₹{Number(req.total_amount).toLocaleString('en-IN')}</p>
-                  )}
-                  {req.reason && (
-                    <p className="mt-2 text-sm text-gray-700 bg-gray-50 rounded-lg p-2 border border-gray-100">
-                      <span className="font-medium text-gray-600">Reason: </span>
-                      {req.reason}
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-500 mt-2">
-                    Requested by {req.requested_by} • {req.created_at ? new Date(req.created_at).toLocaleString('en-IN') : ''}
-                  </p>
+        <>
+          {/* Table */}
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Customer Name
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Quotation ID
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Product Name
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Quantity
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Rate
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Total Amount
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Reason
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Salesperson
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {currentItems.map((req) => (
+                    <tr key={req.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <User className="h-4 w-4 text-gray-400 mr-2" />
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {req.customer_name || 'N/A'}
+                            </div>
+                            {req.is_partial && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 mt-1">
+                                Partial
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{req.quotation_number || 'N/A'}</div>
+                        <div className="text-xs text-gray-500">{req.quotation_id?.substring(0, 8)}...</div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="text-sm text-gray-900 max-w-xs truncate">
+                          {req.item_product_name || req.product_name || req.is_partial ? (req.reason?.replace('Partial: ', '') || 'N/A') : 'Full Order'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {req.quantity ? `${req.quantity} ${req.unit || ''}`.trim() : '—'}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {req.rate ? `₹${Number(req.rate).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          ₹{Number(req.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="text-sm text-gray-900 max-w-xs truncate" title={req.reason || 'No reason provided'}>
+                          {req.reason || '—'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{req.requested_by || 'N/A'}</div>
+                        <div className="text-xs text-gray-500">
+                          {req.created_at ? new Date(req.created_at).toLocaleDateString('en-IN') : ''}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        {req.status === 'pending' && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                            Pending
+                          </span>
+                        )}
+                        {req.status === 'approved' && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Approved
+                          </span>
+                        )}
+                        {req.status === 'rejected' && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            Rejected
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
+                        {req.status === 'pending' ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleApprove(req.id)}
+                              disabled={approvingId === req.id}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 text-xs"
+                              title="Approve"
+                            >
+                              {approvingId === req.id ? (
+                                <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full" />
+                              ) : (
+                                <CheckCircle className="h-3 w-3" />
+                              )}
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => setRejectModalId(req.id)}
+                              disabled={rejectingId === req.id}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50 text-xs"
+                              title="Reject"
+                            >
+                              <XCircle className="h-3 w-3" />
+                              Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-500">
+                            {req.status === 'approved' && req.approved_by && (
+                              <div>By: {req.approved_by}</div>
+                            )}
+                            {req.status === 'rejected' && req.approved_by && (
+                              <div>By: {req.approved_by}</div>
+                            )}
+                            {req.approved_at && (
+                              <div>{new Date(req.approved_at).toLocaleDateString('en-IN')}</div>
+                            )}
+                            {req.rejected_at && (
+                              <div>{new Date(req.rejected_at).toLocaleDateString('en-IN')}</div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 px-4">
+              <div className="text-sm text-gray-700">
+                Showing {startIndex + 1} to {Math.min(endIndex, list.length)} of {list.length} requests
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => goToPage(page)}
+                      className={`px-3 py-1 rounded-md text-sm ${
+                        currentPage === page
+                          ? 'bg-blue-600 text-white'
+                          : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => handleApprove(req.id)}
-                    disabled={approvingId === req.id}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                  >
-                    {approvingId === req.id ? (
-                      <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-                    ) : (
-                      <CheckCircle className="h-4 w-4" />
-                    )}
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => setRejectModalId(req.id)}
-                    disabled={rejectingId === req.id}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50"
-                  >
-                    <XCircle className="h-4 w-4" />
-                    Reject
-                  </button>
-                </div>
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       {/* Reject reason modal */}

@@ -1,14 +1,14 @@
 "use client"
 
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Eye, Edit, Mail, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCcw, Clock, Calendar, Package, MoreHorizontal, User, Building2, MapPin } from 'lucide-react';
 import apiClient from '../../utils/apiClient';
 import { API_ENDPOINTS } from '../../api/admin_api/api';
+import { getProducts } from '../../constants/products';
 import SalespersonCustomerTimeline from '../../components/SalespersonCustomerTimeline';
 import { useAuth } from '../../hooks/useAuth';
 import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton';
-import { getProducts } from '../../constants/products';
-import { useClickOutside } from '../../hooks/useClickOutside';
 
 const parseEnquiredProducts = (lead) => {
   const raw = lead?.enquired_products;
@@ -25,7 +25,7 @@ const parseEnquiredProducts = (lead) => {
   }
 };
 
-export const EditLeadStatusModal = ({ lead, onClose, onSave }) => {
+export const EditLeadStatusModal = ({ lead, onClose, onSave, embedInSidebar }) => {
   const initialProducts = useMemo(() => parseEnquiredProducts(lead), [lead?.id]);
   const products = useMemo(() => getProducts(), []);
 
@@ -33,7 +33,10 @@ export const EditLeadStatusModal = ({ lead, onClose, onSave }) => {
   const [otherProduct, setOtherProduct] = useState(lead?.other_product ?? lead?.otherProduct ?? '');
   const [productSearch, setProductSearch] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [dropdownRect, setDropdownRect] = useState({ top: 0, left: 0, width: 0 });
   const comboboxRef = useRef(null);
+  const inputRef = useRef(null);
+  const dropdownRef = useRef(null);
 
   const showOtherInput = useMemo(() =>
     enquiredProducts.some(p =>
@@ -48,11 +51,27 @@ export const EditLeadStatusModal = ({ lead, onClose, onSave }) => {
     return products.filter(p => p.name.toLowerCase().includes(q));
   }, [productSearch, products]);
 
-  useClickOutside(
-    comboboxRef,
-    () => setShowProductDropdown(false),
-    showProductDropdown
-  );
+  useEffect(() => {
+    if (showProductDropdown && inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      setDropdownRect({
+        top: rect.bottom,
+        left: rect.left,
+        width: rect.width
+      });
+    }
+  }, [showProductDropdown, productSearch]);
+
+  useEffect(() => {
+    if (!showProductDropdown) return;
+    const handler = (e) => {
+      const insideCombobox = comboboxRef.current?.contains(e.target);
+      const insideDropdown = dropdownRef.current?.contains(e.target);
+      if (!insideCombobox && !insideDropdown) setShowProductDropdown(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showProductDropdown]);
 
   const addProduct = (name = null) => {
     const toAdd = (name || productSearch.trim());
@@ -97,25 +116,10 @@ export const EditLeadStatusModal = ({ lead, onClose, onSave }) => {
     }
   };
 
-  return (
-    <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[110] overflow-y-auto p-3 sm:p-4"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-auto my-4 max-h-[95vh] overflow-hidden flex flex-col">
-        <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 p-4 sm:p-5 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-              <Package className="h-5 w-5 text-white" />
-            </div>
-            <h3 className="text-base sm:text-lg font-bold text-white">Update Enquiry</h3>
-          </div>
-          <button onClick={onClose} className="p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors text-white">
-            <X className="h-4 w-4 sm:h-5 sm:w-5" />
-          </button>
-        </div>
-
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+  const formContent = (
+    <>
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5">
+          {/* Enquired Products - dropdown + list */}
           <div ref={comboboxRef} className="relative product-combobox-container">
             <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
               <Package className="h-4 w-4 text-emerald-500" />
@@ -124,6 +128,7 @@ export const EditLeadStatusModal = ({ lead, onClose, onSave }) => {
             <div className="flex gap-2">
               <div className="flex-1 relative">
                 <input
+                  ref={inputRef}
                   type="text"
                   value={productSearch}
                   onChange={(e) => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
@@ -132,8 +137,16 @@ export const EditLeadStatusModal = ({ lead, onClose, onSave }) => {
                   className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-gray-900"
                   placeholder="Type to search or add custom product..."
                 />
-                {showProductDropdown && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border-2 border-gray-300 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                {showProductDropdown && typeof document !== 'undefined' && createPortal(
+                  <div
+                    ref={dropdownRef}
+                    className="fixed z-[200] bg-white border-2 border-gray-300 rounded-lg shadow-xl max-h-60 overflow-y-auto"
+                    style={{
+                      top: dropdownRect.top + 4,
+                      left: dropdownRect.left,
+                      width: Math.max(dropdownRect.width, 200)
+                    }}
+                  >
                     {filteredProducts.length > 0 ? (
                       <div className="py-1">
                         {filteredProducts.map((p) => (
@@ -154,7 +167,8 @@ export const EditLeadStatusModal = ({ lead, onClose, onSave }) => {
                         </button>
                       </div>
                     )}
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
               <button type="button" onClick={() => addProduct()} disabled={!productSearch.trim()}
@@ -206,6 +220,41 @@ export const EditLeadStatusModal = ({ lead, onClose, onSave }) => {
             Update Enquiry
           </button>
         </div>
+    </>
+  );
+
+  if (embedInSidebar) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 w-full max-h-full overflow-hidden flex flex-col">
+        <div className="p-3 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+          <h3 className="text-base font-bold text-gray-800">Update Enquiry</h3>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        {formContent}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[110] overflow-y-auto p-3 sm:p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-auto my-4 max-h-[95vh] overflow-hidden flex flex-col">
+        <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 p-4 sm:p-5 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
+              <Package className="h-5 w-5 text-white" />
+            </div>
+            <h3 className="text-base sm:text-lg font-bold text-white">Update Enquiry</h3>
+          </div>
+          <button onClick={onClose} className="p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors text-white">
+            <X className="h-4 w-4 sm:h-5 sm:w-5" />
+          </button>
+        </div>
+        {formContent}
       </div>
     </div>
   );
@@ -603,21 +652,21 @@ export default function LeadStatusPage() {
     setShowEditModal(true);
   };
 
-  // Get status badge
+  // Get status badge — premium: soft bg, shadow, rounded-full
   const getStatusBadge = (status) => {
     const statusLower = status?.toLowerCase() || '';
     const statusClasses = {
-      'pending': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
-      'running': 'bg-blue-100 text-blue-800 border border-blue-200',
-      'converted': 'bg-green-100 text-green-800 border border-green-200',
-      'interested': 'bg-purple-100 text-purple-800 border border-purple-200',
-      'win/closed': 'bg-emerald-100 text-emerald-800 border border-emerald-200',
-      'win': 'bg-emerald-100 text-emerald-800 border border-emerald-200',
-      'closed': 'bg-gray-100 text-gray-800 border border-gray-200',
-      'lost': 'bg-red-100 text-red-800 border border-red-200',
-      'loose': 'bg-red-100 text-red-800 border border-red-200',
-      'follow up': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
-      'not interested': 'bg-gray-100 text-gray-800 border border-gray-200',
+      'pending': 'bg-amber-50 text-amber-800 border border-amber-200/80 shadow-sm',
+      'running': 'bg-blue-50 text-blue-800 border border-blue-200/80 shadow-sm',
+      'converted': 'bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-sm',
+      'interested': 'bg-violet-50 text-violet-800 border border-violet-200/80 shadow-sm',
+      'win/closed': 'bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-sm',
+      'win': 'bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-sm',
+      'closed': 'bg-slate-100 text-slate-800 border border-slate-200/80 shadow-sm',
+      'lost': 'bg-red-50 text-red-800 border border-red-200/80 shadow-sm',
+      'loose': 'bg-red-50 text-red-800 border border-red-200/80 shadow-sm',
+      'follow up': 'bg-amber-50 text-amber-800 border border-amber-200/80 shadow-sm',
+      'not interested': 'bg-slate-100 text-slate-600 border border-slate-200/80 shadow-sm',
     };
 
     const statusText = {
@@ -636,29 +685,29 @@ export default function LeadStatusPage() {
 
     return (
       <span
-        className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClasses[statusLower] || 'bg-gray-100 text-gray-800 border border-gray-200'}`}
+        className={`px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClasses[statusLower] || 'bg-slate-100 text-slate-700 border border-slate-200/80 shadow-sm'}`}
       >
         {statusText[statusLower] || status || 'Unknown'}
       </span>
     );
   };
 
-  // Get follow up badge
+  // Get follow up badge — premium: soft bg, shadow, rounded-full
   const getFollowUpBadge = (status) => {
     const statusLower = status?.toLowerCase() || '';
     const followUpClasses = {
-      'appointment scheduled': 'bg-blue-100 text-blue-800 border border-blue-200',
-      'not interested': 'bg-red-100 text-red-800 border border-red-200',
-      'interested': 'bg-green-100 text-green-800 border border-green-200',
-      'quotation sent': 'bg-purple-100 text-purple-800 border border-purple-200',
-      'negotiation': 'bg-orange-100 text-orange-800 border border-orange-200',
-      'close order': 'bg-emerald-100 text-emerald-800 border border-emerald-200',
-      'closed/lost': 'bg-gray-100 text-gray-800 border border-gray-200',
-      'call back request': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
-      'unreachable/call not connected': 'bg-red-100 text-red-800 border border-red-200',
-      'currently not required': 'bg-gray-100 text-gray-800 border border-gray-200',
-      'not relevant': 'bg-gray-100 text-gray-800 border border-gray-200',
-      'pending': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
+      'appointment scheduled': 'bg-blue-50 text-blue-800 border border-blue-200/80 shadow-sm',
+      'not interested': 'bg-red-50 text-red-800 border border-red-200/80 shadow-sm',
+      'interested': 'bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-sm',
+      'quotation sent': 'bg-violet-50 text-violet-800 border border-violet-200/80 shadow-sm',
+      'negotiation': 'bg-orange-50 text-orange-800 border border-orange-200/80 shadow-sm',
+      'close order': 'bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-sm',
+      'closed/lost': 'bg-slate-100 text-slate-700 border border-slate-200/80 shadow-sm',
+      'call back request': 'bg-amber-50 text-amber-800 border border-amber-200/80 shadow-sm',
+      'unreachable/call not connected': 'bg-red-50 text-red-800 border border-red-200/80 shadow-sm',
+      'currently not required': 'bg-slate-100 text-slate-600 border border-slate-200/80 shadow-sm',
+      'not relevant': 'bg-slate-100 text-slate-600 border border-slate-200/80 shadow-sm',
+      'pending': 'bg-amber-50 text-amber-800 border border-amber-200/80 shadow-sm',
     };
 
     const followUpText = {
@@ -678,7 +727,7 @@ export default function LeadStatusPage() {
 
     return (
       <span
-        className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${followUpClasses[statusLower] || 'bg-gray-100 text-gray-800 border border-gray-200'}`}
+        className={`px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${followUpClasses[statusLower] || 'bg-slate-100 text-slate-700 border border-slate-200/80 shadow-sm'}`}
       >
         {followUpText[statusLower] || status || 'Pending'}
       </span>
@@ -715,31 +764,33 @@ export default function LeadStatusPage() {
   };
 
   return (
-    <div className={`pt-6 pb-6 pl-6 pr-0 transition-all duration-300 ${showCustomerTimeline ? 'pr-[360px]' : ''}`}>
-      {/* Search and Filters */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between gap-4 mb-4">
-          <div className="flex items-center gap-3 flex-1">
-            <div className="flex shadow-lg rounded-xl overflow-hidden">
-              <input 
-                type="text" 
-                placeholder="Search items..." 
-                value={searchQuery} 
-                onChange={(e) => handleSearch(e.target.value)} 
-                className="px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64 bg-white border-gray-200 text-gray-900 placeholder-gray-500" 
+    <div className={`pt-6 pb-8 pl-6 pr-0 transition-all duration-300 min-h-[calc(100vh-4rem)] ${showCustomerTimeline ? 'pr-[360px]' : ''}`} style={{ background: 'linear-gradient(165deg, #f8fafc 0%, #f1f5f9 25%, #eef2ff 50%, #faf5ff 75%, #f8fafc 100%)' }}>
+      <style>{`@keyframes leadRowIn { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: translateY(0); } }`}</style>
+      <div className="max-w-[1600px] mx-auto">
+      {/* Header section: Search + Filters (elevated card) */}
+      <div className="mb-6 bg-white rounded-xl border border-slate-200/60 shadow-sm p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
+            <div className="flex rounded-xl border border-slate-200/80 bg-slate-50/50 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500/25 focus-within:border-indigo-300 transition-all shadow-sm">
+              <input
+                type="text"
+                placeholder="Search items..."
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="px-4 py-2.5 text-sm focus:outline-none w-64 bg-transparent text-slate-900 placeholder-slate-400"
               />
-              <button className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md">
+              <button className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white hover:from-indigo-700 hover:to-violet-700 transition-all duration-200 flex-shrink-0 shadow-sm hover:shadow hover:scale-[1.02] active:scale-[0.98]">
                 <Search className="h-4 w-4" />
               </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => {
                 const hasFilters = searchQuery || statusFilter || followUpFilter || quotationFilter || piFilter;
                 fetchLeads(currentPage, hasFilters);
               }}
-              className="px-3 py-2 rounded-md bg-green-600 text-white hover:bg-green-700 inline-flex items-center gap-2"
+              className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 inline-flex items-center gap-2 text-sm font-medium shadow-sm hover:shadow transition-all hover:scale-[1.02] active:scale-[0.98]"
               title="Refresh"
             >
               <RefreshCcw className="h-4 w-4" />
@@ -748,9 +799,9 @@ export default function LeadStatusPage() {
           </div>
         </div>
 
-        {/* One-line badges row (no scrollbar, compact) */}
-        <div className="mt-4 overflow-hidden">
-          <div className="flex items-center gap-1 whitespace-nowrap">
+        {/* Filter badges row */}
+        <div className="overflow-hidden">
+          <div className="flex flex-wrap items-center gap-2 whitespace-nowrap">
             {/* Lead status badges */}
             <button
               onClick={() => {
@@ -761,7 +812,7 @@ export default function LeadStatusPage() {
                 applyFilters('', '');
                 setCurrentPage(1);
               }}
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border bg-gray-100 text-gray-800 hover:ring-2 ring-gray-300 transition ${!statusFilter && !followUpFilter ? 'ring-2' : ''}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border shadow-sm transition-all ${!statusFilter && !followUpFilter ? 'bg-slate-800 text-white border-slate-800 shadow-sm' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300 hover:shadow'}`}
               title="Show All"
             >
               All ({leadStatusCounts.all})
@@ -770,68 +821,67 @@ export default function LeadStatusPage() {
               <button
                 key={b.key}
                 onClick={() => toggleLeadStatusBadge(b.key)}
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${b.bg} ${b.text} hover:ring-2 ${b.ring} transition ${statusFilter === b.key ? 'ring-2' : ''}`}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border shadow-sm transition-all ${statusFilter === b.key ? 'ring-2 ring-offset-1 ' : ''} ${b.bg} ${b.text} ${b.ring} hover:shadow-md`}
                 title={`Filter: ${b.label}`}
               >
                 {b.label} ({leadStatusCounts[b.key] || 0})
               </button>
             ))}
 
-            {/* Quotation & PI filters inline */}
-            <span className="mx-1 h-4 w-px bg-gray-200" />
-            <div className="text-[11px] font-medium text-gray-600">Quotation:</div>
+            <span className="mx-0.5 h-5 w-px bg-slate-200" />
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Quotation</span>
             <button
               onClick={() => handleQuotationFilter('pending_approval')}
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border bg-yellow-50 text-yellow-800 hover:ring-2 ring-yellow-200 transition ${quotationFilter === 'pending_approval' ? 'ring-2' : ''}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border shadow-sm bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 transition-all ${quotationFilter === 'pending_approval' ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}
             >
               Sent for Approval ({quotationCounts.pending_approval || 0})
             </button>
             <button
               onClick={() => handleQuotationFilter('approved')}
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border bg-green-50 text-green-800 hover:ring-2 ring-green-200 transition ${quotationFilter === 'approved' ? 'ring-2' : ''}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border shadow-sm bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 transition-all ${quotationFilter === 'approved' ? 'ring-2 ring-emerald-400 ring-offset-1' : ''}`}
             >
               Approved ({quotationCounts.approved || 0})
             </button>
             <button
               onClick={() => handleQuotationFilter('rejected')}
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border bg-red-50 text-red-800 hover:ring-2 ring-red-200 transition ${quotationFilter === 'rejected' ? 'ring-2' : ''}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border shadow-sm bg-red-50 text-red-800 border-red-200 hover:bg-red-100 transition-all ${quotationFilter === 'rejected' ? 'ring-2 ring-red-400 ring-offset-1' : ''}`}
             >
               Rejected ({quotationCounts.rejected || 0})
             </button>
 
-            <span className="mx-1 h-4 w-px bg-gray-200" />
-            <div className="text-[11px] font-medium text-gray-600">PI:</div>
+            <span className="mx-0.5 h-5 w-px bg-slate-200" />
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">PI</span>
             <button
               onClick={() => handlePiFilter('pending_approval')}
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border bg-yellow-50 text-yellow-800 hover:ring-2 ring-yellow-200 transition ${piFilter === 'pending_approval' ? 'ring-2' : ''}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border shadow-sm bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 transition-all ${piFilter === 'pending_approval' ? 'ring-2 ring-amber-400 ring-offset-1' : ''}`}
             >
               Sent for Approval ({piCounts.pending_approval || 0})
             </button>
             <button
               onClick={() => handlePiFilter('approved')}
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border bg-green-50 text-green-800 hover:ring-2 ring-green-200 transition ${piFilter === 'approved' ? 'ring-2' : ''}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border shadow-sm bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 transition-all ${piFilter === 'approved' ? 'ring-2 ring-emerald-400 ring-offset-1' : ''}`}
             >
               Approved ({piCounts.approved || 0})
             </button>
             <button
               onClick={() => handlePiFilter('rejected')}
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border bg-red-50 text-red-800 hover:ring-2 ring-red-200 transition ${piFilter === 'rejected' ? 'ring-2' : ''}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border shadow-sm bg-red-50 text-red-800 border-red-200 hover:bg-red-100 transition-all ${piFilter === 'rejected' ? 'ring-2 ring-red-400 ring-offset-1' : ''}`}
             >
               Rejected ({piCounts.rejected || 0})
             </button>
 
             {hydratingDocs && (
-              <span className="text-[11px] text-gray-500 ml-2">Loading latest document statuses…</span>
+              <span className="text-xs text-slate-500 ml-2 font-medium">Loading latest document statuses…</span>
             )}
           </div>
         </div>
       </div>
 
       {error ? (
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
+        <div className="bg-red-50/90 border border-red-200 rounded-xl p-4 shadow-sm">
           <div className="flex">
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">Error</h3>
+              <h3 className="text-sm font-semibold text-red-800">Error</h3>
               <div className="mt-2 text-sm text-red-700">
                 <p>{error}</p>
               </div>
@@ -839,68 +889,72 @@ export default function LeadStatusPage() {
           </div>
         </div>
       ) : (
-        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+        <div className="bg-white rounded-xl border border-slate-200/60 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto p-4 sm:p-5">
+            <table className="min-w-full">
+              <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm border-b border-slate-200/80 shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
                 <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  <th scope="col" className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                     Lead ID
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  <th scope="col" className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                     <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-blue-600" />
-                      <span>CUSTOMER</span>
+                      <User className="h-4 w-4 text-indigo-600" />
+                      <span>Customer</span>
                     </div>
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  <th scope="col" className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                     <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-purple-600" />
-                      <span>BUSINESS</span>
+                      <Building2 className="h-4 w-4 text-violet-600" />
+                      <span>Business</span>
                     </div>
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider max-w-[200px]">
+                  <th scope="col" className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider max-w-[200px]">
                     <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-red-600" />
-                      <span>ADDRESS</span>
+                      <MapPin className="h-4 w-4 text-rose-500" />
+                      <span>Address</span>
                     </div>
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  <th scope="col" className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-teal-600" />
-                      <span>FOLLOW UP</span>
+                      <span>Follow up</span>
                     </div>
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  <th scope="col" className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                     <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-yellow-600" />
-                      <span>SALES STATUS</span>
+                      <Clock className="h-4 w-4 text-amber-600" />
+                      <span>Sales status</span>
                     </div>
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  <th scope="col" className="px-5 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                     <div className="flex items-center gap-2">
-                      <MoreHorizontal className="h-4 w-4 text-gray-600" />
-                      <span>ACTION</span>
+                      <MoreHorizontal className="h-4 w-4 text-slate-500" />
+                      <span>Action</span>
                     </div>
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white">
                 {paginatedLeads.length > 0 ? (
-                  paginatedLeads.map((lead) => (
-                    <tr key={lead.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  paginatedLeads.map((lead, rowIndex) => (
+                    <tr
+                      key={lead.id}
+                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50/90 hover:shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-200"
+                      style={{ animation: `leadRowIn 0.4s ease-out ${rowIndex * 0.04}s both` }}
+                    >
+                      <td className="px-5 py-4 whitespace-nowrap text-sm font-semibold text-slate-800">
                         {lead.id}
                       </td>
-                      <td className="px-6 py-4">
-                        <div>
-                          <div className="font-semibold text-sm text-gray-900 truncate max-w-[200px]" title={lead.name}>{lead.name}</div>
-                          <div className="text-xs text-gray-500 truncate max-w-[200px]" title={lead.phone}>{lead.phone}</div>
+                      <td className="px-5 py-4">
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-sm text-slate-900 truncate max-w-[200px]" title={lead.name}>{lead.name}</div>
+                          <div className="text-xs text-slate-500 truncate max-w-[200px]" title={lead.phone}>{lead.phone}</div>
                           {lead.email && lead.email !== "N/A" && (
-                            <div className="text-xs mt-1 text-cyan-600 truncate max-w-[200px]">
+                            <div className="text-xs mt-1 text-indigo-600 truncate max-w-[200px]">
                               <button 
                                 onClick={() => window.open(`mailto:${lead.email}?subject=Follow up from ANOCAB&body=Dear ${lead.name},%0D%0A%0D%0AThank you for your interest in our products.%0D%0A%0D%0ABest regards,%0D%0AANOCAB Team`, '_blank')}
-                                className="inline-flex items-center gap-1 transition-colors hover:text-cyan-700 truncate"
+                                className="inline-flex items-center gap-1 transition-colors hover:text-indigo-700 truncate"
                                 title={lead.email}
                               >
                                 <Mail className="h-3 w-3 flex-shrink-0" /> <span className="truncate">{lead.email}</span>
@@ -909,45 +963,45 @@ export default function LeadStatusPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-500 max-w-[150px]">
-                        <div className="truncate" title={lead.business || 'N/A'}>{lead.business || 'N/A'}</div>
+                      <td className="px-5 py-4 text-sm text-slate-500 max-w-[150px]">
+                        <div className="truncate font-medium" title={lead.business || 'N/A'}>{lead.business || 'N/A'}</div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-500 max-w-[200px]">
+                      <td className="px-5 py-4 text-sm text-slate-400 max-w-[200px]">
                         <div className="truncate" title={lead.address || 'N/A'}>{lead.address || 'N/A'}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <td className="px-5 py-4 whitespace-nowrap text-sm">
                         <div className="space-y-1">
                           {getFollowUpBadge(lead.follow_up_status)}
                           {lead.follow_up_remark && (
-                            <div className="text-xs text-gray-600 italic truncate max-w-[200px]" title={lead.follow_up_remark}>
+                            <div className="text-xs text-slate-500 italic truncate max-w-[200px]" title={lead.follow_up_remark}>
                               "{lead.follow_up_remark}"
                             </div>
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <td className="px-5 py-4 whitespace-nowrap text-sm">
                         <div className="space-y-1">
                           {getStatusBadge(lead.sales_status)}
                           {lead.sales_status_remark && (
-                            <div className="text-xs text-gray-600 italic truncate max-w-[200px]" title={lead.sales_status_remark}>
+                            <div className="text-xs text-slate-500 italic truncate max-w-[200px]" title={lead.sales_status_remark}>
                               "{lead.sales_status_remark}"
                             </div>
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <td className="px-5 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="relative action-menu-container">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setOpenActionMenu(openActionMenu === lead.id ? null : lead.id);
                             }}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-600"
                           >
-                            <MoreHorizontal className="h-4 w-4 text-gray-600" />
+                            <MoreHorizontal className="h-4 w-4" />
                           </button>
                           {openActionMenu === lead.id && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
+                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg z-10 border border-slate-200">
                               <div className="py-1">
                                 <button
                                   onClick={(e) => {
@@ -955,9 +1009,9 @@ export default function LeadStatusPage() {
                                     handlePreview(lead);
                                     setOpenActionMenu(null);
                                   }}
-                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                  className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors"
                                 >
-                                  <div className="p-1 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-md">
+                                  <div className="p-1.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg">
                                     <Eye className="h-3.5 w-3.5 text-white" />
                                   </div>
                                   View Details
@@ -968,9 +1022,9 @@ export default function LeadStatusPage() {
                                     handleEdit(lead);
                                     setOpenActionMenu(null);
                                   }}
-                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                  className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors"
                                 >
-                                  <div className="p-1 bg-gradient-to-r from-purple-500 to-pink-500 rounded-md">
+                                  <div className="p-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-lg">
                                     <Edit className="h-3.5 w-3.5 text-white" />
                                   </div>
                                   Edit Status
@@ -984,8 +1038,9 @@ export default function LeadStatusPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
-                      No leads found
+                    <td colSpan="7" className="px-5 py-16 text-center">
+                      <p className="text-slate-500 font-semibold">No leads found</p>
+                      <p className="text-slate-400 text-sm mt-1">Try adjusting filters or search</p>
                     </td>
                   </tr>
                 )}
@@ -994,57 +1049,48 @@ export default function LeadStatusPage() {
           </div>
 
           {/* Pagination */}
-          <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4 px-4 py-4 border-t-2 border-blue-200 bg-gradient-to-r from-blue-50/50 to-purple-50/50">
-            {/* Items per page selector */}
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 px-5 py-4 border-t border-slate-200 bg-slate-50/50">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-700">Show:</span>
+              <span className="text-sm text-slate-600 font-medium">Show</span>
               <select
                 value={itemsPerPage}
                 onChange={(e) => handleItemsPerPageChange(parseInt(e.target.value))}
-                className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white text-slate-700"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
                 <option value={20}>20</option>
                 <option value={50}>50</option>
               </select>
-              <span className="text-sm text-gray-700">per page</span>
+              <span className="text-sm text-slate-600 font-medium">per page</span>
             </div>
 
-            {/* Page info */}
-            <div className="text-sm text-gray-700">
+            <div className="text-sm text-slate-600 font-medium">
               {paginatedLeads.length > 0 ? (
-                <>
-                  Showing {startIndex} to {endIndex} of {displayTotal} results
-                </>
+                <>Showing {startIndex}–{endIndex} of {displayTotal}</>
               ) : (
-                <>No results found</>
+                <>No results</>
               )}
             </div>
 
-            {/* Pagination buttons */}
-            <div className="flex items-center gap-2">
-              {/* First page */}
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => handlePageChange(1)}
                 disabled={currentPage === 1 || paginatedLeads.length === 0}
-                className="p-2 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 title="First page"
               >
                 <ChevronsLeft className="h-4 w-4" />
               </button>
-
-              {/* Previous page */}
               <button
                 onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1 || paginatedLeads.length === 0}
-                className="p-2 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 title="Previous page"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
 
-              {/* Page numbers */}
               <div className="flex items-center gap-1">
                 {Array.from({ length: Math.min(5, displayTotalPages) }, (_, i) => {
                   let pageNum;
@@ -1062,10 +1108,10 @@ export default function LeadStatusPage() {
                     <button
                       key={pageNum}
                       onClick={() => handlePageChange(pageNum)}
-                      className={`px-3 py-1 text-sm rounded-md border ${
+                      className={`min-w-[2rem] px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
                         currentPage === pageNum
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                          : 'border-slate-200 text-slate-700 hover:bg-white hover:border-slate-300'
                       }`}
                     >
                       {pageNum}
@@ -1074,21 +1120,18 @@ export default function LeadStatusPage() {
                 })}
               </div>
 
-              {/* Next page */}
               <button
                 onClick={() => handlePageChange(Math.min(displayTotalPages, currentPage + 1))}
                 disabled={currentPage === displayTotalPages || paginatedLeads.length === 0}
-                className="p-2 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 title="Next page"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
-
-              {/* Last page */}
               <button
                 onClick={() => handlePageChange(displayTotalPages)}
                 disabled={currentPage === displayTotalPages || paginatedLeads.length === 0}
-                className="p-2 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 title="Last page"
               >
                 <ChevronsRight className="h-4 w-4" />
@@ -1097,6 +1140,8 @@ export default function LeadStatusPage() {
           </div>
         </div>
       )}
+
+      </div>
 
       {/* Global Customer Timeline Sidebar (salesperson view) */}
       {showCustomerTimeline && timelineLead && (

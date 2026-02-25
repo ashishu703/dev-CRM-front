@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { FileText, Package, RefreshCw, Filter, Phone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Activity } from 'lucide-react';
+import { FileText, Package, RefreshCw, Filter, Phone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Activity, X, Ban } from 'lucide-react';
 import AddCustomerModal from './AddCustomerModal';
 import QuotationPreview from '../../components/QuotationPreview';
 import PIPreview from '../../components/PIPreview';
-import CustomerTimeline from '../../components/CustomerTimeline';
+import CustomerDetailSidebar from '../../components/salesperson/CustomerDetailSidebar';
+import SendEmailForm from '../../components/salesperson/SendEmailForm';
+import UploadDocs from '../../components/salesperson/UploadDocs';
 import FilterBadges from '../../components/FilterBadges';
 import SearchBar from '../../components/SearchBar';
 import LeadTable from '../../components/LeadTable';
@@ -14,6 +16,7 @@ import AssignLeadModal from '../../components/AssignLeadModal';
 import ImportCSVModal from '../../components/ImportCSVModal';
 import ImportPreviewModal from '../../components/ImportPreviewModal';
 import LeadPreviewDrawer from '../../components/LeadPreviewDrawer';
+import OrderCancelApprovals from './OrderCancelApprovals';
 import apiErrorHandler from '../../utils/ApiErrorHandler';
 import toastManager from '../../utils/ToastManager';
 import apiClient from '../../utils/apiClient';
@@ -66,6 +69,7 @@ const LeadsSimplified = () => {
     business: true,
     state: true,
     division: true,
+    generated_by: true,
     address: true,
     enquired_product: true,
     product_quantity: true,
@@ -217,6 +221,10 @@ const LeadsSimplified = () => {
   const allLeadsDataRef = useRef([]);
   const [showPIPreview, setShowPIPreview] = useState(false);
   const [piPreviewData, setPiPreviewData] = useState(null);
+
+  // Activity viewing states
+  const [viewingActivity, setViewingActivity] = useState(null);
+  const [showActivityModal, setShowActivityModal] = useState(false);
 
   // DH: Order Cancel & PI Amendment approvals (inside lead drawer)
   const [pendingOrderCancels, setPendingOrderCancels] = useState([]);
@@ -435,8 +443,12 @@ const LeadsSimplified = () => {
     
     const followUpFromData = [...new Set(allEnquiries.map(e => e.follow_up_status).filter(Boolean))];
     const salesFromData = [...new Set(allEnquiries.map(e => e.sales_status).filter(Boolean))];
+    
+    // Use salesperson_name for display, but store both name and username for filtering
+    const salespersonOptions = [...new Set(allEnquiries.map(e => e.salesperson_name || e.salesperson).filter(Boolean))].sort();
+    
     return {
-      salespersons: [...new Set(allEnquiries.map(e => e.salesperson).filter(Boolean))].sort(),
+      salespersons: salespersonOptions,
       telecallers: [...new Set(allEnquiries.map(e => e.telecaller).filter(Boolean))].sort(),
       states: [...new Set(allEnquiries.map(e => e.state).filter(Boolean))].sort(),
       divisions: [...new Set(allEnquiries.map(e => e.division).filter(Boolean))].sort(),
@@ -470,38 +482,87 @@ const LeadsSimplified = () => {
     if (!enquiries.length) return [];
     
     // Apply client-side filters on paginated data
-    const hasFilters = Object.values(enquiryFilters).some(v => v && v !== 'enquiry_date'); // Exclude enquiry_date as it's handled server-side
+    const hasFilters = enquiryFilters.salesperson || enquiryFilters.telecaller || 
+                       enquiryFilters.state || enquiryFilters.division || 
+                       enquiryFilters.follow_up_status || enquiryFilters.sales_status ||
+                       enquiryFilters.enquiry_date;
+    
     if (!hasFilters) return enquiries;
     
     return enquiries.filter(enquiry => {
-      if (enquiryFilters.salesperson && enquiry.salesperson !== enquiryFilters.salesperson) return false;
+      // Match by salesperson_name or salesperson field
+      if (enquiryFilters.salesperson) {
+        const salespersonMatch = (enquiry.salesperson_name || enquiry.salesperson) === enquiryFilters.salesperson;
+        if (!salespersonMatch) return false;
+      }
       if (enquiryFilters.telecaller && enquiry.telecaller !== enquiryFilters.telecaller) return false;
       if (enquiryFilters.state && enquiry.state !== enquiryFilters.state) return false;
       if (enquiryFilters.division && enquiry.division !== enquiryFilters.division) return false;
       if (enquiryFilters.follow_up_status && enquiry.follow_up_status !== enquiryFilters.follow_up_status) return false;
       if (enquiryFilters.sales_status && enquiry.sales_status !== enquiryFilters.sales_status) return false;
+      
+      // Filter by enquiry date
+      if (enquiryFilters.enquiry_date) {
+        const enquiryDate = enquiry.enquiry_date || enquiry.created_at;
+        if (!enquiryDate) return false;
+        
+        // Extract date part (YYYY-MM-DD) from enquiry date
+        const enquiryDateStr = enquiryDate.split('T')[0];
+        if (enquiryDateStr !== enquiryFilters.enquiry_date) return false;
+      }
+      
       return true;
     });
   }, [enquiries, enquiryFilters]);
 
-  // Group filtered enquiries by date - use server-side grouped data
+  // Group filtered enquiries by date - apply filters to grouped data
   const filteredEnquiriesGroupedByDate = useMemo(() => {
-    // Use server-side grouped data if available, otherwise group client-side
-    if (Object.keys(enquiriesGroupedByDate).length > 0) {
+    // Apply filters to grouped data
+    const hasFilters = enquiryFilters.salesperson || enquiryFilters.telecaller || 
+                       enquiryFilters.state || enquiryFilters.division || 
+                       enquiryFilters.follow_up_status || enquiryFilters.sales_status ||
+                       enquiryFilters.enquiry_date;
+    
+    if (!hasFilters) {
       return enquiriesGroupedByDate;
     }
     
-    // Fallback: group client-side
-    const grouped = {};
-    filteredEnquiries.forEach(enquiry => {
-      const dateKey = enquiry.enquiry_date;
-      if (!grouped[dateKey]) {
-        grouped[dateKey] = [];
+    // Filter each date group
+    const filtered = {};
+    Object.keys(enquiriesGroupedByDate).forEach(dateKey => {
+      const dateEnquiries = enquiriesGroupedByDate[dateKey];
+      const filteredDateEnquiries = dateEnquiries.filter(enquiry => {
+        // Match by salesperson_name or salesperson field
+        if (enquiryFilters.salesperson) {
+          const salespersonMatch = (enquiry.salesperson_name || enquiry.salesperson) === enquiryFilters.salesperson;
+          if (!salespersonMatch) return false;
+        }
+        if (enquiryFilters.telecaller && enquiry.telecaller !== enquiryFilters.telecaller) return false;
+        if (enquiryFilters.state && enquiry.state !== enquiryFilters.state) return false;
+        if (enquiryFilters.division && enquiry.division !== enquiryFilters.division) return false;
+        if (enquiryFilters.follow_up_status && enquiry.follow_up_status !== enquiryFilters.follow_up_status) return false;
+        if (enquiryFilters.sales_status && enquiry.sales_status !== enquiryFilters.sales_status) return false;
+        
+        // Filter by enquiry date
+        if (enquiryFilters.enquiry_date) {
+          const enquiryDate = enquiry.enquiry_date || enquiry.created_at;
+          if (!enquiryDate) return false;
+          
+          // Extract date part (YYYY-MM-DD) from enquiry date
+          const enquiryDateStr = enquiryDate.split('T')[0];
+          if (enquiryDateStr !== enquiryFilters.enquiry_date) return false;
+        }
+        
+        return true;
+      });
+      
+      if (filteredDateEnquiries.length > 0) {
+        filtered[dateKey] = filteredDateEnquiries;
       }
-      grouped[dateKey].push(enquiry);
     });
-    return grouped;
-  }, [filteredEnquiries, enquiriesGroupedByDate]);
+    
+    return filtered;
+  }, [enquiriesGroupedByDate, enquiryFilters]);
 
   // Export enquiries to CSV
   const handleExportEnquiries = () => {
@@ -663,6 +724,7 @@ const LeadsSimplified = () => {
       business: true,
       state: true,
       division: true,
+      generated_by: true,
       address: true,
       enquired_product: true,
       product_quantity: true,
@@ -683,6 +745,7 @@ const LeadsSimplified = () => {
       business: true,
       state: true,
       division: true,
+      generated_by: true,
       address: true,
       enquired_product: true,
       product_quantity: true,
@@ -1248,6 +1311,27 @@ const LeadsSimplified = () => {
     }
   }, [showPreviewModal, previewLead]);
 
+  // Fetch quotations when CustomerDetailSidebar opens
+  useEffect(() => {
+    if (showCustomerTimeline && timelineLead && timelineLead.id) {
+      fetchQuotations(timelineLead.id);
+      fetchPIsForLead();
+    }
+  }, [showCustomerTimeline, timelineLead]);
+
+  // Group PIs by quotation ID for sidebar
+  const quotationPIsMap = useMemo(() => {
+    const pisByQuotation = {};
+    proformaInvoices.forEach(pi => {
+      if (pi.quotation_id) {
+        if (!pisByQuotation[pi.quotation_id]) {
+          pisByQuotation[pi.quotation_id] = [];
+        }
+        pisByQuotation[pi.quotation_id].push(pi);
+      }
+    });
+    return pisByQuotation;
+  }, [proformaInvoices]);
   // DH: Fetch pending order cancels and revised PIs for this lead (when drawer open)
   const fetchPendingApprovalsForLead = useCallback(async () => {
     if (!previewLead?.id) return;
@@ -1721,8 +1805,17 @@ const LeadsSimplified = () => {
   const fetchPIsForLead = async () => {
     try {
       setLoadingPIs(true);
-      const pis = await piService.fetchAllPIs();
-      setProformaInvoices(pis);
+      // Fetch PIs for all quotations of the current lead
+      const allPIs = [];
+      for (const quotation of quotations) {
+        if (quotation.id) {
+          const response = await proformaInvoiceService.getPIsByQuotation(quotation.id);
+          if (response?.success && response.data) {
+            allPIs.push(...response.data);
+          }
+        }
+      }
+      setProformaInvoices(allPIs);
     } catch (error) {
       console.error('Error fetching PIs:', error);
       setProformaInvoices([]);
@@ -2026,6 +2119,98 @@ const LeadsSimplified = () => {
     }
   };
 
+  // Handle activity view
+  const handleViewActivity = (activity) => {
+    const activityType = activity.activity_type;
+    const metadata = activity.metadata || {};
+
+    switch (activityType) {
+      case 'document_uploaded':
+        // Open document in new tab
+        if (metadata.url) {
+          window.open(metadata.url, '_blank');
+        } else {
+          toastManager.info('Document URL not available');
+        }
+        break;
+      
+      case 'mail_sent':
+        // Show email details in modal
+        setViewingActivity(activity);
+        setShowActivityModal(true);
+        break;
+      
+      case 'enquiry_added':
+      case 'enquiry_edited':
+        // Show enquiry details in modal
+        setViewingActivity(activity);
+        setShowActivityModal(true);
+        break;
+      
+      case 'quotation_created':
+      case 'quotation_edited':
+      case 'quotation_approved':
+      case 'quotation_rejected':
+        // View quotation
+        if (metadata.quotationId) {
+          handleViewQuotation(metadata.quotationId);
+        } else {
+          toastManager.info('Quotation ID not available');
+        }
+        break;
+      
+      case 'pi_created':
+        // View PI
+        if (metadata.piId) {
+          handleViewPI(metadata.piId);
+        } else {
+          toastManager.info('PI ID not available');
+        }
+        break;
+      
+      default:
+        // Show generic activity details
+        setViewingActivity(activity);
+        setShowActivityModal(true);
+    }
+  };
+
+  // Handle activity delete
+  const handleDeleteActivity = async (activity) => {
+    const activityType = activity.activity_type;
+    const metadata = activity.metadata || {};
+
+    try {
+      switch (activityType) {
+        case 'document_uploaded':
+          // Delete document
+          toastManager.info('Document deletion will be implemented');
+          // TODO: Implement document deletion API call
+          break;
+        
+        case 'mail_sent':
+          // Delete email
+          toastManager.info('Email deletion will be implemented');
+          // TODO: Implement email deletion API call
+          break;
+        
+        default:
+          toastManager.info('This activity cannot be deleted');
+      }
+    } catch (error) {
+      toastManager.error('Failed to delete activity');
+    }
+  };
+
+  // Handle enquiry edit from activity timeline
+  const handleEditEnquiryFromActivity = (activity) => {
+    const metadata = activity.metadata || {};
+    toastManager.info('Enquiry editing will be implemented');
+    // TODO: Open enquiry edit modal with metadata
+    setViewingActivity(activity);
+    setShowActivityModal(true);
+  };
+
   const handleStatusChange = useCallback(async (leadId, field, newStatus) => {
     try {
       await leadService.updateLead(leadId, { [field]: newStatus });
@@ -2065,21 +2250,7 @@ const LeadsSimplified = () => {
   }
 
   return (
-    <div
-      className={`space-y-4 sm:space-y-6 transition-all duration-300 ${showCustomerTimeline ? 'pl-3 sm:pl-4 md:pl-6' : 'p-3 sm:p-4 md:p-6'}`}
-      style={{
-        width: showCustomerTimeline ? 'calc(98% - 200px)' : '100%',
-        marginRight: 0,
-        paddingRight: showCustomerTimeline ? 0 : '1.5rem',
-        paddingLeft: '1.5rem',
-        boxSizing: 'border-box',
-        overflow: 'visible',
-        position: 'relative',
-        marginLeft: 0,
-        maxWidth: showCustomerTimeline ? 'calc(98% - 200px)' : '100%',
-        flexShrink: 0
-      }}
-    >
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 md:p-6">
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
         <nav className="-mb-px flex space-x-8">
@@ -2115,6 +2286,22 @@ const LeadsSimplified = () => {
           >
             <Phone className="w-4 h-4" />
             Last Call
+          </button>
+          <button
+            onClick={() => setActiveTab('orderCancelApprovals')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+              activeTab === 'orderCancelApprovals'
+                ? 'border-amber-500 text-amber-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Ban className="w-4 h-4" />
+            Order Cancel Approvals
+            {orderCancelPendingCount > 0 && (
+              <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-amber-600 rounded-full">
+                {orderCancelPendingCount}
+              </span>
+            )}
           </button>
         </nav>
       </div>
@@ -2253,7 +2440,6 @@ const LeadsSimplified = () => {
           setShowCustomerTimeline(true);
         }}
         onAssign={openAssignModal}
-        showCustomerTimeline={showCustomerTimeline}
         setShowColumnFilter={setShowColumnFilter}
         allLeadsData={allLeadsData}
         usernames={usernames}
@@ -2533,128 +2719,55 @@ const LeadsSimplified = () => {
 
           {/* Filters - Collapsible */}
           {showEnquiryFilters && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              {/* Filter by Salesperson */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Salesperson</label>
-                <select
-                  value={enquiryFilters.salesperson}
-                  onChange={(e) => setEnquiryFilters(prev => ({ ...prev, salesperson: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Salespersons</option>
-                  {enquiryFilterOptions.salespersons.map(sp => (
-                    <option key={sp} value={sp}>{sp}</option>
-                  ))}
-                </select>
-              </div>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Filter by Salesperson */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Salesperson</label>
+                  <select
+                    value={enquiryFilters.salesperson}
+                    onChange={(e) => setEnquiryFilters(prev => ({ ...prev, salesperson: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Salespersons</option>
+                    {enquiryFilterOptions.salespersons.map(sp => (
+                      <option key={sp} value={sp}>{sp}</option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* Filter by Telecaller */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Telecaller</label>
-                <select
-                  value={enquiryFilters.telecaller}
-                  onChange={(e) => setEnquiryFilters(prev => ({ ...prev, telecaller: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Telecallers</option>
-                  {enquiryFilterOptions.telecallers.map(tc => (
-                    <option key={tc} value={tc}>{tc}</option>
-                  ))}
-                </select>
-              </div>
+                {/* Filter by Enquiry Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Enquiry Date</label>
+                  <input
+                    type="date"
+                    value={enquiryFilters.enquiry_date}
+                    onChange={(e) => setEnquiryFilters(prev => ({ ...prev, enquiry_date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
 
-              {/* Filter by State */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Filter by State</label>
-                <select
-                  value={enquiryFilters.state}
-                  onChange={(e) => setEnquiryFilters(prev => ({ ...prev, state: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All States</option>
-                  {enquiryFilterOptions.states.map(state => (
-                    <option key={state} value={state}>{state}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Filter by Division */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Division</label>
-                <select
-                  value={enquiryFilters.division}
-                  onChange={(e) => setEnquiryFilters(prev => ({ ...prev, division: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Divisions</option>
-                  {enquiryFilterOptions.divisions.map(div => (
-                    <option key={div} value={div}>{div}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Filter by Follow Up Status */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Follow Up Status</label>
-                <select
-                  value={enquiryFilters.follow_up_status}
-                  onChange={(e) => setEnquiryFilters(prev => ({ ...prev, follow_up_status: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Follow Up Statuses</option>
-                  {enquiryFilterOptions.followUpStatuses.map(status => (
-                    <option key={status} value={status}>{status}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Filter by Sales Status */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Sales Status</label>
-                <select
-                  value={enquiryFilters.sales_status}
-                  onChange={(e) => setEnquiryFilters(prev => ({ ...prev, sales_status: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Sales Statuses</option>
-                  {enquiryFilterOptions.salesStatuses.map(status => (
-                    <option key={status} value={status}>{status}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Filter by Enquiry Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Enquiry Date</label>
-                <input
-                  type="date"
-                  value={enquiryFilters.enquiry_date}
-                  onChange={(e) => setEnquiryFilters(prev => ({ ...prev, enquiry_date: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Clear Filters */}
-              <div className="flex items-end">
-                <button
-                  onClick={() => setEnquiryFilters({
-                    salesperson: '',
-                    telecaller: '',
-                    state: '',
-                    division: '',
-                    follow_up_status: '',
-                    sales_status: '',
-                    enquiry_date: ''
-                  })}
-                  className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                >
-                  Clear Filters
-                </button>
+                {/* Clear Filters */}
+                <div className="flex items-end">
+                  <button
+                    onClick={() => {
+                      setEnquiryFilters({
+                        salesperson: '',
+                        telecaller: '',
+                        state: '',
+                        division: '',
+                        follow_up_status: '',
+                        sales_status: '',
+                        enquiry_date: ''
+                      });
+                    }}
+                    className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors"
+                  >
+                    Clear Filters
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
           )}
 
           {enquiriesLoading && enquiryPage === 1 ? (
@@ -2809,6 +2922,10 @@ const LeadsSimplified = () => {
         onChange={handleFileUpload}
         style={{ display: 'none' }}
       />
+
+      {activeTab === 'orderCancelApprovals' && (
+        <OrderCancelApprovals setActiveView={setActiveTab} />
+      )}
 
       <ImportCSVModal
         isOpen={showImportPopup}
@@ -2969,163 +3086,179 @@ const LeadsSimplified = () => {
       />
 
       {showEnquiryEditModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Edit Enquiry</h3>
-              <button
-                onClick={() => setShowEnquiryEditModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
-                <input
-                  type="text"
-                  value={enquiryEditForm.customer_name}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, customer_name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Business</label>
-                <input
-                  type="text"
-                  value={enquiryEditForm.business}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, business: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                <textarea
-                  rows="2"
-                  value={enquiryEditForm.address}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, address: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                <input
-                  type="text"
-                  value={enquiryEditForm.state}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, state: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Division</label>
-                <input
-                  type="text"
-                  value={enquiryEditForm.division}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, division: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Enquired Product</label>
-                <input
-                  type="text"
-                  value={enquiryEditForm.enquired_product}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, enquired_product: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                <input
-                  type="text"
-                  value={enquiryEditForm.product_quantity}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, product_quantity: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Product Remark</label>
-                <textarea
-                  rows="2"
-                  value={enquiryEditForm.product_remark}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, product_remark: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Follow Up Status</label>
-                <input
-                  type="text"
-                  value={enquiryEditForm.follow_up_status}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, follow_up_status: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Follow Up Remark</label>
-                <input
-                  type="text"
-                  value={enquiryEditForm.follow_up_remark}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, follow_up_remark: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Sales Status</label>
-                <input
-                  type="text"
-                  value={enquiryEditForm.sales_status}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, sales_status: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Sales Status Remark</label>
-                <input
-                  type="text"
-                  value={enquiryEditForm.sales_status_remark}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, sales_status_remark: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Salesperson</label>
-                <input
-                  type="text"
-                  value={enquiryEditForm.salesperson}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, salesperson: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Telecaller</label>
-                <input
-                  type="text"
-                  value={enquiryEditForm.telecaller}
-                  onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, telecaller: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/50 z-50 transition-opacity"
+            onClick={() => setShowEnquiryEditModal(false)}
+          />
+          
+          {/* Sidebar Drawer */}
+          <div className="fixed right-0 top-0 bottom-0 w-full sm:w-[500px] md:w-[600px] lg:w-[700px] bg-white shadow-2xl z-[51] overflow-y-auto">
+            {/* Header */}
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 z-10">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold">Edit Enquiry</h3>
+                <button
+                  onClick={() => setShowEnquiryEditModal(false)}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => setShowEnquiryEditModal(false)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveEnquiryEdit}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Save Changes
-              </button>
+
+            {/* Form Content */}
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
+                  <input
+                    type="text"
+                    value={enquiryEditForm.customer_name}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, customer_name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Business</label>
+                  <input
+                    type="text"
+                    value={enquiryEditForm.business}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, business: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                  <textarea
+                    rows="2"
+                    value={enquiryEditForm.address}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, address: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                  <input
+                    type="text"
+                    value={enquiryEditForm.state}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, state: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Division</label>
+                  <input
+                    type="text"
+                    value={enquiryEditForm.division}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, division: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Enquired Product</label>
+                  <input
+                    type="text"
+                    value={enquiryEditForm.enquired_product}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, enquired_product: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                  <input
+                    type="text"
+                    value={enquiryEditForm.product_quantity}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, product_quantity: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Remark</label>
+                  <textarea
+                    rows="2"
+                    value={enquiryEditForm.product_remark}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, product_remark: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Follow Up Status</label>
+                  <input
+                    type="text"
+                    value={enquiryEditForm.follow_up_status}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, follow_up_status: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Follow Up Remark</label>
+                  <input
+                    type="text"
+                    value={enquiryEditForm.follow_up_remark}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, follow_up_remark: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sales Status</label>
+                  <input
+                    type="text"
+                    value={enquiryEditForm.sales_status}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, sales_status: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sales Status Remark</label>
+                  <input
+                    type="text"
+                    value={enquiryEditForm.sales_status_remark}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, sales_status_remark: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Salesperson</label>
+                  <input
+                    type="text"
+                    value={enquiryEditForm.salesperson}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, salesperson: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Telecaller</label>
+                  <input
+                    type="text"
+                    value={enquiryEditForm.telecaller}
+                    onChange={(e) => setEnquiryEditForm(prev => ({ ...prev, telecaller: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setShowEnquiryEditModal(false)}
+                  className="px-6 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEnquiryEdit}
+                  className="px-6 py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {showQuotationModal && selectedQuotation && (
@@ -3149,51 +3282,138 @@ const LeadsSimplified = () => {
         />
       )}
 
-      {showCustomerTimeline && timelineLead && (
-        <div style={{ position: 'fixed', top: 0, right: 0, width: 'fit-content', maxWidth: '380px', minWidth: '300px', height: '100vh', zIndex: 50, marginLeft: 0, marginRight: 0, paddingLeft: 0, paddingRight: 0, borderLeft: '1px solid #e5e7eb' }}>
-          <CustomerTimeline
-            lead={timelineLead}
-            onClose={() => {
-              setShowCustomerTimeline(false);
-              setTimelineLead(null);
-            }}
-            onReassign={(lead) => {
-              openAssignModal(lead);
-            }}
-            onQuotationView={(quotation) => {
-              if (quotation?.id) {
-                handleViewQuotation(quotation.id);
-              } else {
-                toastManager.error('Quotation data is missing');
-              }
-            }}
-            onPIView={(pi) => {
-              if (pi?.id) {
-                handleViewPI(pi.id);
-              }
-            }}
-            onApprovePI={(pi) => {
-              if (pi?.id) {
-                handleApprovePI(pi.id);
-              }
-            }}
-            onRejectPI={(pi) => {
-              if (pi?.id) {
-                handleRejectPI(pi.id);
-              }
-            }}
-            onApproveCancelRequest={async (request) => {
-              if (request?.id) {
-                await handleApproveOrderCancel(request.id);
-              }
-            }}
-            onRejectCancelRequest={async (request) => {
-              if (request?.id) {
-                await handleRejectOrderCancel(request.id);
-              }
-            }}
-          />
+      {showActivityModal && viewingActivity && (
+        <div className="fixed inset-0 bg-black/50 z-[160] flex items-center justify-center p-4" onClick={() => setShowActivityModal(false)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Activity Details</h3>
+              <button onClick={() => setShowActivityModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-semibold text-gray-600">Activity Type</label>
+                  <p className="text-base text-gray-900 mt-1">{viewingActivity.activity_type?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-gray-600">Performed By</label>
+                  <p className="text-base text-gray-900 mt-1">{viewingActivity.performed_by_name || viewingActivity.performed_by || 'System'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-gray-600">Date & Time</label>
+                  <p className="text-base text-gray-900 mt-1">{new Date(viewingActivity.created_at).toLocaleString('en-IN')}</p>
+                </div>
+                {viewingActivity.metadata && Object.keys(viewingActivity.metadata).length > 0 && (
+                  <div>
+                    <label className="text-sm font-semibold text-gray-600">Details</label>
+                    <div className="mt-2 bg-gray-50 rounded-lg p-4">
+                      {Object.entries(viewingActivity.metadata).map(([key, value]) => (
+                        <div key={key} className="mb-2 last:mb-0">
+                          <span className="text-sm font-medium text-gray-700">{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}: </span>
+                          <span className="text-sm text-gray-900">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="sticky bottom-0 bg-gray-50 px-6 py-4 flex justify-end border-t border-gray-200">
+              <button onClick={() => setShowActivityModal(false)} className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+                Close
+              </button>
+            </div>
+          </div>
         </div>
+      )}
+
+      {showCustomerTimeline && timelineLead && (
+        <CustomerDetailSidebar
+          customer={timelineLead}
+          onClose={() => {
+            setShowCustomerTimeline(false);
+            setTimelineLead(null);
+          }}
+          onEdit={(lead) => {
+            setEditingLead(lead);
+            setShowEditModal(true);
+            setShowCustomerTimeline(false);
+          }}
+          onQuotation={(customer) => {
+            setShowCustomerTimeline(false);
+            toastManager.info('Please use the quotation creation workflow from the main page');
+          }}
+          quotations={quotations.filter(q => (q.customerId || q.customer_id) === timelineLead?.id)}
+          onViewQuotation={(quotation) => {
+            if (quotation?.id) {
+              handleViewQuotation(quotation.id);
+            } else {
+              toastManager.error('Quotation data is missing');
+            }
+          }}
+          onEditQuotation={(quotation, customer) => {
+            setShowCustomerTimeline(false);
+            toastManager.info('Please use the quotation editing workflow from the main page');
+          }}
+          onDeleteQuotation={(quotation) => {
+            if (window.confirm('Are you sure you want to delete this quotation?')) {
+              toastManager.success('Quotation deleted successfully');
+            }
+          }}
+          onCreatePI={(quotation, customer) => {
+            setShowCustomerTimeline(false);
+            toastManager.info('Please use the PI creation workflow from the main page');
+          }}
+          quotationPIs={quotationPIsMap}
+          piHook={{
+            fetchPIsForQuotation: async (quotationId) => {
+              await fetchPIsForLead();
+            },
+            handleDeletePI: async (piId) => {
+              if (window.confirm('Are you sure you want to delete this PI?')) {
+                toastManager.info('PI deletion not implemented');
+              }
+            },
+            handleApprovePI: handleApprovePI,
+            handleRejectPI: handleRejectPI
+          }}
+          onViewPI={(piId) => {
+            if (piId) {
+              handleViewPI(piId);
+            }
+          }}
+          onUpdateStatus={() => {
+            setShowCustomerTimeline(false);
+            toastManager.info('Please use the status update workflow from the main page');
+          }}
+          onPricingRfp={() => {
+            setShowCustomerTimeline(false);
+            toastManager.info('Please use the RFP workflow from the main page');
+          }}
+          onSendEmail={() => {}}
+          onDocs={() => {}}
+          renderUpdateStatusContent={null}
+          renderRfpContent={null}
+          renderSendEmailContent={(onClose) => {
+            const leadFormat = (lead) => ({
+              id: lead?.id ?? lead?._id,
+              name: lead?.name || lead?.customer,
+              email: lead?.email,
+              phone: lead?.phone,
+              business: lead?.business
+            });
+            return <SendEmailForm customer={leadFormat(timelineLead)} onClose={onClose} />;
+          }}
+          renderDocsContent={(onClose) => {
+            const leadId = timelineLead?.id ?? timelineLead?._id;
+            return leadId ? <UploadDocs leadId={leadId} onClose={onClose} /> : null;
+          }}
+          onViewActivity={handleViewActivity}
+          onDeleteActivity={handleDeleteActivity}
+          onEditEnquiry={handleEditEnquiryFromActivity}
+        />
       )}
 
     </div>

@@ -19,7 +19,6 @@ export function findIndiaStateByName(stateName) {
 export function getIndiaDivisionsForStateIso(stateIso) {
   const iso = String(stateIso || '').trim()
   if (!iso) return []
-  // Using cities as "division" options (works well for operational CRM usage)
   return City.getCitiesOfState(COUNTRY_CODE_IN, iso) || []
 }
 

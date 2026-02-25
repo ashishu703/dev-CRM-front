@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle, Clock, FilePlus2, RefreshCw, Trash2, XCircle, X } from 'lucide-react';
+import { CheckCircle, Clock, FilePlus2, RefreshCw, Trash2, XCircle, X, Search, Filter, Copy, Check } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import rfpService from '../../services/RfpService';
 import productPriceService from '../../services/ProductPriceService';
@@ -77,6 +77,10 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
   const [products, setProducts] = useState([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[1]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('date_desc');
+  const [copiedRfpId, setCopiedRfpId] = useState(null);
 
   const permissions = useMemo(() => {
     const dept = (user?.departmentType || '').toLowerCase();
@@ -90,20 +94,57 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
     };
   }, [user]);
 
-  const columnCount = permissions.isProduction ? 8 : 9;
+  const columnCount = 6;
+
+  const filteredAndSortedRfps = useMemo(() => {
+    let filtered = [...rfps];
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(rfp => 
+        (rfp.rfp_id && rfp.rfp_id.toLowerCase().includes(query)) ||
+        (rfp.created_by && rfp.created_by.toLowerCase().includes(query)) ||
+        (rfp.product_spec && rfp.product_spec.toLowerCase().includes(query)) ||
+        (rfp.products && rfp.products.some(p => p.product_spec && p.product_spec.toLowerCase().includes(query)))
+      );
+    }
+
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'pending') {
+        filtered = filtered.filter(rfp => rfp.status === 'pending_dh');
+      } else if (statusFilter === 'approved') {
+        filtered = filtered.filter(rfp => ['approved', 'pricing_ready', 'quotation_created', 'accounts_approved', 'senior_approved', 'sent_to_operations'].includes(rfp.status));
+      }
+    }
+
+    // Apply sorting
+    if (sortBy === 'date_desc') {
+      filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    } else if (sortBy === 'date_asc') {
+      filtered.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    } else if (sortBy === 'salesperson_asc') {
+      filtered.sort((a, b) => (a.created_by || '').localeCompare(b.created_by || ''));
+    } else if (sortBy === 'salesperson_desc') {
+      filtered.sort((a, b) => (b.created_by || '').localeCompare(a.created_by || ''));
+    }
+
+    return filtered;
+  }, [rfps, searchQuery, statusFilter, sortBy]);
 
   const totalPages = useMemo(() => {
-    if (!rfps.length) return 1;
-    return Math.max(1, Math.ceil(rfps.length / pageSize));
-  }, [rfps.length, pageSize]);
+    if (!filteredAndSortedRfps.length) return 1;
+    return Math.max(1, Math.ceil(filteredAndSortedRfps.length / pageSize));
+  }, [filteredAndSortedRfps.length, pageSize]);
 
   const paginatedRfps = useMemo(() => {
-    if (!rfps.length) return [];
+    if (!filteredAndSortedRfps.length) return [];
     const currentPage = Math.min(Math.max(1, page), totalPages);
     const start = (currentPage - 1) * pageSize;
     const end = start + pageSize;
-    return rfps.slice(start, end);
-  }, [rfps, page, pageSize, totalPages]);
+    return filteredAndSortedRfps.slice(start, end);
+  }, [filteredAndSortedRfps, page, pageSize, totalPages]);
 
   const handlePageChange = (nextPage) => {
     setPage((prev) => {
@@ -337,6 +378,17 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
     } catch (error) {
       setError(error.message || 'Failed to load RFP details');
     }
+  };
+
+  const handleCopyRfpId = (rfpId) => {
+    if (!rfpId) return;
+    navigator.clipboard.writeText(rfpId).then(() => {
+      setCopiedRfpId(rfpId);
+      setTimeout(() => setCopiedRfpId(null), 2000);
+      Toast.success('RFP ID copied!');
+    }).catch(() => {
+      Toast.error('Failed to copy');
+    });
   };
 
   const allProductsPriced = useMemo(() => {
@@ -620,228 +672,329 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
         </div>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 pt-4 pb-3">
-          <div className="text-xs text-slate-600">
-            {!loading && rfps.length > 0 && (
-              <>
-                Showing{' '}
-                <span className="font-semibold">
-                  {(page - 1) * pageSize + 1}
-                </span>{' '}
-                to{' '}
-                <span className="font-semibold">
-                  {Math.min(page * pageSize, rfps.length)}
-                </span>{' '}
-                of{' '}
-                <span className="font-semibold">
-                  {rfps.length}
-                </span>{' '}
-                RFPs
-              </>
-            )}
-            {!loading && rfps.length === 0 && 'No RFPs to display'}
+      {/* Search, Filter, and Sort Controls */}
+      <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Search Bar */}
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search by RFP ID, Product, or Salesperson..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
+              className="w-full pl-10 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1 text-xs text-slate-600">
-              <span>Rows per page</span>
-              <select
-                value={pageSize}
-                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white"
-              >
-                {PAGE_SIZE_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => handlePageChange(1)}
-                disabled={page <= 1 || totalPages <= 1}
-                className="px-2 py-1 text-xs border border-slate-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-              >
-                «
-              </button>
-              <button
-                type="button"
-                onClick={() => handlePageChange('prev')}
-                disabled={page <= 1 || totalPages <= 1}
-                className="px-2 py-1 text-xs border border-slate-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-              >
-                ‹
-              </button>
-              <span className="text-xs text-slate-600 px-1">
-                Page <span className="font-semibold">{page}</span> of{' '}
-                <span className="font-semibold">{totalPages}</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => handlePageChange('next')}
-                disabled={page >= totalPages || totalPages <= 1}
-                className="px-2 py-1 text-xs border border-slate-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-              >
-                ›
-              </button>
-              <button
-                type="button"
-                onClick={() => handlePageChange(totalPages)}
-                disabled={page >= totalPages || totalPages <= 1}
-                className="px-2 py-1 text-xs border border-slate-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
-              >
-                »
-              </button>
-            </div>
+
+          {/* Status Filter */}
+          <div className="flex items-center gap-2">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            >
+              <option value="all">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+            </select>
           </div>
+
+          {/* Sort By */}
+          <select
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(e.target.value);
+              setPage(1);
+            }}
+            className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          >
+            <option value="date_desc">Latest First</option>
+            <option value="date_asc">Oldest First</option>
+            <option value="salesperson_asc">Salesperson (A-Z)</option>
+            <option value="salesperson_desc">Salesperson (Z-A)</option>
+          </select>
         </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100 text-sm">
-            <thead className="bg-slate-50 text-slate-600 uppercase text-xs tracking-wider">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
               <tr>
-                <th className="px-4 py-3 text-left">RFP ID</th>
-                <th className="px-4 py-3 text-left">Lead</th>
-                <th className="px-4 py-3 text-left">Product</th>
-                <th className="px-4 py-3 text-left">Qty</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                {!permissions.isProduction && <th className="px-4 py-3 text-left">Price</th>}
-                <th className="px-4 py-3 text-left">Quotation</th>
-                <th className="px-4 py-3 text-left">Work Order</th>
-                <th className="px-4 py-3 text-left">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">RFP ID</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Product</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Qty with Unit</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Raised By</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-200 bg-white">
               {loading && (
+                <>
+                  {[...Array(5)].map((_, idx) => (
+                    <tr key={idx} className="animate-pulse">
+                      <td className="px-4 py-3">
+                        <div className="h-4 bg-slate-200 rounded w-24"></div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="space-y-2">
+                          <div className="h-3 bg-slate-200 rounded w-32"></div>
+                          <div className="h-3 bg-slate-200 rounded w-28"></div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="h-4 bg-slate-200 rounded w-20"></div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="h-4 bg-slate-200 rounded w-24"></div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="h-6 bg-slate-200 rounded-full w-28"></div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <div className="h-7 bg-slate-200 rounded w-16"></div>
+                          <div className="h-7 bg-slate-200 rounded w-20"></div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </>
+              )}
+              {!loading && filteredAndSortedRfps.length === 0 && (
                 <tr>
-                  <td colSpan={columnCount} className="px-4 py-6 text-center text-slate-500">Loading...</td>
+                  <td colSpan={columnCount} className="px-4 py-8 text-center text-slate-500">
+                    No RFPs found matching your criteria.
+                  </td>
                 </tr>
               )}
-              {!loading && rfps.length === 0 && (
-                <tr>
-                  <td colSpan={columnCount} className="px-4 py-6 text-center text-slate-500">No RFPs found.</td>
-                </tr>
-              )}
-              {!loading && paginatedRfps.map((rfp) => (
-                <tr key={rfp.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">{rfp.rfp_id || 'Pending'}</td>
-                  <td className="px-4 py-3 text-slate-700">LD-{rfp.lead_id}</td>
-                  <td className="px-4 py-3 text-slate-700">
-                    {rfp.products && rfp.products.length > 0 ? (
-                      <div className="space-y-1">
-                        {rfp.products.slice(0, 2).map((p, idx) => (
-                          <div key={idx} className="text-xs">
-                            {p.product_spec} {(p.quantity ?? p.length) != null && (p.quantity ?? p.length) !== '' ? `(Qty: ${p.quantity ?? p.length})` : ''}
-                          </div>
-                        ))}
-                        {rfp.products.length > 2 && (
-                          <div className="text-xs text-slate-500">+{rfp.products.length - 2} more</div>
+              {!loading && paginatedRfps.map((rfp) => {
+                const totalQty = rfp.products && rfp.products.length > 0
+                  ? rfp.products.reduce((sum, p) => sum + ((parseFloat(p.quantity) ?? parseFloat(p.length)) || 0), 0)
+                  : ((parseFloat(rfp.quantity) ?? parseFloat(rfp.length)) || 0);
+                const unit = rfp.products && rfp.products.length > 0 && rfp.products[0]?.length_unit
+                  ? rfp.products[0].length_unit
+                  : 'Mtr';
+                
+                return (
+                  <tr 
+                    key={rfp.id} 
+                    className="hover:bg-slate-50 transition-colors cursor-pointer"
+                    onClick={() => permissions.isDh && openRfpApprovalModal(rfp)}
+                  >
+                    <td className="px-4 py-3 text-sm font-medium text-slate-900">
+                      {rfp.rfp_id ? (
+                        <div className="flex items-center gap-2">
+                          <span>{rfp.rfp_id}</span>
+                          <button
+                            onClick={() => handleCopyRfpId(rfp.rfp_id)}
+                            className="text-slate-400 hover:text-slate-600 transition-colors"
+                            title="Copy RFP ID"
+                          >
+                            {copiedRfpId === rfp.rfp_id ? (
+                              <Check className="w-3.5 h-3.5 text-green-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">Pending</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      {rfp.products && rfp.products.length > 0 ? (
+                        <div className="space-y-1">
+                          {rfp.products.slice(0, 2).map((p, idx) => (
+                            <div key={idx} className="text-xs">
+                              {p.product_spec}
+                            </div>
+                          ))}
+                          {rfp.products.length > 2 && (
+                            <div className="text-xs text-indigo-600 font-medium">
+                              +{rfp.products.length - 2} more
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        rfp.product_spec || <span className="text-slate-400">N/A</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      {totalQty > 0 ? `${totalQty.toFixed(2)} ${unit}` : <span className="text-slate-400">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      {rfp.created_by_name || rfp.created_by?.split('@')[0] || <span className="text-slate-400">Unknown</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${statusBadge(rfp.status)}`}>
+                        {statusLabel(rfp.status)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                        {permissions.isDh && (
+                          <button
+                            onClick={() => openRfpApprovalModal(rfp)}
+                            className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md text-white transition-colors ${
+                              rfp.status === 'pending_dh'
+                                ? 'bg-blue-600 hover:bg-blue-700'
+                                : 'bg-slate-700 hover:bg-slate-800'
+                            }`}
+                          >
+                            {rfp.status === 'pending_dh' ? 'Review' : 'View'}
+                          </button>
+                        )}
+                        {permissions.isAccounts && ['approved', 'pricing_ready'].includes(rfp.status) && (
+                          <button
+                            onClick={() => openModal(setShowPrice, rfp, () => setPriceForm({
+                              rawMaterialPrice: '',
+                              processingCost: '',
+                              margin: '',
+                              validityDate: ''
+                            }))}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                          >
+                            Add Price
+                          </button>
+                        )}
+                        {permissions.isSalesperson && rfp.status === 'pricing_ready' && !rfp.quotation_id && (
+                          <button
+                            onClick={() => handleGenerateQuotation(rfp.id)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-slate-900 text-white hover:bg-slate-800 transition-colors"
+                          >
+                            Generate Quote
+                          </button>
+                        )}
+                        {permissions.isSalesperson && rfp.quotation_id && ['not_submitted', null, undefined, ''].includes(rfp.accounts_approval_status) && (
+                          <button
+                            onClick={() => openModal(setShowAccountsSubmit, rfp, () => setAccountsSubmitForm({ piId: '', paymentId: '' }))}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+                          >
+                            Submit Accounts
+                          </button>
+                        )}
+                        {permissions.isAccounts && rfp.accounts_approval_status === 'pending' && (
+                          <button
+                            onClick={() => openModal(setShowAccountsApproval, rfp, () => setAccountsApprovalForm({ status: 'approved', notes: '' }))}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-emerald-700 text-white hover:bg-emerald-800 transition-colors"
+                          >
+                            Accounts Decision
+                          </button>
+                        )}
+                        {permissions.isSuperAdmin && rfp.status === 'credit_case' && (
+                          <button
+                            onClick={() => openModal(setShowSeniorApproval, rfp, () => setSeniorApprovalForm({ status: 'approved', notes: '' }))}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-purple-700 text-white hover:bg-purple-800 transition-colors"
+                          >
+                            Senior Approval
+                          </button>
+                        )}
+                        {permissions.isProduction && rfp.work_order_id && rfp.status === 'sent_to_operations' && (
+                          <button
+                            onClick={() => openModal(setShowOperations, rfp, () => setOperationsForm({
+                              action: 'acknowledge',
+                              expectedOrderCreationDate: '',
+                              reason: ''
+                            }))}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-slate-700 text-white hover:bg-slate-800 transition-colors"
+                          >
+                            Operations
+                          </button>
                         )}
                       </div>
-                    ) : (
-                      rfp.product_spec || 'N/A'
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">
-                    {rfp.products && rfp.products.length > 0
-                      ? rfp.products.reduce((sum, p) => sum + ((parseFloat(p.quantity) ?? parseFloat(p.length)) || 0), 0).toFixed(2)
-                      : ((parseFloat(rfp.quantity) ?? parseFloat(rfp.length)) || '-')}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusBadge(rfp.status)}`}>
-                      {statusLabel(rfp.status)}
-                    </span>
-                  </td>
-                  {!permissions.isProduction && (
-                    <td className="px-4 py-3 text-slate-700">
-                      {rfp.calculator_total_price || rfp.calculated_price
-                        ? formatCurrency(rfp.calculator_total_price || rfp.calculated_price)
-                        : '—'}
                     </td>
-                  )}
-                  <td className="px-4 py-3 text-slate-700">{rfp.quotation_number || '—'}</td>
-                  <td className="px-4 py-3 text-slate-700">{rfp.work_order_number || '—'}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      {permissions.isDh && (
-                        <button
-                          onClick={() => openRfpApprovalModal(rfp)}
-                          className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md text-white ${
-                            rfp.status === 'pending_dh'
-                              ? 'bg-blue-600 hover:bg-blue-700'
-                              : 'bg-slate-700 hover:bg-slate-800'
-                          }`}
-                        >
-                          <FilePlus2 className="w-3 h-3" />
-                          {rfp.status === 'pending_dh' ? 'Review & Approve' : 'View'}
-                        </button>
-                      )}
-                      {permissions.isAccounts && ['approved', 'pricing_ready'].includes(rfp.status) && (
-                        <button
-                          onClick={() => openModal(setShowPrice, rfp, () => setPriceForm({
-                            rawMaterialPrice: '',
-                            processingCost: '',
-                            margin: '',
-                            validityDate: ''
-                          }))}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-indigo-600 text-white"
-                        >
-                          <Clock className="w-3 h-3" />
-                          Add Price
-                        </button>
-                      )}
-                      {permissions.isSalesperson && rfp.status === 'pricing_ready' && !rfp.quotation_id && (
-                        <button
-                          onClick={() => handleGenerateQuotation(rfp.id)}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-slate-900 text-white"
-                        >
-                          Generate Quote
-                        </button>
-                      )}
-                      {permissions.isSalesperson && rfp.quotation_id && ['not_submitted', null, undefined, ''].includes(rfp.accounts_approval_status) && (
-                        <button
-                          onClick={() => openModal(setShowAccountsSubmit, rfp, () => setAccountsSubmitForm({ piId: '', paymentId: '' }))}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-amber-600 text-white"
-                        >
-                          Submit Accounts
-                        </button>
-                      )}
-                      {permissions.isAccounts && rfp.accounts_approval_status === 'pending' && (
-                        <button
-                          onClick={() => openModal(setShowAccountsApproval, rfp, () => setAccountsApprovalForm({ status: 'approved', notes: '' }))}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-emerald-700 text-white"
-                        >
-                          Accounts Decision
-                        </button>
-                      )}
-                      {permissions.isSuperAdmin && rfp.status === 'credit_case' && (
-                        <button
-                          onClick={() => openModal(setShowSeniorApproval, rfp, () => setSeniorApprovalForm({ status: 'approved', notes: '' }))}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-purple-700 text-white"
-                        >
-                          Senior Approval
-                        </button>
-                      )}
-                      {permissions.isProduction && rfp.work_order_id && rfp.status === 'sent_to_operations' && (
-                        <button
-                          onClick={() => openModal(setShowOperations, rfp, () => setOperationsForm({
-                            action: 'acknowledge',
-                            expectedOrderCreationDate: '',
-                            reason: ''
-                          }))}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-slate-700 text-white"
-                        >
-                          Operations
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {!loading && filteredAndSortedRfps.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 bg-slate-50">
+            <div className="text-xs text-slate-600">
+              Showing{' '}
+              <span className="font-semibold text-slate-900">
+                {(page - 1) * pageSize + 1}
+              </span>{' '}
+              to{' '}
+              <span className="font-semibold text-slate-900">
+                {Math.min(page * pageSize, filteredAndSortedRfps.length)}
+              </span>{' '}
+              of{' '}
+              <span className="font-semibold text-slate-900">
+                {filteredAndSortedRfps.length}
+              </span>{' '}
+              RFPs
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 text-xs text-slate-600">
+                <span>Rows per page</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                  className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-indigo-500"
+                >
+                  {PAGE_SIZE_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(1)}
+                  disabled={page <= 1 || totalPages <= 1}
+                  className="px-2 py-1 text-xs border border-slate-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
+                >
+                  «
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange('prev')}
+                  disabled={page <= 1 || totalPages <= 1}
+                  className="px-2 py-1 text-xs border border-slate-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
+                >
+                  ‹
+                </button>
+                <span className="text-xs text-slate-600 px-2">
+                  Page <span className="font-semibold">{page}</span> of{' '}
+                  <span className="font-semibold">{totalPages}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange('next')}
+                  disabled={page >= totalPages || totalPages <= 1}
+                  className="px-2 py-1 text-xs border border-slate-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
+                >
+                  ›
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={page >= totalPages || totalPages <= 1}
+                  className="px-2 py-1 text-xs border border-slate-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white transition-colors"
+                >
+                  »
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {showCreate && (
@@ -1081,12 +1234,19 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
         </div>
       )}
 
-      {/* Department Head RFP Approval Modal - Comprehensive View */}
+      {/* Department Head RFP Approval Sidebar Drawer */}
       {showRfpApprovalModal && selectedRfp && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[120] p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/50 z-[120] transition-opacity"
+            onClick={closeModals}
+          />
+          
+          {/* Sidebar Drawer */}
+          <div className="fixed right-0 top-0 bottom-0 w-full sm:w-[600px] md:w-[700px] lg:w-[800px] bg-white shadow-2xl z-[121] overflow-y-auto">
             {/* Header */}
-            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-t-xl">
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 z-10">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-bold mb-1">
@@ -1426,7 +1586,7 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                                         .map(([key, val]) => (
                                           <div key={key} className="flex items-center gap-2 py-1 border-b border-slate-100 last:border-0 min-w-0">
                                             <span className="text-slate-500 font-medium shrink-0 text-xs">{keyToLabel[key] || key.replace(/\s+/g, '')}:</span>
-                                            <span className="text-slate-900 font-semibold truncate">{fmtVal(key, val)}</span>
+                                            <span className={`text-slate-900 font-semibold ${key === 'name' ? 'break-words' : 'truncate'}`}>{fmtVal(key, val)}</span>
                                           </div>
                                         ))
                                     })()}
@@ -1572,11 +1732,11 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
               })()}
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {showCustomPriceModal && customPriceProduct && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[130]">
           <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
             <h2 className="text-lg font-semibold">Set Custom Price (not in calculator / price list)</h2>
             <p className="text-sm text-slate-600">Product: <span className="font-semibold">{customPriceProduct.product_spec}</span></p>

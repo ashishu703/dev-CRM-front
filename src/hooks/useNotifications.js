@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
+import Toast from '../utils/Toast';
 
 const NOTIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -205,9 +206,16 @@ export const useNotifications = () => {
       }
     };
 
+    const onReminderDue = (data) => {
+      const msg = data?.message || 'Aapka follow-up due hai';
+      Toast.info(msg);
+      playNotificationSound();
+    };
+
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('notification', onNotification);
+    socket.on('reminder-due', onReminderDue);
 
     if (socket.connected) setIsConnected(true);
 
@@ -215,6 +223,7 @@ export const useNotifications = () => {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
       socket.off('notification', onNotification);
+      socket.off('reminder-due', onReminderDue);
       clearInterval(cleanupInterval);
       expiryTimersRef.current.forEach(t => clearTimeout(t));
       expiryTimersRef.current.clear();

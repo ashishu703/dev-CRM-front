@@ -1,6 +1,4 @@
-import departmentUserService from '../api/admin_api/departmentUserService';
-import apiClient from '../utils/apiClient';
-import { API_ENDPOINTS } from '../api/admin_api/api';
+import departmentUsersApi from '../api/admin_api/departmentUsersApi';
 
 class CSVImportValidationService {
   constructor(headUserId) {
@@ -14,7 +12,7 @@ class CSVImportValidationService {
 
   async initialize() {
     try {
-      const usersResponse = await departmentUserService.getByHeadId(this.headUserId);
+      const usersResponse = await departmentUsersApi.getByHeadId(this.headUserId);
       
       let users = [];
       if (usersResponse?.data?.users && Array.isArray(usersResponse.data.users)) {
@@ -40,8 +38,6 @@ class CSVImportValidationService {
           });
         }
       });
-
-      await this.loadExistingPhones();
     } catch (error) {
       console.error('Error initializing CSV validation service:', error);
       throw new Error('Failed to initialize validation service');
@@ -49,35 +45,7 @@ class CSVImportValidationService {
   }
 
   async loadExistingPhones() {
-    try {
-      let page = 1;
-      const limit = 200;
-      let hasMore = true;
-
-      while (hasMore) {
-        const response = await apiClient.get(API_ENDPOINTS.LEADS_LIST(`?page=${page}&limit=${limit}`));
-        
-        if (response?.data && Array.isArray(response.data)) {
-          response.data.forEach(lead => {
-            if (lead.phone) {
-              const normalizedPhone = this.normalizePhone(lead.phone);
-              if (normalizedPhone) {
-                this.existingPhones.add(normalizedPhone);
-              }
-            }
-          });
-
-          const total = response?.pagination?.total || 0;
-          const currentCount = page * limit;
-          hasMore = currentCount < total && response.data.length === limit;
-          page++;
-        } else {
-          hasMore = false;
-        }
-      }
-    } catch (error) {
-      console.warn('Could not load existing phones for duplicate check:', error);
-    }
+    return Promise.resolve();
   }
 
   normalizePhone(phone) {
@@ -86,7 +54,7 @@ class CSVImportValidationService {
     return digits.length === 10 ? digits : null;
   }
 
-  validatePhone(phone, rowIndex) {
+  validatePhone(phone) {
     if (!phone || !phone.trim()) {
       return { valid: false, reason: 'Phone number is required' };
     }
@@ -106,9 +74,6 @@ class CSVImportValidationService {
     return { valid: true, normalizedPhone };
   }
 
-  /**
-   * Validate if email belongs to department users under this head
-   */
   validateDepartmentUserEmail(email) {
     if (!email || !email.trim()) {
       return { valid: false, reason: 'Email is empty' };
@@ -127,14 +92,9 @@ class CSVImportValidationService {
   validateLead(lead, rowIndex) {
     const errors = [];
 
-    const phoneValidation = this.validatePhone(lead.phone, rowIndex);
+    const phoneValidation = this.validatePhone(lead.phone);
     if (!phoneValidation.valid) {
       errors.push(`Row ${rowIndex + 2}: ${phoneValidation.reason}`);
-      return { valid: false, errors, skip: true };
-    }
-
-    if (this.existingPhones.has(phoneValidation.normalizedPhone)) {
-      errors.push(`Row ${rowIndex + 2}: Duplicate phone number ${lead.phone} already exists in database`);
       return { valid: false, errors, skip: true };
     }
 
@@ -171,77 +131,43 @@ class CSVImportValidationService {
     return { valid: true, errors, skip: false };
   }
 
-  /**
-   * Process and validate all leads from CSV
-   * STRICT: No fallbacks, exact data only
-   */
   processLeads(leads) {
     const validLeads = [];
-    const processedPhones = new Set();
+    const csvPhones = new Set();
 
-    leads.forEach((lead, index) => {
-      try {
-        // STRICT: Check for duplicate within the same CSV
-        if (!lead.phone) {
-          this.skippedLeads.push({
-            row: index + 2,
-            lead,
-            reason: 'Phone number is missing'
-          });
-          this.validationErrors.push(`Row ${index + 2}: Phone number is missing`);
-          return;
-        }
+    for (let i = 0; i < leads.length; i++) {
+      const lead = leads[i];
+      const rowNum = i + 2;
 
-        const normalizedPhone = this.normalizePhone(lead.phone);
-        if (!normalizedPhone) {
-          this.skippedLeads.push({
-            row: index + 2,
-            lead,
-            reason: `Phone number must be exactly 10 digits (found: ${lead.phone})`
-          });
-          this.validationErrors.push(`Row ${index + 2}: Phone number must be exactly 10 digits`);
-          return;
-        }
-
-        if (processedPhones.has(normalizedPhone)) {
-          this.skippedLeads.push({
-            row: index + 2,
-            lead,
-            reason: `Duplicate phone number in CSV: ${lead.phone}`
-          });
-          this.validationErrors.push(`Row ${index + 2}: Duplicate phone number in CSV`);
-          return;
-        }
-
-        // STRICT: Validate lead
-        const validation = this.validateLead(lead, index);
-        
-        if (!validation.valid || validation.skip) {
-          this.skippedLeads.push({
-            row: index + 2,
-            lead,
-            reason: validation.errors.join('; ')
-          });
-          this.validationErrors.push(...validation.errors);
-          return;
-        }
-
-        // Add phone to processed set
-        processedPhones.add(normalizedPhone);
-        this.existingPhones.add(normalizedPhone);
-
-        // Add to valid leads
-        validLeads.push(lead);
-      } catch (error) {
-        // STRICT: Skip lead if any error occurs
-        this.skippedLeads.push({
-          row: index + 2,
-          lead,
-          reason: `Error processing lead: ${error.message}`
-        });
-        this.validationErrors.push(`Row ${index + 2}: ${error.message}`);
+      if (!lead.phone) {
+        this.skippedLeads.push({ row: rowNum, lead, reason: 'Phone number is missing' });
+        this.validationErrors.push(`Row ${rowNum}: Phone number is missing`);
+        continue;
       }
-    });
+
+      const normalizedPhone = this.normalizePhone(lead.phone);
+      if (!normalizedPhone) {
+        this.skippedLeads.push({ row: rowNum, lead, reason: `Phone must be 10 digits (found: ${lead.phone})` });
+        this.validationErrors.push(`Row ${rowNum}: Phone must be 10 digits`);
+        continue;
+      }
+
+      if (csvPhones.has(normalizedPhone)) {
+        this.skippedLeads.push({ row: rowNum, lead, reason: `Duplicate in CSV: ${lead.phone}` });
+        this.validationErrors.push(`Row ${rowNum}: Duplicate in CSV`);
+        continue;
+      }
+
+      const validation = this.validateLead(lead, i);
+      if (!validation.valid || validation.skip) {
+        this.skippedLeads.push({ row: rowNum, lead, reason: validation.errors.join('; ') });
+        this.validationErrors.push(...validation.errors);
+        continue;
+      }
+
+      csvPhones.add(normalizedPhone);
+      validLeads.push(lead);
+    }
 
     return validLeads;
   }

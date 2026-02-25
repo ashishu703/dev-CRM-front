@@ -1,10 +1,10 @@
-import departmentUserService from '../api/admin_api/departmentUserService';
+import departmentUsersApi from '../api/admin_api/departmentUsersApi';
 
 class UserService {
   async fetchUsers(limit = 100) {
     try {
-      const res = await departmentUserService.listUsers({ page: 1, limit });
-      const payload = res.data || res;
+      const res = await departmentUsersApi.listUsers({ page: 1, limit });
+      const payload = res?.users ? res : (res?.data || res);
       const names = (payload.users || []).map(u => u.username).filter(Boolean);
       return { usernames: names, error: null };
     } catch (err) {

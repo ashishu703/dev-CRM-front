@@ -2,19 +2,16 @@ import CacheBuster from './cacheBuster';
 
 class ApiClient {
   constructor() {
-    // In development, use relative URLs to leverage Vite proxy (avoids CORS)
-    // In production or when explicitly set, use full URLs
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
     const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
     
-    // If no explicit API URL is set in dev, use relative URLs (proxy will handle it)
-    // Otherwise, use the configured URL
+   
     if (!apiBaseUrl && isDevelopment) {
-      this.baseURL = ''; // Empty means relative URLs - will use Vite proxy
+      this.baseURL = ''; 
     } else if (apiBaseUrl && apiBaseUrl.includes('http')) {
       this.baseURL = apiBaseUrl.replace(/\/api.*$/, '');
     } else {
-      this.baseURL = ''; // Default to relative URLs
+      this.baseURL = '';
     }
   }
 
@@ -46,7 +43,7 @@ class ApiClient {
     } catch (_) {}
 
     localStorage.removeItem('authToken');
-    localStorage.removeItem('token'); // Legacy key used by older components
+    localStorage.removeItem('token');
     localStorage.removeItem('user');
   }
 
@@ -61,7 +58,6 @@ class ApiClient {
    * Get headers with authentication token if available
    */
   getHeaders() {
-    // Prefer session token (per-tab) if available, fallback to localStorage
     const token = sessionStorage.getItem('authToken') || this.getAuthToken();
     return {
       'Content-Type': 'application/json',
@@ -73,7 +69,6 @@ class ApiClient {
    * Handle API response and errors
    */
   async handleResponse(response) {
-    // Gracefully handle empty bodies and non-JSON
     const contentType = response.headers.get('content-type') || '';
     const contentLength = response.headers.get('content-length');
     let data = null;
@@ -95,11 +90,9 @@ class ApiClient {
     }
     
     if (!response.ok) {
-      // Extract error message from response - check both 'error' and 'message' fields
       const errorMessage = data.error || data.message || 'An error occurred';
 
-      // If authentication failed (expired / invalid token), proactively clear stored auth
-      if (response.status === 401 && errorMessage.toLowerCase().includes('not authorized')) {
+      if (response.status === 401) {
         this.clearStoredAuth();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('auth:logout'));
@@ -144,7 +137,10 @@ class ApiClient {
       const response = await fetch(fullUrl, config);
       return await this.handleResponse(response);
     } catch (error) {
-      console.error('API Request Error:', error);
+      const status = error?.status;
+      if (![400, 401, 404].includes(status)) {
+        console.error('API Request Error:', error);
+      }
       throw error;
     }
   }

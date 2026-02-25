@@ -1,26 +1,149 @@
 import React from 'react'
-import { X, Eye, Package, Trash2, FileText, Receipt, Pencil, User, Phone, Mail, Building2, MapPin, Globe, Hash, Tag, Clock, CheckCircle, MessageSquare, Ban } from 'lucide-react'
+import { X, Eye, Package, Trash2, FileText, Receipt, Pencil, User, Phone, Mail, Clock, CheckCircle, MessageSquare, Bell, Calendar, Send, Upload, Settings, ShieldCheck } from 'lucide-react'
 import { QuotationHelper } from '../../utils/QuotationHelper'
 import Toast from '../../utils/Toast'
-import apiClient from '../../utils/apiClient'
-import { API_ENDPOINTS } from '../../api/admin_api/api'
-import DateFormatter from '../../utils/DateFormatter'
+import { useGetRemindersByLeadIdQuery, useCreateReminderMutation, useCompleteReminderMutation, useDeleteReminderMutation } from '../../features/leadReminders'
+import { useAuth } from '../../hooks/useAuth'
+import { ReminderCard } from '../timeline'
+import SectionHeader from '../ui/SectionHeader'
+import EmptyState from '../ui/EmptyState'
+import ActivityTimelineSimple from '../lead/ActivityTimelineSimple'
 
-export default function CustomerDetailSidebar({ 
-  customer, onClose, onEdit, onQuotation, quotations, 
-  onViewQuotation, onEditQuotation, onDeleteQuotation, 
-  onCreatePI, quotationPIs, piHook, onViewPI 
+const TAB = { OVERVIEW: 'overview', QUOTATIONS: 'quotations', NOTES: 'notes', UPDATE_STATUS: 'updateStatus', RFP: 'rfp', SEND_EMAIL: 'sendEmail', DOCS: 'docs' }
+const tabBtn = (isActive) => `flex items-center gap-1.5 py-2.5 px-3 text-sm font-medium border-b-2 transition-colors ${isActive ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50' : 'border-transparent text-slate-600 hover:text-slate-900'}`
+
+function ReminderTab({
+  leadId,
+  reminders,
+  upcomingReminders,
+  loadingReminders,
+  createReminder,
+  creatingReminder,
+  completeReminder,
+  deleteReminder,
+  Toast,
+}) {
+  const [title, setTitle] = React.useState('')
+  const [dueAt, setDueAt] = React.useState('')
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!title.trim() || !dueAt) {
+      Toast.warning('Title and due date required')
+      return
+    }
+    try {
+      await createReminder({ leadId, title: title.trim(), due_at: dueAt, repeat_type: 'none' }).unwrap()
+      setTitle('')
+      setDueAt('')
+      Toast.success('Reminder set')
+    } catch (err) {
+      Toast.error(err?.data?.message || 'Failed to create reminder')
+    }
+  }
+  if (!leadId) return null
+  return (
+    <div className="space-y-4">
+      <form onSubmit={handleSubmit} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <h3 className="text-sm font-semibold text-slate-800 mb-2">Set Reminder</h3>
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g. Follow up on quotation"
+          className="w-full rounded border border-slate-200 px-2.5 py-1.5 text-sm mb-2"
+        />
+        <input
+          type="datetime-local"
+          value={dueAt}
+          onChange={(e) => setDueAt(e.target.value)}
+          className="w-full rounded border border-slate-200 px-2.5 py-1.5 text-sm mb-2"
+        />
+        <button type="submit" disabled={creatingReminder} className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+          {creatingReminder ? 'Adding...' : 'Set Reminder'}
+        </button>
+      </form>
+      <SectionHeader icon={Bell} title="Upcoming Reminders" />
+      {loadingReminders ? (
+        <div className="h-20 rounded bg-slate-100 animate-pulse" />
+      ) : upcomingReminders.length === 0 ? (
+        <EmptyState icon={Bell} title="No upcoming reminders" subtitle="Set a reminder above" />
+      ) : (
+        <div className="space-y-1.5">
+          {upcomingReminders.map((r) => (
+            <ReminderCard
+              key={r.id}
+              reminder={r}
+              onComplete={(rem) => completeReminder({ leadId, reminderId: rem.id })}
+              onDelete={(rem) => deleteReminder({ leadId, reminderId: rem.id })}
+              showCountdown
+            />
+          ))}
+        </div>
+      )}
+      {(() => { const completed = reminders.filter((r) => r.completed_at); return completed.length > 0 && (
+        <>
+          <h3 className="text-sm font-semibold text-slate-600">Completed</h3>
+          <div className="space-y-1.5">
+            {completed.slice(0, 5).map((r) => (
+              <ReminderCard key={r.id} reminder={r} showCountdown={false} />
+            ))}
+          </div>
+        </>
+      ); })()}
+    </div>
+  )
+}
+
+export default function CustomerDetailSidebar({
+  customer, onClose, onEdit, onQuotation, quotations,
+  onViewQuotation, onEditQuotation, onDeleteQuotation,
+  onCreatePI, quotationPIs, piHook, onViewPI,
+  onUpdateStatus, onPricingRfp, onSendEmail, onDocs,
+  renderUpdateStatusContent, renderRfpContent, renderSendEmailContent, renderDocsContent,
+  onPricingRfpTabSelect, onUpdateStatusTabSelect,
+  hasPending = false,
+  onFinalSave,
+  onViewActivity,
+  onDeleteActivity,
+  onEditEnquiry,
 }) {
   if (!customer) return null
 
   const isApprovedQuotation = QuotationHelper.isApproved
   const isPaymentCompleted = QuotationHelper.isPaymentCompleted
 
-  const [followUpHistory, setFollowUpHistory] = React.useState([])
-  const [loadingHistory, setLoadingHistory] = React.useState(false)
-  const [orderCancelRequests, setOrderCancelRequests] = React.useState([])
-  const [loadingOrderCancel, setLoadingOrderCancel] = React.useState(false)
+  const leadId = customer?.id ?? customer?._id
+  const { user: authUser } = useAuth()
+  const [activeTab, setActiveTab] = React.useState(TAB.OVERVIEW)
   const [isVisible, setIsVisible] = React.useState(false)
+  const [viewingEmail, setViewingEmail] = React.useState(null)
+
+  // Default handlers if not provided
+  const handleViewActivity = onViewActivity || ((activity) => {
+    // Silently handle if no handler provided
+  });
+
+  const handleDeleteActivity = onDeleteActivity || ((activity) => {
+    // Silently handle if no handler provided
+  });
+
+  const handleEditEnquiry = onEditEnquiry || ((activity) => {
+    // Silently handle if no handler provided
+  });
+
+  const { data: remindersResult, isLoading: loadingReminders } = useGetRemindersByLeadIdQuery(
+    leadId ? { leadId, page: 1, limit: 50 } : undefined,
+    { skip: !leadId }
+  )
+  const reminders = remindersResult?.reminders ?? []
+  const upcomingReminders = React.useMemo(() => reminders.filter((r) => !r.completed_at && r.due_at && new Date(r.due_at) >= new Date()), [reminders])
+  const quotationCount = (quotations && quotations.filter(q => (q.customerId || q.customer_id) === customer?.id || !(q.customerId || q.customer_id)).length) || 0
+  const notesCount = reminders.filter((r) => !r.completed_at).length || 0
+  const [createReminder, { isLoading: creatingReminder }] = useCreateReminderMutation()
+  const [completeReminder] = useCompleteReminderMutation()
+  const [deleteReminder] = useDeleteReminderMutation()
+
+  const custQuotations = React.useMemo(() => (quotations || []).filter(q => (q.customerId || q.customer_id) === customer?.id || !(q.customerId || q.customer_id)), [quotations, customer?.id])
 
   React.useEffect(() => {
     const frame = requestAnimationFrame(() => setIsVisible(true))
@@ -38,55 +161,12 @@ export default function CustomerDetailSidebar({
 
   React.useEffect(() => {
     if (!quotations || quotations.length === 0 || !piHook?.fetchPIsForQuotation) return
-
     quotations.forEach((q) => {
       if (q.id && !quotationPIs?.[q.id]) {
         piHook.fetchPIsForQuotation(q.id)
       }
     })
   }, [quotations?.length, customer?.id])
-
-  React.useEffect(() => {
-    const fetchFollowUpHistory = async () => {
-      const customerId = customer?.id || customer?._id
-      if (!customerId) {
-        setFollowUpHistory([])
-        return
-      }
-
-      setLoadingHistory(true)
-      try {
-        const response = await apiClient.get(API_ENDPOINTS.SALESPERSON_LEAD_HISTORY(customerId))
-        const history = response?.data?.data || response?.data || []
-        setFollowUpHistory(Array.isArray(history) ? history : [])
-      } catch (error) {
-        console.warn('Failed to fetch follow up history:', error)
-        setFollowUpHistory([])
-      } finally {
-        setLoadingHistory(false)
-      }
-    }
-
-    fetchFollowUpHistory()
-  }, [customer?.id, customer?._id])
-
-  React.useEffect(() => {
-    const customerId = customer?.id || customer?._id
-    if (!customerId) {
-      setOrderCancelRequests([])
-      return
-    }
-
-    setLoadingOrderCancel(true)
-    apiClient
-      .get(API_ENDPOINTS.ORDER_CANCEL_BY_CUSTOMER(customerId))
-      .then((res) => {
-        const data = res?.data?.data || res?.data || []
-        setOrderCancelRequests(Array.isArray(data) ? data : [])
-      })
-      .catch(() => setOrderCancelRequests([]))
-      .finally(() => setLoadingOrderCancel(false))
-  }, [customer?.id, customer?._id])
 
   const getPIsForQuotation = (quotationId) => quotationPIs?.[quotationId] || []
 
@@ -97,37 +177,26 @@ export default function CustomerDetailSidebar({
     return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
   }
 
-  const getCustomerCreatedDate = () => {
-    const createdDate = customer.created_at || customer.createdAt || customer.date
-    if (!createdDate) return 'N/A'
-    return DateFormatter.formatDate(createdDate)
-  }
+  const initials = (customer?.name || 'U').trim().split(/\s+/).map((n) => n[0]).join('').toUpperCase().slice(0, 2)
 
-  const sortedFollowUps = React.useMemo(() => {
-    if (!followUpHistory || followUpHistory.length === 0) return []
-
-    return [...followUpHistory].sort((a, b) => {
-      const dateA = new Date(a.follow_up_date || a.created_at || 0)
-      const dateB = new Date(b.follow_up_date || b.created_at || 0)
-      return dateB - dateA
-    })
-  }, [followUpHistory])
-
-  const formatFollowUpDateTime = (followUp) => {
-    if (!followUp) return 'N/A'
-    const dateInput = followUp.follow_up_date || followUp.created_at
-    const timeInput = followUp.follow_up_time
-    if (!dateInput) return 'N/A'
-    return DateFormatter.formatDateTime(dateInput, timeInput)
-  }
-
-  const getStatusBadgeClass = (salesStatus) => {
-    const status = String(salesStatus || '').toLowerCase()
-    if (status === 'running') return 'bg-gradient-to-r from-yellow-400 to-orange-400'
-    if (status === 'pending') return 'bg-gradient-to-r from-yellow-500 to-amber-500'
-    if (status === 'win' || status === 'converted') return 'bg-gradient-to-r from-green-500 to-emerald-500'
-    return 'bg-gradient-to-r from-blue-500 to-cyan-500'
-  }
+  const CustomerInfoBlock = () => (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 mb-4">
+      <div className="flex gap-4 flex-wrap">
+        <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-base font-bold flex-shrink-0">
+          {initials}
+        </div>
+        <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <div className="sm:col-span-2"><span className="font-semibold text-slate-500">Name</span><p className="font-medium text-slate-900 truncate">{customer.name || 'N/A'}</p></div>
+          <div><span className="font-semibold text-slate-500">Business name</span><p className="font-medium text-slate-900 truncate">{customer.business || customer.customerType || 'N/A'}</p></div>
+          <div><span className="font-semibold text-slate-500">Mobile no</span><p className="font-medium text-slate-900 flex items-center gap-1"><Phone className="h-3.5 w-3.5 text-slate-500" /> {customer.phone || 'N/A'}</p></div>
+          <div><span className="font-semibold text-slate-500">Email address</span><p className="font-medium text-slate-900 truncate flex items-center gap-1"><Mail className="h-3.5 w-3.5 text-slate-500 flex-shrink-0" /> {customer.email || 'N/A'}</p></div>
+          <div><span className="font-semibold text-slate-500">State</span><p className="font-medium text-slate-900">{customer.state || 'N/A'}</p></div>
+          <div><span className="font-semibold text-slate-500">Division</span><p className="font-medium text-slate-900">{customer.division || 'N/A'}</p></div>
+          <div><span className="font-semibold text-slate-500">Assigned salesperson</span><p className="font-medium text-slate-900 flex items-center gap-1"><User className="h-3.5 w-3.5 text-indigo-600" /> {authUser?.username || authUser?.name || '—'}</p></div>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <>
@@ -137,175 +206,118 @@ export default function CustomerDetailSidebar({
       ></div>
       
       <div
-        className={`fixed inset-y-0 right-0 h-screen w-full sm:w-[360px] lg:w-[420px] bg-white shadow-2xl z-[150] flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`fixed inset-y-0 right-0 h-full w-full sm:w-[936px] lg:w-[1092px] bg-white shadow-2xl z-[150] flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}
+        style={{ top: 0, bottom: 0 }}
       >
-        <div className="bg-slate-800 pt-6 pb-3 px-4 sm:pt-8 sm:pb-4 flex items-center justify-between flex-shrink-0 gap-2 overflow-hidden">
-          <h2 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2 min-w-0 flex-1 truncate">
-            <User className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0 text-indigo-300" />
-            <span>Customer Details</span>
-          </h2>
-          <button onClick={onClose} className="p-2 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition-colors flex-shrink-0" aria-label="Close">
-            <X className="h-4 w-4 sm:h-5 sm:w-5" />
-          </button>
+        <div className="bg-white border-b border-slate-200 px-4 py-3 flex-shrink-0 shadow-sm">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h2 className="text-base font-bold text-slate-900 truncate">Customer Details</h2>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 flex-shrink-0" aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <div className="flex gap-1 border-b border-slate-200 -mb-px flex-wrap">
+            <button type="button" onClick={() => setActiveTab(TAB.OVERVIEW)} className={tabBtn(activeTab === TAB.OVERVIEW)}>
+              <FileText className="h-3.5 w-3.5" /> Overview
+            </button>
+            <button type="button" onClick={() => setActiveTab(TAB.QUOTATIONS)} className={tabBtn(activeTab === TAB.QUOTATIONS)}>
+              <FileText className="h-3.5 w-3.5" /> Quotations {quotationCount > 0 && <span className="bg-emerald-500 text-white text-xs font-semibold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">{quotationCount}</span>}
+            </button>
+            <button type="button" onClick={() => setActiveTab(TAB.NOTES)} className={tabBtn(activeTab === TAB.NOTES)}>
+              <MessageSquare className="h-3.5 w-3.5" /> Notes {notesCount > 0 && <span className="bg-amber-500 text-white text-xs font-semibold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">{notesCount}</span>}
+            </button>
+            {(typeof renderUpdateStatusContent === 'function' || typeof onUpdateStatus === 'function') && (
+              <button type="button" onClick={() => { if (typeof renderUpdateStatusContent === 'function') { typeof onUpdateStatusTabSelect === 'function' && onUpdateStatusTabSelect(customer); setActiveTab(TAB.UPDATE_STATUS); } else onUpdateStatus?.(); }} className={tabBtn(activeTab === TAB.UPDATE_STATUS)}>
+                <Settings className="h-3.5 w-3.5" /> Enquiry
+              </button>
+            )}
+            {(typeof renderRfpContent === 'function' || typeof onPricingRfp === 'function') && (
+              <button type="button" onClick={() => { if (typeof renderRfpContent === 'function') { typeof onPricingRfpTabSelect === 'function' && onPricingRfpTabSelect(customer); setActiveTab(TAB.RFP); } else onPricingRfp?.(); }} className={tabBtn(activeTab === TAB.RFP)}>
+                <ShieldCheck className="h-3.5 w-3.5" /> Request for Price
+              </button>
+            )}
+            {(typeof renderSendEmailContent === 'function' || typeof onSendEmail === 'function') && (
+              <button type="button" onClick={() => { if (typeof renderSendEmailContent === 'function') setActiveTab(TAB.SEND_EMAIL); else onSendEmail?.(); }} className={tabBtn(activeTab === TAB.SEND_EMAIL)}>
+                <Send className="h-3.5 w-3.5" /> Send Email
+              </button>
+            )}
+            {(typeof renderDocsContent === 'function' || typeof onDocs === 'function') && (
+              <button type="button" onClick={() => { if (typeof renderDocsContent === 'function') setActiveTab(TAB.DOCS); else onDocs?.(); }} className={tabBtn(activeTab === TAB.DOCS)}>
+                <Upload className="h-3.5 w-3.5" /> Docs
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4">
-          <div className="bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 rounded-lg p-4 mb-4 border border-purple-200 shadow-sm">
-            <h3 className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 mb-3 flex items-center gap-2">
-              <User className="h-4 w-4 text-purple-600" />
-              Customer Information
-            </h3>
-            <div className="space-y-2.5 text-sm">
-              <div className="flex items-start gap-2">
-                <User className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-purple-700 text-xs">Name:</span>
-                  <span className="ml-2 text-gray-800 font-medium text-xs break-words">{customer.name || 'N/A'}</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Phone className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-blue-700 text-xs">Phone:</span>
-                  <span className="ml-2 text-gray-800 font-medium text-xs break-words">{customer.phone || 'N/A'}</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Mail className="h-4 w-4 text-pink-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-pink-700 text-xs">Email:</span>
-                  <span className="ml-2 text-gray-800 font-medium text-xs break-words">{customer.email || 'N/A'}</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Building2 className="h-4 w-4 text-indigo-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-indigo-700 text-xs">Business:</span>
-                  <span className="ml-2 text-gray-800 font-medium text-xs break-words">{customer.business || 'N/A'}</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <MapPin className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-red-700 text-xs">Address:</span>
-                  <span className="ml-2 text-gray-800 font-medium text-xs break-words">{customer.address || 'N/A'}</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Globe className="h-4 w-4 text-teal-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-teal-700 text-xs">State:</span>
-                  <span className="ml-2 text-gray-800 font-medium text-xs break-words">{customer.state || 'N/A'}</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Hash className="h-4 w-4 text-cyan-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-cyan-700 text-xs">GST No:</span>
-                  <span className="ml-2 text-gray-800 font-medium text-xs break-words">{customer.gstNo || 'N/A'}</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Tag className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-orange-700 text-xs">Type:</span>
-                  <span className="ml-2 text-gray-800 font-medium text-xs break-words">{customer.customerType || 'N/A'}</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-green-700 text-xs">Customer Created:</span>
-                  <span className="ml-2 text-gray-800 font-medium text-xs break-words">{getCustomerCreatedDate()}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          {activeTab === TAB.UPDATE_STATUS && typeof renderUpdateStatusContent === 'function' && (
+            <div className="min-h-0 overflow-y-auto">{renderUpdateStatusContent(() => setActiveTab(TAB.OVERVIEW))}</div>
+          )}
+          {activeTab === TAB.RFP && typeof renderRfpContent === 'function' && (
+            <div className="min-h-0 overflow-y-auto">{renderRfpContent(() => setActiveTab(TAB.OVERVIEW))}</div>
+          )}
+          {activeTab === TAB.SEND_EMAIL && typeof renderSendEmailContent === 'function' && (
+            <div className="min-h-0 overflow-y-auto">{renderSendEmailContent(() => setActiveTab(TAB.OVERVIEW))}</div>
+          )}
+          {activeTab === TAB.DOCS && typeof renderDocsContent === 'function' && (
+            <div className="min-h-0 overflow-y-auto">{renderDocsContent(() => setActiveTab(TAB.OVERVIEW))}</div>
+          )}
+          {activeTab === TAB.NOTES && (
+            <ReminderTab
+              leadId={leadId}
+              reminders={reminders}
+              upcomingReminders={upcomingReminders}
+              loadingReminders={loadingReminders}
+              createReminder={createReminder}
+              creatingReminder={creatingReminder}
+              completeReminder={completeReminder}
+              deleteReminder={deleteReminder}
+              Toast={Toast}
+            />
+          )}
 
-          {(orderCancelRequests?.length > 0 || loadingOrderCancel) && (
-            <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-red-50 rounded-lg p-4 mb-4 border border-amber-200 shadow-sm mt-4">
-              <h3 className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-orange-600 mb-3 flex items-center gap-2">
-                <Ban className="h-4 w-4 text-amber-600" />
-                Order Cancel Details
-              </h3>
-              {loadingOrderCancel ? (
-                <div className="text-center py-3 text-xs text-gray-600">Loading...</div>
-              ) : (
-                <div className="space-y-2">
-                  {orderCancelRequests.map((req, idx) => (
-                    <div
-                      key={req.id || idx}
-                      className="p-3 rounded-lg bg-white border border-amber-100 shadow-sm"
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="font-semibold text-gray-800 text-xs">
-                          Quotation: {req.quotation_id ? String(req.quotation_id).slice(0, 8) + '...' : 'N/A'}
-                        </span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
-                          req.status === 'approved' ? 'bg-green-100 text-green-800' :
-                          req.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                          'bg-amber-100 text-amber-800'
-                        }`}>
-                          {req.status === 'approved' ? 'Cancelled' : req.status === 'rejected' ? 'Rejected' : 'Pending'}
-                        </span>
-                      </div>
-                      {req.reason && (
-                        <p className="text-[11px] text-gray-600 mb-1"><span className="font-medium">Reason:</span> {req.reason}</p>
-                      )}
-                      <p className="text-[10px] text-gray-500">
-                        Requested: {req.created_at ? DateFormatter.formatDateTime(req.created_at) : 'N/A'}
-                        {req.approved_at && req.status === 'approved' && ` • Approved: ${DateFormatter.formatDateTime(req.approved_at)}`}
-                        {req.rejected_at && req.status === 'rejected' && ` • Rejected: ${DateFormatter.formatDateTime(req.rejected_at)}`}
-                        {req.rejection_reason && <span className="block mt-0.5 text-red-600">Rejection: {req.rejection_reason}</span>}
-                      </p>
-                    </div>
-                  ))}
+          {activeTab === TAB.OVERVIEW && (
+            <div className="space-y-4">
+              <CustomerInfoBlock />
+              {hasPending && typeof onFinalSave === 'function' && (
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <button type="button" onClick={onFinalSave} className="w-full py-2 px-3 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">Final Save</button>
                 </div>
               )}
+              {upcomingReminders.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2 mb-3"><Calendar className="h-4 w-4 text-indigo-600" /> Upcoming Activities</h3>
+                  <div className="space-y-2">
+                    {upcomingReminders.slice(0, 5).map((r) => (
+                      <ReminderCard key={r.id} reminder={r} onComplete={(rem) => completeReminder({ leadId, reminderId: rem.id })} onDelete={(rem) => deleteReminder({ leadId, reminderId: rem.id })} showCountdown />
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="px-4 py-3 border-b border-slate-200">
+                  <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-indigo-600" /> 
+                    Customer Timeline Overview
+                  </h3>
+                </div>
+                <div className="p-3 max-h-[500px] overflow-y-auto">
+                  <ActivityTimelineSimple 
+                    leadId={leadId} 
+                    onViewActivity={handleViewActivity}
+                    onDeleteActivity={handleDeleteActivity}
+                    onEditEnquiry={handleEditEnquiry}
+                  />
+                </div>
+              </div>
             </div>
           )}
 
-          {sortedFollowUps.length > 0 && (
-            <div className="bg-white rounded-lg p-4 mb-4 border border-gray-200 shadow-sm mt-4">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-indigo-600" />
-                Follow Up History
-              </h3>
-              {loadingHistory ? (
-                <div className="text-center py-4 text-xs text-gray-500">Loading...</div>
-              ) : (
-                <div className="space-y-2">
-                  {sortedFollowUps.map((followUp, idx) => (
-                    <div
-                      key={`follow-up-${followUp.id || idx}`}
-                      className="flex gap-3 p-2.5 rounded-lg border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex-shrink-0 w-10 flex flex-col items-center text-[10px] font-medium text-gray-600">
-                        <Clock className="h-3 w-3 text-indigo-500 mb-0.5" />
-                        {formatFollowUpDateTime(followUp)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {followUp.follow_up_status && (
-                            <span className="text-xs font-medium text-gray-800">{followUp.follow_up_status}</span>
-                          )}
-                          {followUp.sales_status && (
-                            <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded ${getStatusBadgeClass(followUp.sales_status)} text-white`}>
-                              {String(followUp.sales_status).toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                        {followUp.follow_up_remark && (
-                          <p className="text-[11px] text-gray-600 mt-0.5 italic">{followUp.follow_up_remark}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          
+          {activeTab === TAB.QUOTATIONS && (
+            <>
+              <CustomerInfoBlock />
           <div className="mt-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 gap-2 sm:gap-3">
               <h3 className="text-sm sm:text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 flex items-center gap-2">
@@ -326,7 +338,7 @@ export default function CustomerDetailSidebar({
             
             {quotations && quotations.length > 0 ? (
               <div className="space-y-3">
-                {quotations.filter(q => q.customerId === customer.id || !q.customerId).map((quotation, index) => {
+                {quotations.filter(q => (q.customerId || q.customer_id) === customer.id || !(q.customerId || q.customer_id)).map((quotation, index) => {
                   const pis = getPIsForQuotation(quotation.id)
                   return (
                     <div key={quotation.id || index} className="p-4 border-2 border-gray-200 rounded-lg bg-gradient-to-br from-white to-gray-50 hover:border-purple-300 hover:shadow-md transition-all duration-200 overflow-hidden">
@@ -447,6 +459,32 @@ export default function CustomerDetailSidebar({
                                   >
                                     <Eye className="h-3 w-3" />
                                   </button>
+                                  {(pi.status === 'pending_approval' || pi.status === 'pending') && piHook?.handleApprovePI && (
+                                    <>
+                                      <button
+                                        onClick={() => {
+                                          if (piHook.handleApprovePI && pi.id) {
+                                            piHook.handleApprovePI(pi.id)
+                                          }
+                                        }}
+                                        className="p-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600 rounded-lg shadow-sm transition-all duration-200"
+                                        title="Approve PI"
+                                      >
+                                        <CheckCircle className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          if (piHook.handleRejectPI && pi.id) {
+                                            piHook.handleRejectPI(pi.id)
+                                          }
+                                        }}
+                                        className="p-1 bg-gradient-to-r from-red-500 to-rose-500 text-white hover:from-red-600 hover:to-rose-600 rounded-lg shadow-sm transition-all duration-200"
+                                        title="Reject PI"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    </>
+                                  )}
                                   {pi.status !== 'approved' && pi.status !== 'pending_approval' && pi.status !== 'pending_verification' && pi.status !== 'completed' && (
                                     <button
                                       onClick={() => {
@@ -488,26 +526,55 @@ export default function CustomerDetailSidebar({
               </div>
             )}
           </div>
+          </>
+          )}
         </div>
 
-        <div className="p-3 sm:p-4 border-t-2 border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100 flex flex-col sm:flex-row justify-end gap-2 sm:gap-2 flex-shrink-0 overflow-hidden">
-          <button 
-            onClick={() => {
-              onEdit()
-              onClose()
-            }} 
-            className="px-3 sm:px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 text-sm sm:text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-200 w-full sm:w-auto"
-          >
-            Edit Customer
-          </button>
-          <button 
-            onClick={onClose} 
-            className="px-3 sm:px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm sm:text-base font-semibold transition-all duration-200 w-full sm:w-auto"
-          >
+        <div className="p-3 sm:p-4 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-end gap-2 flex-shrink-0">
+          <button onClick={onClose} className="px-3 sm:px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-semibold transition-colors">
             Close
+          </button>
+          <button onClick={() => { onEdit(); onClose(); }} className="px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-semibold transition-colors">
+            Edit Customer
           </button>
         </div>
       </div>
+
+      {viewingEmail && (
+        <div className="fixed inset-0 bg-black/50 z-[160] flex items-center justify-center p-4" onClick={() => setViewingEmail(null)}>
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2"><Send className="h-4 w-4 text-indigo-600" /> Email</h3>
+              <button type="button" onClick={() => setViewingEmail(null)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700" aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1 text-sm space-y-3">
+              {(() => {
+                let payload = viewingEmail.payload
+                if (typeof payload === 'string') {
+                  try { payload = JSON.parse(payload || '{}'); } catch (_) { payload = {}; }
+                }
+                payload = payload || {}
+                const to = Array.isArray(payload.to) ? payload.to.join(', ') : (payload.to || '—')
+                const subject = payload.subject || '—'
+                const text = payload.text || payload.body || payload.html || ''
+                return (
+                  <>
+                    <div><span className="font-semibold text-slate-500">From:</span> <span className="text-slate-800">{viewingEmail.sentBy || viewingEmail.sent_by || '—'}</span></div>
+                    <div><span className="font-semibold text-slate-500">To:</span> <span className="text-slate-800">{to}</span></div>
+                    <div><span className="font-semibold text-slate-500">Subject:</span> <span className="text-slate-800">{subject}</span></div>
+                    {text && <div className="pt-2 border-t border-slate-100"><span className="font-semibold text-slate-500 block mb-1">Body:</span><div className="text-slate-700 whitespace-pre-wrap break-words">{typeof text === 'string' && text.includes('<') ? <span dangerouslySetInnerHTML={{ __html: text }} /> : text}</div></div>}
+                  </>
+                )
+              })()}
+            </div>
+            <div className="p-3 border-t border-slate-200 flex justify-end">
+              <button type="button" onClick={() => setViewingEmail(null)} className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm font-medium">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

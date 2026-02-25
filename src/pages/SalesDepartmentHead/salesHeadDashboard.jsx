@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react"
 import quotationService from '../../api/admin_api/quotationService'
 import paymentService from '../../api/admin_api/paymentService'
 import proformaInvoiceService from '../../api/admin_api/proformaInvoiceService'
-import departmentUserService from '../../api/admin_api/departmentUserService'
+import departmentUsersApi from '../../api/admin_api/departmentUsersApi'
 import departmentHeadService from '../../api/admin_api/departmentHeadService'
 import { useAuth } from '../../hooks/useAuth'
 import salesDataService from '../../services/SalesDataService'
@@ -563,7 +563,7 @@ const SalesHeadDashboard = ({ setActiveView, isDarkMode = false }) => {
         return []
       }
       
-      const usersResponse = await departmentUserService.getByHeadId(user.id)
+      const usersResponse = await departmentUsersApi.getByHeadId(user.id)
       // Handle different response structures - check data.users first (nested structure)
       let users = []
       if (usersResponse?.data?.users && Array.isArray(usersResponse.data.users)) {

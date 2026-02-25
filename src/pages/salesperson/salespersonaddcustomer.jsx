@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { X, User, Phone, MessageCircle, Mail, Building2, FileText, MapPin, Globe, Package, UserPlus } from "lucide-react"
-import departmentUserService from "../../api/admin_api/departmentUserService"
+import departmentUsersApi from "../../api/admin_api/departmentUsersApi"
 import apiClient from "../../utils/apiClient"
 import { API_ENDPOINTS } from "../../api/admin_api/api"
 import { findIndiaStateByName, getIndiaDivisionsForStateIso, getIndiaStates } from "../../utils/indiaLocation"
@@ -27,6 +27,9 @@ export default function AddCustomerForm({ onClose, onSave, editingCustomer }) {
   const [salespersons, setSalespersons] = useState([])
   const [loadingSalespersons, setLoadingSalespersons] = useState(false)
   
+  const CUSTOMER_TYPE_OPTIONS = ['trader', 'contractor', 'shopkeeper', 'manufacturer', 'other']
+  const LEAD_SOURCE_OPTIONS = ['facebook', 'instagram', 'office market', 'linkedin', 'india mart', 'tradeindia', 'justdial']
+
   const [formData, setFormData] = useState({
     customerName: editingCustomer?.name || "",
     mobileNumber: editingCustomer?.phone || "",
@@ -37,14 +40,18 @@ export default function AddCustomerForm({ onClose, onSave, editingCustomer }) {
     gstNumber: editingCustomer?.gstNo === "N/A" ? "" : editingCustomer?.gstNo || "",
     address: editingCustomer?.address || "",
     state: editingCustomer?.state === "N/A" ? "" : (editingCustomer?.state || ""),
-    customerType: editingCustomer?.customerType || "",
-    leadSource: editingCustomer?.enquiryBy || "",
-    salesStatus: editingCustomer?.salesStatus || '',
-    salesStatusRemark: editingCustomer?.salesStatusRemark || '',
-    followUpStatus: editingCustomer?.followUpStatus || '',
-    followUpRemark: editingCustomer?.followUpRemark || '',
-    followUpDate: editingCustomer?.followUpDate || '',
-    followUpTime: editingCustomer?.followUpTime || '',
+    customerType: (() => {
+      const ct = (editingCustomer?.customerType || "").toLowerCase().trim()
+      return CUSTOMER_TYPE_OPTIONS.includes(ct) ? ct : (ct ? "other" : "")
+    })(),
+    customerTypeOther: (() => {
+      const ct = (editingCustomer?.customerType || "").trim()
+      return CUSTOMER_TYPE_OPTIONS.includes(ct.toLowerCase()) ? "" : ct
+    })(),
+    leadSource: (() => {
+      const ls = (editingCustomer?.enquiryBy || "").toLowerCase().trim().replace(/\s+/g, " ")
+      return LEAD_SOURCE_OPTIONS.includes(ls) ? ls : ""
+    })(),
     callDurationSeconds: editingCustomer?.callDurationSeconds || '',
     callRecordingFile: null,
     transferredTo: editingCustomer?.transferredTo || '',
@@ -103,8 +110,8 @@ export default function AddCustomerForm({ onClose, onSave, editingCustomer }) {
         // If still missing headUserId, attempt to fetch the current user record
         if (!headUserId) {
           try {
-            const currentUserRes = await departmentUserService.listUsers({ page: 1, limit: 1 })
-            const currentUserPayload = currentUserRes?.data || currentUserRes
+            const currentUserRes = await departmentUsersApi.listUsers({ page: 1, limit: 1 })
+            const currentUserPayload = currentUserRes?.users ? currentUserRes : (currentUserRes?.data || currentUserRes)
             const currentUser = (currentUserPayload.users || [])[0]
             if (currentUser) {
               headUserId = currentUser.head_user_id || currentUser.headUserId || headUserId
@@ -120,37 +127,19 @@ export default function AddCustomerForm({ onClose, onSave, editingCustomer }) {
         // If we have headUserId, use getByHeadId to get all users under that head
         if (headUserId) {
           try {
-            const res = await departmentUserService.getByHeadId(headUserId)
-            
-            // Handle different response structures for getByHeadId
-            if (res?.data?.users && Array.isArray(res.data.users)) {
-              users = res.data.users
-            } else if (Array.isArray(res?.data)) {
-              users = res.data
-            } else if (Array.isArray(res)) {
-              users = res
-            } else if (res?.success && res.data?.users && Array.isArray(res.data.users)) {
-              users = res.data.users
-            } else if (res?.success && Array.isArray(res.data)) {
-              users = res.data
-            } else if (res?.users && Array.isArray(res.users)) {
-              users = res.users
-            }
-            
-            // fetched users by head ID
+            const res = await departmentUsersApi.getByHeadId(headUserId)
+            users = res?.users ?? []
           } catch (headErr) {
             try {
-              const res = await departmentUserService.listUsers({ page: 1, limit: 1000 })
-              const payload = res?.data || res
-              users = payload.users || []
+              const res = await departmentUsersApi.listUsers({ page: 1, limit: 1000 })
+              users = res?.users ?? []
             } catch (listErr) {
             }
           }
         } else {
           try {
-            const res = await departmentUserService.listUsers({ page: 1, limit: 1000 })
-            const payload = res?.data || res
-            users = payload.users || []
+            const res = await departmentUsersApi.listUsers({ page: 1, limit: 1000 })
+            users = res?.users ?? []
           } catch (listErr) {
           }
         }
@@ -214,20 +203,27 @@ export default function AddCustomerForm({ onClose, onSave, editingCustomer }) {
       return
     }
     
-    onSave(formData)
+    const payload = {
+      ...formData,
+      customerType: formData.customerType === 'other' ? (formData.customerTypeOther?.trim() || 'other') : formData.customerType,
+    }
+    onSave(payload)
   }
 
   return (
-    <div 
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[110] p-4" 
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          onClose();
-        }
-      }}
-    >
-      <Card className="w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 border-b bg-gradient-to-r from-blue-50 to-purple-50">
+    <>
+      <div
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[110] transition-opacity duration-300"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-[120] flex flex-col overflow-hidden"
+        style={{ animation: 'slideInRight 0.3s ease-out' }}
+      >
+        <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+        <Card className="flex-1 overflow-hidden flex flex-col rounded-none border-0 shadow-none">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 border-b bg-gradient-to-r from-blue-50 to-purple-50 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
               <UserPlus className="h-6 w-6 text-white" />
@@ -415,13 +411,25 @@ export default function AddCustomerForm({ onClose, onSave, editingCustomer }) {
                   <User className="h-4 w-4 text-purple-500" />
                   Customer Type
                 </label>
-                <input
-                  type="text"
+                <select
                   value={formData.customerType}
                   onChange={(e) => handleInputChange("customerType", e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter customer type"
-                />
+                >
+                  <option value="">Select customer type</option>
+                  {CUSTOMER_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{opt.charAt(0).toUpperCase() + opt.slice(1)}</option>
+                  ))}
+                </select>
+                {formData.customerType === 'other' && (
+                  <input
+                    type="text"
+                    value={formData.customerTypeOther}
+                    onChange={(e) => handleInputChange("customerTypeOther", e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-2"
+                    placeholder="Other (specify)"
+                  />
+                )}
               </div>
 
               <div className="space-y-2">
@@ -429,13 +437,16 @@ export default function AddCustomerForm({ onClose, onSave, editingCustomer }) {
                   <Globe className="h-4 w-4 text-orange-500" />
                   Lead Source
                 </label>
-                <input
-                  type="text"
+                <select
                   value={formData.leadSource}
                   onChange={(e) => handleInputChange("leadSource", e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter lead source"
-                />
+                >
+                  <option value="">Select lead source</option>
+                  {LEAD_SOURCE_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{opt.charAt(0).toUpperCase() + opt.slice(1)}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="space-y-2">
@@ -454,69 +465,6 @@ export default function AddCustomerForm({ onClose, onSave, editingCustomer }) {
                 <p className="text-xs text-gray-500">Date is auto-detected</p>
               </div>
             </div>
-
-            {/* Follow Up + Sales Status */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <User className="h-4 w-4 text-amber-600" />
-                  Follow Up Status
-                </label>
-                <select
-                  value={formData.followUpStatus}
-                  onChange={(e) => handleInputChange('followUpStatus', e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Select Follow Up Status</option>
-                  <option value="Appointment Scheduled">Appointment Scheduled</option>
-                  <option value="Next Meeting">Next Meeting</option>
-                  <option value="Not Interested">Not Interested</option>
-                  <option value="Interested">Interested</option>
-                  <option value="Quotation Sent">Quotation Sent</option>
-                  <option value="Negotiation">Negotiation</option>
-                  <option value="Close Order">Close Order</option>
-                  <option value="Closed/Lost">Closed/Lost</option>
-                  <option value="Call Back Request">Call Back Request</option>
-                  <option value="Unreachable/Call Not Connected">Unreachable/Call Not Connected</option>
-                  <option value="Currently Not Required">Currently Not Required</option>
-                  <option value="Not Relevant">Not Relevant</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <User className="h-4 w-4 text-blue-600" />
-                  Sales Status
-                </label>
-                <select
-                  value={formData.salesStatus}
-                  onChange={(e) => handleInputChange("salesStatus", e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Select Lead Status</option>
-                  <option value="pending">Pending</option>
-                  <option value="running">Running</option>
-                  <option value="converted">Converted</option>
-                  <option value="interested">Interested</option>
-                  <option value="loose">Loose</option>
-                  <option value="win/closed">Win/Closed</option>
-                  <option value="lost">Lost</option>
-                  <option value="closed">Closed</option>
-                </select>
-              </div>
-
-              {/* Sales Status Remark */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Sales Status Remark</label>
-                <textarea
-                  value={formData.salesStatusRemark}
-                  onChange={(e) => handleInputChange("salesStatusRemark", e.target.value)}
-                  rows={2}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  placeholder="Enter remark for sales status"
-                />
-              </div>
-            </div>
-
 
             {/* Transfer Lead field */}
             <div className="space-y-2">
@@ -556,6 +504,7 @@ export default function AddCustomerForm({ onClose, onSave, editingCustomer }) {
           </form>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </>
   )
 }

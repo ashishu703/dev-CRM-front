@@ -6,7 +6,7 @@ import apiClient from '../utils/apiClient';
 import { API_ENDPOINTS } from '../api/admin_api/api';
 import Toast from '../utils/Toast';
 
-const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate }) => {
+const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => {
   const { logout } = useAuth();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -221,9 +221,26 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate }) => {
     await logout();
   };
 
+  const modalPositionStyle = anchorRect && typeof window !== 'undefined'
+    ? (() => {
+        const centerX = anchorRect.left + anchorRect.width / 2;
+        const halfModal = 224;
+        const clampedX = Math.max(16 + halfModal, Math.min(centerX, window.innerWidth - 16 - halfModal));
+        return {
+          position: 'fixed',
+          top: anchorRect.bottom + 8,
+          left: clampedX,
+          transform: 'translateX(-50%)',
+        };
+      })()
+    : undefined;
+
   const modalContent = (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[99999] overflow-y-auto p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col">
+    <div className={`fixed inset-0 bg-black/50 flex items-start justify-center z-[99999] overflow-y-auto p-4 ${!anchorRect ? 'pt-24 sm:pt-28' : ''}`}>
+      <div
+        className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col"
+        style={modalPositionStyle}
+      >
         <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 p-3 flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">

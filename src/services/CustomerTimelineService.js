@@ -3,6 +3,7 @@ import { API_ENDPOINTS } from '../api/admin_api/api';
 import quotationService from '../api/admin_api/quotationService';
 import proformaInvoiceService from '../api/admin_api/proformaInvoiceService';
 import DateFormatter from '../utils/DateFormatter';
+import ReportsService from './ReportsService';
 
 /**
  * Service class for fetching and aggregating customer timeline data.
@@ -22,10 +23,11 @@ class CustomerTimelineService {
   async getTimelineData(leadId) {
     try {
       // Fetch all data in parallel where possible
-      const [historyRes, quotationsRes, leadRes] = await Promise.allSettled([
+      const [historyRes, quotationsRes, leadRes, ledgerRes] = await Promise.allSettled([
         apiClient.get(API_ENDPOINTS.SALESPERSON_LEAD_HISTORY(leadId)),
         quotationService.getQuotationsByCustomer(leadId),
-        apiClient.get(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(leadId)).catch(() => ({ status: 'rejected' }))
+        apiClient.get(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(leadId)).catch(() => ({ status: 'rejected' })),
+        ReportsService.getCustomerLedger(leadId)
       ]);
 
       const history = historyRes.status === 'fulfilled' 
@@ -47,6 +49,10 @@ class CustomerTimelineService {
         transferredAt: leadData.transferred_at || leadData.transferredAt || null,
         transferReason: leadData.transfer_reason || leadData.transferReason || null
       };
+
+      const ledgerPayload = ledgerRes.status === 'fulfilled' ? ledgerRes.value : null;
+      const customerLedger = ledgerPayload?.data?.ledger || [];
+      const customerFinalBalance = ledgerPayload?.data?.final_balance ?? null;
 
       // Fetch PIs for all quotations
       const pisByQuotationId = {};
@@ -162,6 +168,8 @@ class CustomerTimelineService {
           new Date(b.payment_date || 0) - new Date(a.payment_date || 0)
         ),
         paymentSummary,
+        customerLedger,
+        customerFinalBalance,
         transferInfo,
         cancelRequests
       };

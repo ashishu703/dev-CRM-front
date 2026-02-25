@@ -192,12 +192,10 @@ export default function AcsrCalculator({ setActiveView, rates: externalRates, on
     }
 
     try {
-      // Calculate weights using your specified formulas
       const aluminiumWeight = sizeAluminium * sizeAluminium * 0.785 * noOfWiresAluminium * 1.02 * 2.703;
       const steelWeight = sizeSteel * sizeSteel * 0.785 * noOfWiresSteel * 1.02 * 7.9;
       const totalWeight = aluminiumWeight + steelWeight;
 
-      // Calculate costs using your specified formulas
       const aluminiumCgRate = parseFloat(rates.aluminium_cg_grade) || 0
       const aluminiumEcRate = parseFloat(rates.aluminium_ec_grade) || 0
       const steelRate = parseFloat(rates.steel_rate) || 0

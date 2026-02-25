@@ -1,19 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  ChevronDown, 
-  ChevronRight, 
-  BarChart3, 
-  Users, 
-  Building2, 
-  UserCheck, 
-  Settings, 
+import {
+  ChevronDown,
+  ChevronRight,
+  BarChart3,
+  Users,
+  Building2,
+  UserCheck,
+  Settings,
   TrendingUp,
   Menu,
   X,
   Calendar,
   HelpCircle,
   PlusCircle,
-  FileText
+  FileText,
+  Wrench,
 } from 'lucide-react';
 
 const Sidebar = ({ onLogout, activeView, setActiveView }) => {
@@ -126,7 +127,13 @@ const Sidebar = ({ onLogout, activeView, setActiveView }) => {
       label: 'Reports',
       icon: <FileText className="w-5 h-5" />,
       hasDropdown: false
-    }
+    },
+    {
+      id: 'toolbox',
+      label: 'Toolbox Interface',
+      icon: <Wrench className="w-5 h-5" />,
+      hasDropdown: false
+    },
   ];
 
   // Debug: Log the sidebar items structure

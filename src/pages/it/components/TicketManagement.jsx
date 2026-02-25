@@ -4,7 +4,7 @@ import TicketPreviewSidebar from './TicketPreviewSidebar';
 import TicketEditModal from './TicketEditModal';
 import apiClient from '../../../utils/apiClient';
 import { API_ENDPOINTS } from '../../../api/admin_api/api';
-import departmentUsersService from '../../../api/admin_api/departmentUsersService';
+import departmentUsersApi from '../../../api/admin_api/departmentUsersApi';
 import toastManager from '../../../utils/ToastManager';
 
 const PRIORITIES = ['low', 'medium', 'high', 'critical'];
@@ -69,7 +69,7 @@ const TicketManagement = () => {
   const fetchItUsers = useCallback(async () => {
     try {
       setLoadingUsers(true);
-      const response = await departmentUsersService.listUsers({ 
+      const response = await departmentUsersApi.listUsers({ 
         page: 1, 
         limit: 100,
         departmentType: 'it',

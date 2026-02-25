@@ -5,141 +5,65 @@ import { apiClient, API_ENDPOINTS } from '../utils/globalImports';
 const ImportPreviewModal = ({ isOpen, onClose, importPreview, importing, onImport }) => {
   const [duplicateMap, setDuplicateMap] = useState(new Map());
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
-  const [existingPhones, setExistingPhones] = useState(new Set());
 
-  // Normalize phone number (extract last 10 digits)
   const normalizePhone = (phone) => {
     if (!phone) return null;
     const digits = String(phone).replace(/\D/g, '');
     return digits.length >= 10 ? digits.slice(-10) : null;
   };
 
-  // Check for duplicates when modal opens
   useEffect(() => {
     if (!isOpen || importPreview.length === 0) {
       setDuplicateMap(new Map());
-      setExistingPhones(new Set());
       return;
     }
 
     const checkDuplicates = async () => {
       setCheckingDuplicates(true);
       try {
-        // Load existing phone numbers from API
         const existingPhonesSet = new Set();
-        let page = 1;
-        const limit = 200;
-        let hasMore = true;
-        let totalLoaded = 0;
-
-        console.log('[Duplicate Check] Starting to load existing phones...');
-
-        while (hasMore && page <= 50) { // Limit to 50 pages to prevent infinite loops
-          try {
-            const queryString = `page=${page}&limit=${limit}`;
-            const endpoint = API_ENDPOINTS.LEADS_LIST(queryString);
-            console.log(`[Duplicate Check] Calling API: ${endpoint}`);
-            const response = await apiClient.get(endpoint);
-            
-            console.log(`[Duplicate Check] Page ${page} response structure:`, {
-              hasResponse: !!response,
-              hasData: !!response?.data,
-              dataType: Array.isArray(response?.data) ? 'array' : typeof response?.data,
-              dataLength: Array.isArray(response?.data) ? response.data.length : 'N/A',
-              hasPagination: !!response?.pagination,
-              pagination: response?.pagination,
-              responseKeys: response ? Object.keys(response) : []
-            });
-            
-            // Handle different response structures
-            let leadsData = null;
-            if (Array.isArray(response?.data)) {
-              leadsData = response.data;
-            } else if (response?.data?.data && Array.isArray(response.data.data)) {
-              leadsData = response.data.data;
-            } else if (response?.data?.leads && Array.isArray(response.data.leads)) {
-              leadsData = response.data.leads;
-            }
-            
-            if (leadsData && Array.isArray(leadsData) && leadsData.length > 0) {
-              leadsData.forEach(lead => {
-                const phone = lead.phone || lead.mobileNumber || lead.mobile || '';
-                if (phone) {
-                  const normalized = normalizePhone(phone);
-                  if (normalized) {
-                    existingPhonesSet.add(normalized);
-                  }
-                }
-              });
-
-              totalLoaded += leadsData.length;
-              const total = response?.pagination?.total || response?.data?.pagination?.total || response?.total || leadsData.length;
-              const currentCount = page * limit;
-              
-              console.log(`[Duplicate Check] Loaded ${totalLoaded} leads (${leadsData.length} this page), total: ${total}`);
-              
-              hasMore = currentCount < total && leadsData.length === limit;
-              page++;
-            } else {
-              console.warn('[Duplicate Check] No valid data found in response. Stopping pagination.');
-              console.warn('[Duplicate Check] Response sample:', JSON.stringify(response).substring(0, 500));
-              hasMore = false;
-            }
-          } catch (error) {
-            console.error(`[Duplicate Check] Error loading page ${page}:`, error);
-            console.error('Error details:', error.response?.data || error.message);
-            hasMore = false;
+        
+        console.log('[DUPLICATE CHECK] Calling API:', API_ENDPOINTS.LEADS_ALL_PHONES());
+        const response = await apiClient.get(API_ENDPOINTS.LEADS_ALL_PHONES());
+        const phones = response?.data || [];
+        console.log('[DUPLICATE CHECK] Received phones count:', phones.length);
+        
+        phones.forEach(phone => {
+          if (phone) {
+            const normalized = normalizePhone(phone);
+            if (normalized) existingPhonesSet.add(normalized);
           }
-        }
+        });
+        
+        console.log('[DUPLICATE CHECK] Total unique phones in DB:', existingPhonesSet.size);
 
-        console.log(`[Duplicate Check] Total existing phones loaded: ${existingPhonesSet.size}`);
-        console.log(`[Duplicate Check] Sample existing phones (first 5):`, Array.from(existingPhonesSet).slice(0, 5));
-        setExistingPhones(existingPhonesSet);
-
-        // Check for duplicates in import preview
         const duplicateMapNew = new Map();
-        const seenInPreview = new Map(); // Map to track first occurrence index
-        let previewPhones = [];
+        const seenInPreview = new Map();
 
         importPreview.forEach((row, index) => {
           const phone = row['Mobile Number'] || row['mobile number'] || row.Phone || row.phone || '';
           const normalizedPhone = normalizePhone(phone);
           
           if (normalizedPhone) {
-            previewPhones.push({ index, original: phone, normalized: normalizedPhone });
-            
-            // Check if duplicate within preview
             if (seenInPreview.has(normalizedPhone)) {
               const firstIndex = seenInPreview.get(normalizedPhone);
               duplicateMapNew.set(index, { type: 'preview', phone: normalizedPhone, firstIndex });
-              console.log(`[Duplicate Check] Row ${index + 1}: Duplicate in file (first at row ${firstIndex + 1})`);
-              // Also mark the first occurrence if not already marked
               if (!duplicateMapNew.has(firstIndex)) {
                 duplicateMapNew.set(firstIndex, { type: 'preview', phone: normalizedPhone, firstIndex: firstIndex });
               }
             } else {
               seenInPreview.set(normalizedPhone, index);
-              // Check if exists in database
               if (existingPhonesSet.has(normalizedPhone)) {
                 duplicateMapNew.set(index, { type: 'existing', phone: normalizedPhone });
-                console.log(`[Duplicate Check] Row ${index + 1}: Phone ${normalizedPhone} already exists in database`);
               }
             }
-          } else {
-            console.log(`[Duplicate Check] Row ${index + 1}: Invalid or missing phone number: "${phone}"`);
           }
         });
 
-        console.log(`[Duplicate Check] Preview phones (first 5):`, previewPhones.slice(0, 5));
-        console.log(`[Duplicate Check] Found ${duplicateMapNew.size} duplicates in preview`);
-        console.log(`[Duplicate Check] Duplicate details:`, Array.from(duplicateMapNew.entries()).slice(0, 5));
+        console.log('[DUPLICATE CHECK] Found duplicates:', duplicateMapNew.size);
         setDuplicateMap(duplicateMapNew);
       } catch (error) {
-        console.error('[Duplicate Check] Fatal error:', error);
-        console.error('Error stack:', error.stack);
-        
-        // Fallback: At least check for duplicates within preview file
-        console.log('[Duplicate Check] Falling back to preview-only duplicate check');
+        console.error('[DUPLICATE CHECK] Error:', error);
         const duplicateMapNew = new Map();
         const seenInPreview = new Map();
         
@@ -220,7 +144,9 @@ const ImportPreviewModal = ({ isOpen, onClose, importPreview, importing, onImpor
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">New Records</p>
-                  <p className="text-lg sm:text-xl font-bold text-gray-900">{newRecordsCount}</p>
+                  <p className="text-lg sm:text-xl font-bold text-gray-900">
+                    {checkingDuplicates ? '...' : newRecordsCount}
+                  </p>
                 </div>
               </div>
             </div>

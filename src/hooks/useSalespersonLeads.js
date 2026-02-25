@@ -4,8 +4,18 @@ import Toast from '../utils/Toast'
 import { getDisplayPriority, getDisplayScore, getSalesWeight } from '../utils/leadPriorityUtils'
 import { mapApiRowToLead } from '../utils/leadMapping'
 
-export function useSalespersonLeads(initialCustomers = []) {
+function isNoFollowUp(c) {
+  const s = (c.followUpStatus || c.follow_up_status || '').toString().trim();
+  return !s || s.toLowerCase() === 'n/a';
+}
+
+export function useSalespersonLeads(initialCustomers = [], filterNewLeadsOnly = false) {
   const [customers, setCustomers] = useState(initialCustomers)
+  const baseCustomers = initialCustomers.length ? initialCustomers : customers;
+  const effectiveCustomers = useMemo(
+    () => (filterNewLeadsOnly ? baseCustomers.filter(isNoFollowUp) : baseCustomers),
+    [filterNewLeadsOnly, baseCustomers]
+  );
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [selectedTag, setSelectedTag] = useState('all')
@@ -45,12 +55,12 @@ export function useSalespersonLeads(initialCustomers = []) {
   }, [searchQuery]);
 
   const tags = useMemo(() => {
-    const uniqueTypes = [...new Set(customers.map(c => {
+    const uniqueTypes = [...new Set(effectiveCustomers.map(c => {
       const type = c.customerType
       return type && type !== 'N/A' ? type.toLowerCase() : null
     }).filter(Boolean))]
     return uniqueTypes.sort()
-  }, [customers])
+  }, [effectiveCustomers])
 
   const getUniqueFilterOptions = useMemo(() => {
     const cleanValue = (value) => {
@@ -60,7 +70,7 @@ export function useSalespersonLeads(initialCustomers = []) {
     }
 
     const allProductValues = []
-    customers.forEach((c) => {
+    effectiveCustomers.forEach((c) => {
       let product = c.productName || c.product_type || c.productType || c.product_name || ''
       if (Array.isArray(product)) {
         product = product.filter(p => p && String(p).trim() !== '').join(', ')
@@ -74,7 +84,7 @@ export function useSalespersonLeads(initialCustomers = []) {
     })
     const uniqueProducts = [...new Set(allProductValues)].sort()
 
-    const allSalesStatuses = customers.map(c => {
+    const allSalesStatuses = effectiveCustomers.map(c => {
       const status = c.salesStatus || ''
       const trimmed = String(status).trim()
       if (trimmed && trimmed !== '' && trimmed.toLowerCase() !== 'null') return trimmed
@@ -85,17 +95,17 @@ export function useSalespersonLeads(initialCustomers = []) {
     if (!uniqueSalesStatuses.includes('N/A')) uniqueSalesStatuses.push('N/A')
     
     return {
-      tags: [...new Set(customers.map(c => {
+      tags: [...new Set(effectiveCustomers.map(c => {
         const type = c.customerType
         return type && type !== 'N/A' ? type.toLowerCase() : null
       }).filter(Boolean))].sort(),
-      followUpStatuses: [...new Set(customers.map(c => cleanValue(c.followUpStatus)).filter(Boolean))].sort(),
+      followUpStatuses: [...new Set(effectiveCustomers.map(c => cleanValue(c.followUpStatus)).filter(Boolean))].sort(),
       salesStatuses: uniqueSalesStatuses.sort(),
-      states: [...new Set(customers.map(c => cleanValue(c.state)).filter(Boolean))].sort(),
-      leadSources: [...new Set(customers.map(c => cleanValue(c.enquiryBy)).filter(Boolean))].sort(),
+      states: [...new Set(effectiveCustomers.map(c => cleanValue(c.state)).filter(Boolean))].sort(),
+      leadSources: [...new Set(effectiveCustomers.map(c => cleanValue(c.enquiryBy)).filter(Boolean))].sort(),
       products: uniqueProducts
     }
-  }, [customers])
+  }, [effectiveCustomers])
 
   const todayLocal = useMemo(() => {
     const d = new Date()
@@ -103,7 +113,7 @@ export function useSalespersonLeads(initialCustomers = []) {
   }, [])
 
   const filteredCustomers = useMemo(() => {
-    let filtered = customers
+    let filtered = effectiveCustomers
     if (filterCreatedToday) {
       filtered = filtered.filter(c => {
         const created = c.created_at || c.date || ''
@@ -196,7 +206,7 @@ export function useSalespersonLeads(initialCustomers = []) {
     })
 
     return filtered
-  }, [customers, debouncedSearchQuery, selectedTag, filters, advancedFilters, enabledFilters, sortBy, sortOrder, filterCreatedToday, todayLocal])
+  }, [effectiveCustomers, debouncedSearchQuery, selectedTag, filters, advancedFilters, enabledFilters, sortBy, sortOrder, filterCreatedToday, todayLocal])
 
   const paginatedCustomers = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage

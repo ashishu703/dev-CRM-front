@@ -2,19 +2,59 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 
-/* Custom styles */
+/* ========== ENTERPRISE CRM DESIGN TOKENS (Slate + Enterprise Blue) ========== */
 :root {
-  --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-  --warning-gradient: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-  --sidebar-bg: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-  --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --card-shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  /* Primary & semantic */
+  --primary-600: #2563EB;
+  --primary-500: #3B82F6;
+  --success-500: #10B981;
+  --success-600: #059669;
+  --warning-500: #F59E0B;
+  --warning-600: #D97706;
+  --danger-500: #EF4444;
+  --danger-600: #DC2626;
+
+  /* Surfaces – max 2 background surfaces */
+  --bg-page: #F8FAFC;
+  --bg-card: #FFFFFF;
+  --surface-primary: #FFFFFF;
+  --surface-secondary: #F8FAFC;
+
+  /* Border */
+  --border: #E2E8F0;
+  --border-hover: #CBD5E1;
+
+  /* Text – WCAG-friendly contrast */
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #64748B;
+
+  /* Sidebar (Slate + Enterprise Blue) */
+  --sidebar-bg: #0F172A;
+  --sidebar-hover: #1E293B;
+  --sidebar-active: #2563EB;
+  --sidebar-text: #CBD5E1;
+  --sidebar-text-muted: #94A3B8;
+
+  /* Radius scale */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  /* 8px-based spacing */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 40px;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 
 * {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 body {
@@ -24,7 +64,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background: var(--bg-page);
   background-attachment: fixed;
 }
 
@@ -33,11 +73,158 @@ code {
     monospace;
 }
 
-/* Professional CRM Typography */
+/* Professional CRM Typography – single font (Inter) */
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Poppins', 'Inter', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-weight: 600;
   letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+/* Sales Intelligence Dashboard - premium background */
+.dashboard-bg {
+  background-color: #0F172A;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(79, 70, 229, 0.2), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 100% 60%, rgba(59, 130, 246, 0.12), transparent 45%),
+    radial-gradient(ellipse 50% 30% at 0% 80%, rgba(79, 70, 229, 0.1), transparent 45%);
+  min-height: 100%;
+}
+
+/* Sales Intelligence Dashboard - design system */
+.dashboard-card {
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  box-shadow: 0 0 40px rgba(99, 102, 241, 0.15);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.dashboard-card:hover {
+  box-shadow: 0 0 40px rgba(99, 102, 241, 0.2);
+}
+
+/* Urgent item subtle pulse */
+@keyframes urgency-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); }
+  50% { opacity: 0.95; box-shadow: 0 0 28px rgba(239, 68, 68, 0.45); }
+}
+.urgency-glow {
+  animation: urgency-pulse 2.5s ease-in-out infinite;
+}
+
+/* Salesperson dashboard – enterprise: white cards only, no pastel backgrounds */
+.salesperson-dashboard-bg {
+  background: var(--bg-page);
+  min-height: 100%;
+}
+.salesperson-dashboard-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  height: fit-content;
+  width: 100%;
+}
+.salesperson-dashboard-card:hover {
+  box-shadow: var(--shadow-card-hover);
+  border-color: var(--border-hover);
+}
+
+/* Neutral card header – no tinted backgrounds */
+.dashboard-card-header {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-secondary);
+}
+.dashboard-card-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+.dashboard-card-header p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 4px 0 0 0;
+}
+
+/* Single dominant row: KPI summary (only 1 dominant row) */
+.dashboard-kpi-row {
+  padding: var(--space-2) 0;
+}
+.dashboard-kpi-row .section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+.dashboard-kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.dashboard-kpi-card:hover {
+  box-shadow: var(--shadow-card-hover);
+  border-color: var(--border-hover);
+}
+/* Accent: left border only (no full background tint) */
+.dashboard-kpi-card-accent-primary { border-left: 4px solid var(--primary-600); }
+.dashboard-kpi-card-accent-success { border-left: 4px solid var(--success-500); }
+.dashboard-kpi-card-accent-warning { border-left: 4px solid var(--warning-500); }
+.dashboard-kpi-card-accent-neutral { border-left: 4px solid var(--border-hover); }
+
+/* Layout: strict 8px spacing */
+.dashboard-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.dashboard-section-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-auto-rows: auto;
+  align-items: start;
+  gap: var(--space-4);
+}
+.dashboard-section-row > * {
+  align-self: start;
+}
+@media (min-width: 1024px) {
+  .dashboard-section-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.dashboard-container {
+  padding: var(--space-4);
+}
+.section {
+  margin-bottom: var(--space-4);
+}
+.card-inner-padding {
+  padding: var(--space-3);
+}
+
+/* Standard button – component kit */
+.btn-primary {
+  background: var(--primary-600);
+  color: white;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  font-weight: 600;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.btn-primary:hover {
+  background: #1D4ED8;
 }
 
 /* Smooth scrolling */
@@ -52,17 +239,17 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 10px;
+  background: var(--surface-secondary);
+  border-radius: var(--radius-sm);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 10px;
+  background: var(--border-hover);
+  border-radius: var(--radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  background: #94A3B8;
 }
 
 /* Lightweight view-switch animations */

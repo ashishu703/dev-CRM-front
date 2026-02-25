@@ -1,12 +1,14 @@
 import { TrendingUp, CheckCircle, Clock, CreditCard, UserPlus, CalendarCheck, ArrowUp, XCircle, PhoneOff, Target, BarChart3, PieChart as PieChartIcon, Activity, Award, TrendingDown, ArrowRightLeft, Calendar, FileText, FileCheck, FileX, Receipt, ShoppingCart, DollarSign, RefreshCw } from "lucide-react"
-import React, { useState, useEffect, useMemo, useCallback } from "react"
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useDispatch } from "react-redux"
 import apiClient from '../../utils/apiClient'
-import { API_ENDPOINTS } from '../../api/admin_api/api'
-import quotationService from '../../api/admin_api/quotationService'
-import paymentService from '../../api/admin_api/paymentService'
-import proformaInvoiceService from '../../api/admin_api/proformaInvoiceService'
-import departmentUserService from '../../api/admin_api/departmentUserService'
 import { useAuth } from '../../hooks/useAuth'
+import { useSalesData } from '../../shared/hooks/useSalesData'
+import { clearSalesState } from '../../features/sales/salesSlice'
+import { useOptionalDashboardData } from './dashboard/context/DashboardDataContext'
+import { getDateRangeFromFilter, filterLeadsByDate, filterPaymentsByDate, filterQuotationsByDate } from './dashboard/utils/dateUtils'
+import { calculateLeadMetrics } from './dashboard/services/dashboardCalculator'
+import { Card, CardHeader, CardTitle, CardContent } from '../../shared/components/Card'
 import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton'
 import MyPerformancePanel from '../../components/dashboard/MyPerformancePanel'
 import { toDateOnly } from '../../utils/dateOnly'
@@ -27,8 +29,6 @@ import {
   OutstandingPaymentAgingChart
 } from '../../components/dashboard/ChartJSCharts'
 
-const MS_IN_DAY = 24 * 60 * 60 * 1000
-
 const SALES_TARGET_ACHIEVED_VIDEO_URL =
   'https://res.cloudinary.com/dngojnptn/video/upload/v1767337379/Sales_Target_Achieved_Video_Animation_ycm9sb.mp4'
 
@@ -36,109 +36,57 @@ function cx(...classes) {
   return classes.filter(Boolean).join(" ")
 }
 
-function Card({ className, style, children, isDarkMode = false }) {
-  return <div
-    className={cx(
-      "rounded-xl border overflow-hidden transition-all duration-300 hover:shadow-xl",
-      !style && (isDarkMode ? "bg-gray-800 border-gray-700 shadow-lg" : "bg-white border-gray-200 shadow-md hover:shadow-2xl"),
-      className
-    )}
-    style={style}
-  >{children}</div>
-}
-
-function CardHeader({ className, children }) {
-  return <div className={cx("p-4", className)}>{children}</div>
-}
-
-function CardTitle({ className, children, isDarkMode = false }) {
-  return <div className={cx(
-    "text-base font-semibold",
-    isDarkMode ? "text-white" : "text-gray-900",
-    className
-  )}>{children}</div>
-}
-
-function CardContent({ className, children }) {
-  return <div className={cx("p-4 pt-0", className)}>{children}</div>
-}
-
-
 export default function DashboardContent({ isDarkMode = false, onNavigate }) {
   const { user } = useAuth()
-  const [overviewDateFilter, setOverviewDateFilter] = useState('')
-  const [leads, setLeads] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [initialLoading, setInitialLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [refreshing, setRefreshing] = useState(false)
-  const [allPayments, setAllPayments] = useState([])
-  const [allQuotations, setAllQuotations] = useState([])
-  const [allPIs, setAllPIs] = useState([])
+  const dispatch = useDispatch()
+  const {
+    leads,
+    leadsLoading,
+    leadsError: error,
+    userTarget,
+    targetLoading,
+    businessMetrics,
+    allPayments,
+    allQuotations,
+    loadLeads,
+    loadUserTarget,
+    loadBusinessMetrics,
+    refresh,
+  } = useSalesData({ role: 'salesperson' })
+
+  const dashboardData = useOptionalDashboardData()
+  const [localOverviewDateFilter, setLocalOverviewDateFilter] = useState('')
+  const overviewDateFilter = dashboardData ? dashboardData.filters.overviewDateFilter : localOverviewDateFilter
+  const setOverviewDateFilter = dashboardData ? dashboardData.filters.setOverviewDateFilter : setLocalOverviewDateFilter
   const [monthlyHighlight, setMonthlyHighlight] = useState(null)
   const [showMonthlyHighlight, setShowMonthlyHighlight] = useState(false)
-  const [userTarget, setUserTarget] = useState({
-    target: 0,
-    achievedTarget: 0,
-    targetStartDate: null,
-    targetEndDate: null,
-    targetDurationDays: null
-  })
-  const [businessMetrics, setBusinessMetrics] = useState({
-    totalQuotation: 0,
-    approvedQuotation: 0,
-    pendingQuotation: 0,
-    totalPI: 0,
-    approvedPI: 0,
-    pendingPI: 0,
-    totalAdvancePayment: 0,
-    duePayment: 0,
-    totalSaleOrder: 0,
-    totalReceivedPayment: 0,
-    totalRevenue: 0
-  })
-  const [loadingMetrics, setLoadingMetrics] = useState(false)
+  const lastUserIdRef = useRef(null)
+  const initialLoading = leadsLoading
 
-  const getCalendarDaysRemaining = (targetDate) => {
-    if (!targetDate || isNaN(targetDate.getTime())) return 0
-    const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const endDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate())
-    if (endDay < today) return 0
-    const diffTime = endDay - today
-    return Math.max(0, Math.round(diffTime / MS_IN_DAY))
-  }
+  const dateRange = useMemo(() => getDateRangeFromFilter(overviewDateFilter), [overviewDateFilter])
+  const localFilteredData = useMemo(
+    () => ({
+      filteredLeads: filterLeadsByDate(leads, dateRange),
+      filteredPayments: filterPaymentsByDate(allPayments, dateRange),
+      filteredQuotations: filterQuotationsByDate(allQuotations, dateRange),
+    }),
+    [leads, allPayments, allQuotations, dateRange]
+  )
+  const filteredLeads = dashboardData ? dashboardData.filters.filteredData.filteredLeads : localFilteredData.filteredLeads
+  const filteredPayments = dashboardData ? dashboardData.filters.filteredData.filteredPayments : localFilteredData.filteredPayments
+  const filteredQuotations = dashboardData ? dashboardData.filters.filteredData.filteredQuotations : localFilteredData.filteredQuotations
 
-  const fetchLeads = useCallback(async () => {
-    try {
-      setLoading(true)
-      // Add timestamp to prevent caching
-      const url = `${API_ENDPOINTS.SALESPERSON_ASSIGNED_LEADS_ME()}?_t=${Date.now()}`;
-      const leadsResponse = await apiClient.get(url)
-      const assignedLeads = leadsResponse?.data || []
-      
-      const transformedLeads = assignedLeads.map(lead => ({
-        id: lead.id,
-        name: lead.name,
-        sales_status: lead.sales_status || lead.salesStatus || 'pending',
-        source: lead.lead_source || lead.leadSource || 'Unknown',
-        created_at: lead.created_at || lead.createdAt || lead.date || new Date().toISOString(),
-        follow_up_date: lead.follow_up_date || lead.followUpDate || null,
-        lead_priority: (lead.lead_priority || lead.leadPriority || 'LOW').toUpperCase()
-      }))
-      setLeads(transformedLeads)
-      setError(null)
-    } catch (err) {
-      console.error('[Dashboard] Error loading leads:', err)
-      setError('Failed to load leads data')
-      setLeads([])
-    } finally {
-      setLoading(false)
-      setInitialLoading(false)
+  useEffect(() => {
+    const currentUserId = user?.id || user?.email || null
+    if (!currentUserId) return
+    if (lastUserIdRef.current !== null && lastUserIdRef.current !== currentUserId) {
+      dispatch(clearSalesState())
     }
-  }, [])
+    lastUserIdRef.current = currentUserId
+    loadLeads()
+    loadUserTarget()
+  }, [user?.id, user?.email, dispatch, loadLeads, loadUserTarget])
 
-  // Month-start highlight (achievers only) - shown only on day 1-2 (show on every login during the window)
   useEffect(() => {
     const run = async () => {
       try {
@@ -163,588 +111,15 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
     run()
   }, [user?.id])
 
-  // Fetch user target data
-  const fetchUserTarget = useCallback(async () => {
-    try {
-      // When department_user calls listUsers, it automatically filters by their email
-      const response = await departmentUserService.listUsers({ page: 1, limit: 1 })
-      const payload = response?.data || response
-      const users = payload?.users || []
-      
-      if (users.length > 0) {
-        const user = users[0]
-        const next = {
-          target: parseFloat(user.target || 0),
-          achievedTarget: parseFloat(user.achievedTarget || user.achieved_target || 0),
-          targetStartDate: user.targetStartDate || user.target_start_date || null,
-          targetEndDate: user.targetEndDate || user.target_end_date || null,
-          targetDurationDays: user.targetDurationDays || user.target_duration_days || null
-        }
-        setUserTarget(next)
-        return next
-      }
-      const empty = {
-        target: 0,
-        achievedTarget: 0,
-        targetStartDate: null,
-        targetEndDate: null,
-        targetDurationDays: null
-      }
-      setUserTarget(empty)
-      return empty
-    } catch (err) {
-      console.error('Error fetching user target:', err)
-      // Set defaults on error
-      const empty = {
-        target: 0,
-        achievedTarget: 0,
-        targetStartDate: null,
-        targetEndDate: null,
-        targetDurationDays: null
-      }
-      setUserTarget(empty)
-      return empty
-    }
-  }, [])
-
-  // OPTIMIZED: Fetch business metrics - reuse leads from state if available, parallel API calls
-  const fetchBusinessMetrics = useCallback(async (leadsData = null, targetWindow = null) => {
-    try {
-      setLoadingMetrics(true)
-      
-      // OPTIMIZED: Reuse leads from state if available, otherwise fetch with cache busting
-      let assignedLeads = leadsData || leads
-      if (!assignedLeads || assignedLeads.length === 0) {
-        const url = `${API_ENDPOINTS.SALESPERSON_ASSIGNED_LEADS_ME()}?_t=${Date.now()}`;
-        const leadsResponse = await apiClient.get(url)
-        const rawLeads = leadsResponse?.data || []
-        // Transform if needed (if coming from API directly)
-        assignedLeads = rawLeads.map(lead => ({
-          id: lead.id,
-          name: lead.name,
-          sales_status: lead.sales_status || lead.salesStatus || 'pending',
-          source: lead.lead_source || lead.leadSource || 'Unknown',
-          created_at: lead.created_at || lead.createdAt || lead.date || new Date().toISOString()
-        }))
-      }
-      
-      const leadIds = assignedLeads.map(lead => lead.id)
-      
-      if (leadIds.length === 0) {
-        setLoadingMetrics(false)
-        setAllPayments([])
-        return
-      }
-      
-      // OPTIMIZED: Fetch quotations, payments, and PIs in parallel
-      const [quotationsResult, paymentsByCustomersResult] = await Promise.all([
-        quotationService.getBulkQuotationsByCustomers(leadIds).catch(err => {
-          console.error('Error fetching bulk quotations:', err)
-          return { data: [] }
-        }),
-        paymentService.getBulkPaymentsByCustomers(leadIds).catch(err => {
-          console.error('Error fetching bulk payments by customers:', err)
-          return { data: [] }
-        })
-      ])
-      
-      const allQuotations = quotationsResult?.data || []
-      setAllQuotations(allQuotations)
-      const quotationIds = allQuotations.map(q => q.id)
-      
-      // OPTIMIZED: Fetch payments by quotations and PIs in parallel
-      const [paymentsByQuotationsResult, pisResult] = await Promise.all([
-        quotationIds.length > 0 
-          ? paymentService.getBulkPaymentsByQuotations(quotationIds).catch(err => {
-              console.error('Error fetching bulk payments by quotations:', err)
-              return { data: [] }
-            })
-          : Promise.resolve({ data: [] }),
-        quotationIds.length > 0
-          ? proformaInvoiceService.getBulkPIsByQuotations(quotationIds).catch(err => {
-              console.error('Error fetching bulk PIs:', err)
-              return { data: [] }
-            })
-          : Promise.resolve({ data: [] })
-      ])
-      
-      // Combine payments from both sources
-      const allPayments = []
-      const paymentsByCustomers = Array.isArray(paymentsByCustomersResult?.data) ? paymentsByCustomersResult.data : []
-      const paymentsByQuotations = Array.isArray(paymentsByQuotationsResult?.data) ? paymentsByQuotationsResult.data : []
-      
-      allPayments.push(...paymentsByCustomers)
-      
-      // Add payments that aren't already in allPayments
-      paymentsByQuotations.forEach(p => {
-        const exists = allPayments.some(ap => ap.id === p.id || 
-          (ap.payment_reference && p.payment_reference && ap.payment_reference === p.payment_reference))
-        if (!exists) {
-          allPayments.push(p)
-        }
-      })
-      
-      // Store payments for monthly revenue calculation
-      setAllPayments(allPayments)
-      
-      // Use allPayments variable for rest of the function
-      const fetchedPayments = allPayments
-      
-      // Get PIs
-      const allPIs = pisResult?.data || []
-      setAllPIs(allPIs)
-
-      // Set of quotation IDs which have at least one PI (used for Sale Order count)
-      const quotationIdsWithPI = new Set(
-        allPIs
-          .map((pi) => pi.quotation_id)
-          .filter((id) => id != null)
+  const handleRefresh = useCallback(async () => {
+    refresh()
+    if (leads.length > 0) {
+      await loadBusinessMetrics(
+        userTarget?.targetStartDate || null,
+        userTarget?.targetEndDate || null
       )
-      
-      // Calculate quotation metrics
-      const totalQuotation = allQuotations.length
-      const approvedQuotation = allQuotations.filter(q => {
-        const status = (q.status || '').toLowerCase()
-        return status === 'approved'
-      }).length
-      const pendingQuotation = allQuotations.filter(q => {
-        const status = (q.status || '').toLowerCase()
-        return status === 'pending_approval' || status === 'pending' || status === 'draft'
-      }).length
-      const rejectedQuotation = allQuotations.filter(q => {
-        const status = (q.status || '').toLowerCase()
-        return status === 'rejected'
-      }).length
-      
-      // Calculate PI metrics
-      const totalPI = allPIs.length
-      const approvedPI = allPIs.filter(pi => {
-        const status = (pi.status || '').toLowerCase()
-        return status === 'approved'
-      }).length
-      const pendingPI = allPIs.filter(pi => {
-        const status = (pi.status || '').toLowerCase()
-        return status === 'pending_approval' || status === 'pending'
-      }).length
-      const rejectedPI = allPIs.filter(pi => {
-        const status = (pi.status || '').toLowerCase()
-        return status === 'rejected'
-      }).length
-      
-      // Calculate payment metrics - improved calculation with date range filtering
-      // Filter completed/paid payments and apply date range filter if target dates are set
-      // ONLY count APPROVED payments (approved by accounts department)
-      let completedPayments = allPayments.filter(p => {
-        const status = (p.payment_status || p.status || '').toLowerCase()
-        // Check approval status - ONLY count approved payments
-        const approvalStatus = (p.approval_status || '').toLowerCase()
-        const isApproved = approvalStatus === 'approved'
-        // Only count completed/advance payments that are not refunds AND are approved
-        const isRefund = p.is_refund === true || p.is_refund === 1
-        return (status === 'completed' || status === 'paid' || status === 'success' || status === 'advance') && !isRefund && isApproved
-      })
-      
-      // Apply date range filter if user has target dates
-      const startDateStr = targetWindow?.targetStartDate || userTarget.targetStartDate
-      const endDateStr = targetWindow?.targetEndDate || userTarget.targetEndDate
-      if (startDateStr && endDateStr) {
-        
-        completedPayments = completedPayments.filter(p => {
-          // Compare date-only strings to avoid timezone shifts
-          const raw = p.payment_date || p.paymentDate || null
-          if (!raw) return false
-          const pd = toDateOnly(raw)
-          if (!pd) return false
-          return pd >= startDateStr && pd <= endDateStr
-        })
-      }
-      
-      // Calculate total received payment (all completed payments within date range)
-      // Use installment_amount as primary field (matches backend calculation)
-      const totalReceivedPayment = completedPayments.reduce((sum, p) => {
-        const amount = Number(
-          p.installment_amount ||  // Primary field - matches backend
-          p.paid_amount || 
-          p.amount || 
-          p.payment_amount ||
-          0
-        )
-        return sum + (isNaN(amount) ? 0 : amount)
-      }, 0)
-      
-      // Calculate advance payment (first payment or payments marked as advance)
-      // Advance payment = first payment of each quotation OR payments with status 'advance'
-      // We need to track the first payment per quotation/lead to avoid double counting
-      const firstPaymentMap = new Map() // key: quotation_id or lead_id, value: { amount, payment_date }
-      const advancePaymentsList = [] // List of all advance payments to sum
-      
-      completedPayments.forEach(p => {
-        const key = p.quotation_id || `lead_${p.lead_id}`
-        const status = (p.payment_status || p.status || '').toLowerCase()
-        const paymentDate = p.payment_date ? new Date(p.payment_date) : new Date(0)
-        const amount = Number(p.installment_amount || p.paid_amount || p.amount || p.payment_amount || 0)
-        
-        // Check if this is an advance payment
-        const isExplicitAdvance = status === 'advance' || p.is_advance === true || p.payment_type === 'advance'
-        const isFirstPayment = p.installment_number === 1 || p.installment_number === 0
-        
-        if (isExplicitAdvance) {
-          // Explicitly marked as advance - always count
-          advancePaymentsList.push(amount)
-        } else if (isFirstPayment) {
-          // First payment - check if we already have a first payment for this quotation/lead
-          if (!firstPaymentMap.has(key)) {
-            firstPaymentMap.set(key, { amount, paymentDate })
-            advancePaymentsList.push(amount)
-          } else {
-            // Compare dates - use the earliest payment as first payment
-            const existing = firstPaymentMap.get(key)
-            if (paymentDate < existing.paymentDate) {
-              // Remove old amount and add new one
-              const oldIndex = advancePaymentsList.indexOf(existing.amount)
-              if (oldIndex > -1) {
-                advancePaymentsList.splice(oldIndex, 1)
-              }
-              firstPaymentMap.set(key, { amount, paymentDate })
-              advancePaymentsList.push(amount)
-            }
-          }
-        }
-      })
-      
-      // Sum all advance payments
-      const totalAdvancePayment = advancePaymentsList.reduce((sum, amount) => {
-        return sum + (isNaN(amount) ? 0 : amount)
-      }, 0)
-      
-      // Calculate due payments (remaining amounts from approved quotations)
-      // Calculate for ALL approved quotations with date range filtered payments
-      let duePayment = 0
-      let totalRevenue = 0
-      
-      // Prepare date range filter
-      let dateFilter = null
-      if (startDateStr && endDateStr) {
-        dateFilter = { startDateStr, endDateStr }
-      }
-      
-      // OPTIMIZED: Use already fetched PIs instead of making N+1 queries
-      // Create a map of quotation_id -> PIs for quick lookup
-      const pisByQuotationIdMap = new Map();
-      allPIs.forEach(pi => {
-        if (pi.quotation_id) {
-          if (!pisByQuotationIdMap.has(pi.quotation_id)) {
-            pisByQuotationIdMap.set(pi.quotation_id, []);
-          }
-          pisByQuotationIdMap.get(pi.quotation_id).push(pi);
-        }
-      });
-      
-      for (const quotation of allQuotations) {
-        const status = (quotation.status || '').toLowerCase()
-        if (status === 'approved') {
-          // OPTIMIZED: Check if PI exists using already fetched data (no API call)
-          const quotationPIs = pisByQuotationIdMap.get(quotation.id) || [];
-          const hasPIForQuotation = quotationPIs.length > 0;
-          
-          // Skip if no PI exists
-          if (!hasPIForQuotation) {
-            continue;
-          }
-          
-          const quotationTotal = Number(quotation.total_amount || quotation.total || 0)
-          if (!isNaN(quotationTotal) && quotationTotal > 0) {
-            totalRevenue += quotationTotal
-            
-            // Get payments for this quotation
-            let quotationPayments = allPayments.filter(p => 
-              p.quotation_id === quotation.id || 
-              (p.lead_id && quotation.customer_id && p.lead_id === quotation.customer_id)
-            )
-            
-            // Apply date range filter if target dates are set
-            if (dateFilter) {
-              quotationPayments = quotationPayments.filter(p => {
-                const raw = p.payment_date || p.paymentDate || null
-                if (!raw) return false
-                const pd = toDateOnly(raw)
-                if (!pd) return false
-                return pd >= dateFilter.startDateStr && pd <= dateFilter.endDateStr
-              })
-            }
-            
-            // Calculate paid amount using installment_amount
-            // ONLY count APPROVED payments
-            const paidTotal = quotationPayments
-              .filter(p => {
-                const pStatus = (p.payment_status || p.status || '').toLowerCase()
-                const approvalStatus = (p.approval_status || '').toLowerCase()
-                const isApproved = approvalStatus === 'approved'
-                const isRefund = p.is_refund === true || p.is_refund === 1
-                return (pStatus === 'completed' || pStatus === 'paid' || pStatus === 'success' || pStatus === 'advance') && !isRefund && isApproved
-              })
-              .reduce((sum, p) => {
-                const amount = Number(p.installment_amount || p.paid_amount || p.amount || 0)
-                return sum + (isNaN(amount) ? 0 : amount)
-              }, 0)
-            
-            // Calculate remaining amount (due payment)
-            const remaining = quotationTotal - paidTotal
-            if (remaining > 0) {
-              duePayment += remaining
-            }
-          }
-        }
-      }
-      
-      // Count sale orders
-      // Business rule: any quotation that has at least one PI created is treated as a Sale Order
-      // So we simply count unique quotation IDs which have a PI
-      const totalSaleOrder = quotationIdsWithPI.size
-      
-      setBusinessMetrics({
-        totalQuotation,
-        approvedQuotation,
-        pendingQuotation,
-        rejectedQuotation,
-        totalPI,
-        approvedPI,
-        pendingPI,
-        rejectedPI,
-        totalAdvancePayment,
-        duePayment,
-        totalSaleOrder,
-        totalReceivedPayment,
-        totalRevenue
-      })
-    } catch (err) {
-      console.error('Error fetching business metrics:', err)
-      // Set default values on error
-      setBusinessMetrics({
-        totalQuotation: 0,
-        approvedQuotation: 0,
-        pendingQuotation: 0,
-        rejectedQuotation: 0,
-        totalPI: 0,
-        approvedPI: 0,
-        pendingPI: 0,
-        rejectedPI: 0,
-        totalAdvancePayment: 0,
-        duePayment: 0,
-        totalSaleOrder: 0,
-        totalReceivedPayment: 0,
-        totalRevenue: 0
-      })
-    } finally {
-      setLoadingMetrics(false)
     }
-  }, [leads, userTarget])
-
-  // OPTIMIZED: Refresh dashboard function - parallel API calls
-  const refreshDashboard = useCallback(async () => {
-    try {
-      setRefreshing(true)
-      // Fetch leads first with cache busting
-      const url = `${API_ENDPOINTS.SALESPERSON_ASSIGNED_LEADS_ME()}?_t=${Date.now()}`;
-      const leadsResponse = await apiClient.get(url)
-      const assignedLeads = leadsResponse?.data || []
-      
-      const transformedLeads = assignedLeads.map(lead => ({
-        id: lead.id,
-        name: lead.name,
-        sales_status: lead.sales_status || lead.salesStatus || 'pending',
-        source: lead.lead_source || lead.leadSource || 'Unknown',
-        created_at: lead.created_at || lead.createdAt || lead.date || new Date().toISOString(),
-        follow_up_date: lead.follow_up_date || lead.followUpDate || null,
-        lead_priority: (lead.lead_priority || lead.leadPriority || 'LOW').toUpperCase()
-      }))
-      setLeads(transformedLeads)
-      // Fetch target and metrics
-      const targetWindow = await fetchUserTarget()
-      await fetchBusinessMetrics(transformedLeads, targetWindow)
-    } catch (err) {
-      console.error('Error refreshing dashboard:', err)
-    } finally {
-      setRefreshing(false)
-    }
-  }, [fetchBusinessMetrics, fetchUserTarget])
-
-  const fetchingMetricsRef = React.useRef(false);
-  const lastUserIdRef = React.useRef(null);
-  
-  const currentUserId = user?.id || user?.email || null;
-  
-  useEffect(() => {
-    if (lastUserIdRef.current === currentUserId && lastUserIdRef.current !== null) {
-      return;
-    }
-    
-    if (lastUserIdRef.current !== null && lastUserIdRef.current !== currentUserId) {
-      setLeads([]);
-      setError(null);
-      setBusinessMetrics({
-        totalQuotation: 0,
-        approvedQuotation: 0,
-        pendingQuotation: 0,
-        totalPI: 0,
-        approvedPI: 0,
-        pendingPI: 0,
-        totalAdvancePayment: 0,
-        duePayment: 0,
-        totalSaleOrder: 0,
-        totalReceivedPayment: 0,
-        totalRevenue: 0
-      });
-    }
-    
-    // Update last user ID
-    lastUserIdRef.current = currentUserId;
-    
-    const loadData = async () => {
-      // Fetch leads and target; metrics will run once leads are loaded and/or target is available
-      await Promise.all([fetchLeads(), fetchUserTarget()]);
-      setInitialLoading(false);
-    };
-    
-    if (currentUserId) {
-      loadData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUserId])
-  
-  // OPTIMIZED: Fetch metrics after leads are loaded (reuse leads data)
-  useEffect(() => {
-    if (!currentUserId || fetchingMetricsRef.current || leads.length === 0) return;
-    
-    // Fetch metrics with leads data to avoid duplicate API call
-    if (!fetchingMetricsRef.current) {
-      fetchingMetricsRef.current = true;
-      fetchBusinessMetrics(leads, userTarget).finally(() => {
-        fetchingMetricsRef.current = false;
-      });
-    }
-  }, [leads.length, currentUserId, fetchBusinessMetrics]); // Only when leads are loaded and user is set
-  
-  // OPTIMIZED: Fetch business metrics when user target dates change (to recalculate with date range)
-  useEffect(() => {
-    // Skip if user not set or already fetching
-    if (!currentUserId || fetchingMetricsRef.current) return;
-    
-    // Only refetch if we have target dates and leads
-    if (userTarget.targetStartDate && userTarget.targetEndDate && leads.length > 0) {
-      fetchingMetricsRef.current = true;
-      fetchBusinessMetrics(leads, userTarget).finally(() => {
-        fetchingMetricsRef.current = false;
-      });
-    }
-  }, [userTarget.targetStartDate, userTarget.targetEndDate, currentUserId, leads, fetchBusinessMetrics])
-
-  // Simple status mapping function
-  const mapSalesStatusToBucket = (status) => {
-    switch (status) {
-      case 'converted':
-      case 'win lead':
-        return 'converted'
-      case 'pending':
-        return 'not-connected'
-      case 'running':
-      case 'interested':
-        return 'connected'
-      case 'lost/closed':
-        return 'closed'
-      default:
-        return 'not-connected'
-    }
-  }
-
-  const getDateRange = () => {
-    if (!overviewDateFilter) return null
-    const selectedDate = new Date(overviewDateFilter)
-    const startOfDay = new Date(selectedDate)
-    startOfDay.setHours(0, 0, 0, 0)
-    const endDate = new Date()
-    endDate.setHours(23, 59, 59, 999)
-    return { start: startOfDay, end: endDate }
-  }
-    
-  const getFilteredLeads = () => {
-    const dateRange = getDateRange()
-    if (!dateRange) return leads
-    return leads.filter(lead => {
-      if (!lead.created_at) return false
-      const leadDate = new Date(lead.created_at)
-      return leadDate >= dateRange.start && leadDate <= dateRange.end
-    })
-  }
-
-  const getFilteredQuotations = () => {
-    const dateRange = getDateRange()
-    if (!dateRange) return allQuotations
-    return allQuotations.filter(q => {
-      const quoteDate = q.quotation_date ? new Date(q.quotation_date) : (q.created_at ? new Date(q.created_at) : null)
-      if (!quoteDate) return false
-      return quoteDate >= dateRange.start && quoteDate <= dateRange.end
-    })
-  }
-
-  const getFilteredPayments = () => {
-    const dateRange = getDateRange()
-    if (!dateRange) return allPayments
-    return allPayments.filter(p => {
-      const paymentDate = p.payment_date ? new Date(p.payment_date) : null
-      if (!paymentDate) return false
-      return paymentDate >= dateRange.start && paymentDate <= dateRange.end
-    })
-  }
-
-  // Calculate real data from leads
-  const calculateLeadStatusData = () => {
-    const filteredLeads = getFilteredLeads()
-    const statusCounts = {}
-    filteredLeads.forEach(lead => {
-      const bucket = mapSalesStatusToBucket(lead.sales_status)
-      statusCounts[bucket] = (statusCounts[bucket] || 0) + 1
-    })
-    return statusCounts
-  }
-
-  const calculateMetrics = () => {
-    const filteredLeads = getFilteredLeads()
-    const totalLeads = filteredLeads.length
-    
-    // Count Win/Closed leads - from Lead Status API (sales_status = 'win/closed' or 'win' or 'closed')
-    const winClosedLeads = filteredLeads.filter(lead => {
-      const status = String(lead.sales_status || '').toLowerCase()
-      return status === 'win/closed' || status === 'win' || status === 'closed'
-    }).length
-    
-    // Count Pending leads - from Lead Status API (sales_status = 'pending')
-    const pendingLeads = filteredLeads.filter(lead => {
-      const status = String(lead.sales_status || '').toLowerCase()
-      return status === 'pending'
-    }).length
-    
-    const nextMeetingLeads = filteredLeads.filter(lead => mapSalesStatusToBucket(lead.sales_status) === 'next-meeting').length
-    const connectedLeads = filteredLeads.filter(lead => mapSalesStatusToBucket(lead.sales_status) === 'connected').length
-    const closedLeads = filteredLeads.filter(lead => mapSalesStatusToBucket(lead.sales_status) === 'closed').length
-
-    // Conversion Rate = (Win/Closed Leads / Total Leads) * 100
-    const conversionRate = totalLeads > 0 ? ((winClosedLeads / totalLeads) * 100).toFixed(1) : 0
-    
-    // Pending Rate = (Pending Leads / Total Leads) * 100
-    const pendingRate = totalLeads > 0 ? ((pendingLeads / totalLeads) * 100).toFixed(1) : 0
-
-    return {
-      totalLeads,
-      winClosedLeads,
-      pendingLeads,
-      nextMeetingLeads,
-      connectedLeads,
-      closedLeads,
-      conversionRate,
-      pendingRate
-    }
-  }
+  }, [refresh, loadBusinessMetrics, leads.length, userTarget?.targetStartDate, userTarget?.targetEndDate])
 
   // Month-wise trends (real data, no hardcoded fallbacks)
   const trendMetrics = useMemo(() => {
@@ -833,10 +208,10 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
       revenueTrend: formatPctChange(prevRevenue, currRevenue)
     }
   }, [leads, allPayments])
+  const trendMetricsToUse = dashboardData ? dashboardData.metrics.trendMetrics : trendMetrics
 
   // Calculate lead sources from real data
   const calculateLeadSources = () => {
-    const filteredLeads = getFilteredLeads()
     const sourceCounts = {}
     
     // Count leads by source
@@ -860,8 +235,6 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
 
   // Calculate weekly activity from real leads data
   const calculateWeeklyActivity = () => {
-    const filteredLeads = getFilteredLeads()
-    
     // Get the current week (last 7 days)
     const now = new Date()
     const dayOfWeek = now.getDay() // 0 = Sunday, 1 = Monday, etc.
@@ -912,7 +285,7 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
   }
 
   const calculateMonthlyRevenue = () => {
-    const paymentsToUse = getFilteredPayments()
+    const paymentsToUse = filteredPayments
     
     // Group payments by month
     const revenueByMonth = {}
@@ -980,8 +353,6 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
       months.push(date.toLocaleDateString('en-US', { month: 'short' }))
     }
     
-    const filteredQuotations = getFilteredQuotations()
-    
     const quotationByMonth = {}
     filteredQuotations.forEach(quotation => {
       const quoteDate = quotation.quotation_date ? new Date(quotation.quotation_date) : (quotation.created_at ? new Date(quotation.created_at) : null)
@@ -1031,8 +402,6 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
   }
 
   const getSalesOrderProgressData = () => {
-    const filteredQuotations = getFilteredQuotations()
-    
     const created = filteredQuotations.length
     const approved = filteredQuotations.filter(q => {
       const status = (q.status || '').toLowerCase()
@@ -1056,7 +425,6 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
   }
 
   const getLeadConversionFunnelData = () => {
-    const filteredLeads = getFilteredLeads()
     const totalLeads = filteredLeads.length
     const qualified = filteredLeads.filter(l => {
       const s = (l.sales_status || l.salesStatus || '').toLowerCase()
@@ -1071,7 +439,7 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
   }
 
   const getSalesPipelineDonutData = () => {
-    const filtered = getFilteredLeads()
+    const filtered = filteredLeads
     const order = [
       'Pending', 'Running', 'Converted', 'Interested', 'Win/Closed', 'Closed', 'Lost',
       'Meeting Scheduled', 'Quotation Sent', 'Closed/Lost (Follow-up)'
@@ -1115,7 +483,7 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
     const targetStartDate = userTarget.targetStartDate ? new Date(`${userTarget.targetStartDate}T00:00:00`) : null
     const targetEndDate = userTarget.targetEndDate ? new Date(`${userTarget.targetEndDate}T00:00:00`) : null
     
-    const paymentsToUse = getFilteredPayments()
+    const paymentsToUse = filteredPayments
     
     const monthlyActual = months.map((monthLabel, monthIndex) => {
       const monthDate = new Date(now.getFullYear(), now.getMonth() - (5 - monthIndex), 1)
@@ -1176,8 +544,6 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
   }
   
   const getRevenueDistributionData = () => {
-    const filteredQuotations = getFilteredQuotations()
-    
     const revenueByCategory = {
       'Product': 0,
       'Service': 0,
@@ -1229,7 +595,7 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
       months.push(date.toLocaleDateString('en-US', { month: 'short' }))
     }
     
-    const paymentsToUse = getFilteredPayments()
+    const paymentsToUse = filteredPayments
     
     // Calculate aging buckets for each month
     const agingData = months.map((monthLabel, monthIndex) => {
@@ -1295,8 +661,7 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
     return `₹${n.toLocaleString('en-IN')}`
   }
 
-  const salesOverviewMetrics = useMemo(() => {
-    const filteredLeads = getFilteredLeads()
+  const localSalesOverviewMetrics = useMemo(() => {
     const totalLeads = filteredLeads.length
     const totalSalesAmount = businessMetrics.totalReceivedPayment || 0
     const pendingLeads = filteredLeads.filter(l => String(l.sales_status || '').toLowerCase() === 'pending').length
@@ -1331,38 +696,16 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
       weightedValue: formatCompact(totalSalesAmount),
       avgOpenDealAge: avgOpenDealAge.toFixed(2)
     }
-  }, [leads, overviewDateFilter, businessMetrics.totalReceivedPayment, businessMetrics.totalRevenue])
+  }, [filteredLeads, businessMetrics])
+  const salesOverviewMetrics = dashboardData ? dashboardData.metrics.salesOverviewMetrics : localSalesOverviewMetrics
 
-  const calculatedMetrics = useMemo(() => calculateMetrics(), [leads, overviewDateFilter])
-  const statusData = useMemo(() => calculateLeadStatusData(), [leads, overviewDateFilter])
-  const leadSources = useMemo(() => calculateLeadSources(), [leads, overviewDateFilter])
-  const weeklyActivity = useMemo(() => calculateWeeklyActivity(), [leads, overviewDateFilter])
-  const monthlyRevenue = useMemo(() => calculateMonthlyRevenue(), [allPayments, overviewDateFilter])
-
-  const hasTargetAssigned =
-    Number(userTarget.target || 0) > 0 &&
-    !!userTarget.targetStartDate &&
-    !!userTarget.targetEndDate &&
-    (() => {
-      const end = new Date(`${userTarget.targetEndDate}T00:00:00`)
-      if (isNaN(end.getTime())) return false
-      const today = new Date()
-      const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-      const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate())
-      return endDay >= todayDay
-    })()
-
-  const daysLeftInTarget = (() => {
-    if (!hasTargetAssigned) return 0
-    const endDate = new Date(`${userTarget.targetEndDate}T00:00:00`)
-    endDate.setHours(23, 59, 59, 999)
-    return getCalendarDaysRemaining(endDate)
-  })()
-  
-  const revenueTarget = hasTargetAssigned ? (userTarget.target || 0) : 0
-  const revenueCurrent = hasTargetAssigned ? (Number(userTarget.achievedTarget || 0) || businessMetrics.totalReceivedPayment || 0) : 0
-  const targetProgress = revenueTarget > 0 ? Math.min(100, Math.round((revenueCurrent / revenueTarget) * 100)) : 0
-  const targetStatusOnTrack = targetProgress >= 100 || (daysLeftInTarget > 0 && targetProgress >= 0)
+  const localCalculatedMetrics = useMemo(() => calculateLeadMetrics(filteredLeads), [filteredLeads])
+  const calculatedMetrics = dashboardData ? dashboardData.metrics.leadMetrics : localCalculatedMetrics
+  const localLeadSources = useMemo(() => calculateLeadSources(), [filteredLeads])
+  const leadSources = dashboardData ? dashboardData.metrics.leadSources : localLeadSources
+  const localWeeklyActivity = useMemo(() => calculateWeeklyActivity(), [filteredLeads])
+  const weeklyActivity = dashboardData ? dashboardData.metrics.weeklyActivity : localWeeklyActivity
+  const monthlyRevenue = useMemo(() => calculateMonthlyRevenue(), [filteredPayments])
 
   const overviewData = {
     metrics: [
@@ -1372,8 +715,8 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
         subtitle: "Active leads this month",
         icon: UserPlus,
         color: "bg-blue-50 text-blue-600 border-blue-200",
-        trend: trendMetrics.totalLeadsTrend.text,
-        trendUp: trendMetrics.totalLeadsTrend.up
+        trend: trendMetricsToUse.totalLeadsTrend.text,
+        trendUp: trendMetricsToUse.totalLeadsTrend.up
       },
       {
         title: "Conversion Rate",
@@ -1381,8 +724,8 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
         subtitle: "Above target of 20%",
         icon: CheckCircle,
         color: "bg-green-50 text-green-600 border-green-200",
-        trend: trendMetrics.conversionRateTrend.text,
-        trendUp: trendMetrics.conversionRateTrend.up
+        trend: trendMetricsToUse.conversionRateTrend.text,
+        trendUp: trendMetricsToUse.conversionRateTrend.up
       },
       {
         title: "Pending Rate",
@@ -1390,17 +733,17 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
         subtitle: "Leads requiring follow-up",
         icon: Clock,
         color: "bg-orange-50 text-orange-600 border-orange-200",
-        trend: trendMetrics.pendingRateTrend.text,
-        trendUp: trendMetrics.pendingRateTrend.up
+        trend: trendMetricsToUse.pendingRateTrend.text,
+        trendUp: trendMetricsToUse.pendingRateTrend.up
       },
       {
         title: "Total Revenue",
-        value: `₹${businessMetrics.totalReceivedPayment.toLocaleString('en-IN')}`,
+        value: `₹${(businessMetrics?.totalReceivedPayment ?? 0).toLocaleString('en-IN')}`,
         subtitle: "Revenue from payment received",
         icon: CreditCard,
         color: "bg-purple-50 text-purple-600 border-purple-200",
-        trend: trendMetrics.revenueTrend.text,
-        trendUp: trendMetrics.revenueTrend.up
+        trend: trendMetricsToUse.revenueTrend.text,
+        trendUp: trendMetricsToUse.revenueTrend.up
       },
     ],
     weeklyLeads: weeklyActivity,
@@ -1408,103 +751,28 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
     monthlyRevenue: monthlyRevenue
   }
 
-  const overviewMetrics = overviewData.metrics
-
   // Counts mapped directly from lead status values used in Lead Status page
-  const salesStatusCounts = React.useMemo(() => {
+  const localSalesStatusCounts = React.useMemo(() => {
     const c = { all: 0, pending: 0, running: 0, converted: 0, interested: 0, 'win/closed': 0, closed: 0, lost: 0 }
-    const filtered = getFilteredLeads()
-    c.all = filtered.length
-    filtered.forEach(l => {
+    c.all = filteredLeads.length
+    filteredLeads.forEach(l => {
       const k = String(l.sales_status || '').toLowerCase()
       if (c[k] != null) c[k] += 1
     })
     return c
-  }, [leads, overviewDateFilter])
+  }, [filteredLeads])
+  const salesStatusCounts = dashboardData ? dashboardData.metrics.statusCounts : localSalesStatusCounts
 
   // Follow-up specific counts (only the requested ones)
-  const followUpCounts = React.useMemo(() => {
+  const localFollowUpCounts = React.useMemo(() => {
     const c = { 'appointment scheduled': 0, 'closed/lost': 0, 'quotation sent': 0 }
-    const filtered = getFilteredLeads()
-    filtered.forEach(l => {
+    filteredLeads.forEach(l => {
       const k = String(l.follow_up_status || '').toLowerCase()
       if (c[k] != null) c[k] += 1
     })
     return c
-  }, [leads, overviewDateFilter])
-
-  const leadStatuses = [
-    {
-      title: "Pending",
-      count: salesStatusCounts.pending.toString(),
-      subtitle: "Leads awaiting response",
-      icon: Clock,
-      color: "bg-orange-50 text-orange-600 border-orange-200",
-    },
-    {
-      title: "Running",
-      count: salesStatusCounts.running.toString(),
-      subtitle: "In progress",
-      icon: Activity,
-      color: "bg-blue-50 text-blue-600 border-blue-200",
-    },
-    {
-      title: "Converted",
-      count: salesStatusCounts.converted.toString(),
-      subtitle: "Successful conversions",
-      icon: CheckCircle,
-      color: "bg-green-50 text-green-600 border-green-200",
-    },
-    {
-      title: "Interested",
-      count: salesStatusCounts.interested.toString(),
-      subtitle: "Warm leads",
-      icon: UserPlus,
-      color: "bg-purple-50 text-purple-600 border-purple-200",
-    },
-    {
-      title: "Win/Closed",
-      count: salesStatusCounts['win/closed'].toString(),
-      subtitle: "Won or closed",
-      icon: Award,
-      color: "bg-emerald-50 text-emerald-600 border-emerald-200",
-    },
-    {
-      title: "Closed",
-      count: salesStatusCounts.closed.toString(),
-      subtitle: "Closed deals",
-      icon: FileText,
-      color: "bg-gray-50 text-gray-600 border-gray-200",
-    },
-    {
-      title: "Lost",
-      count: salesStatusCounts.lost.toString(),
-      subtitle: "Declined/failed",
-      icon: XCircle,
-      color: "bg-red-50 text-red-600 border-red-200",
-    },
-    {
-      title: "Meeting scheduled",
-      count: (followUpCounts['appointment scheduled'] || 0).toString(),
-      subtitle: "Upcoming meetings",
-      icon: CalendarCheck,
-      color: "bg-indigo-50 text-indigo-600 border-indigo-200",
-    },
-    {
-      title: "Quotation Sent",
-      count: (followUpCounts['quotation sent'] || 0).toString(),
-      subtitle: "Proposals shared",
-      icon: FileText,
-      color: "bg-yellow-50 text-yellow-700 border-yellow-200",
-    },
-    {
-      title: "Closed/Lost (Follow-up)",
-      count: (followUpCounts['closed/lost'] || 0).toString(),
-      subtitle: "Follow-up outcome",
-      icon: PhoneOff,
-      color: "bg-gray-50 text-gray-600 border-gray-200",
-    },
-  ]
+  }, [filteredLeads])
+  const followUpCounts = dashboardData ? dashboardData.metrics.followUpCounts : localFollowUpCounts
 
   // Show skeleton loader on initial load
   if (initialLoading) {
@@ -1579,12 +847,12 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
       )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 sm:gap-4 mb-4 sm:mb-6 flex-wrap">
         <button
-          onClick={refreshDashboard}
-          disabled={refreshing}
-          className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 shadow-lg hover:shadow-xl ${refreshing ? 'opacity-50 cursor-not-allowed' : ''} ${isDarkMode ? 'bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white' : 'bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white'}`}
+          onClick={handleRefresh}
+          disabled={leadsLoading}
+          className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-200 shadow-lg hover:shadow-xl ${leadsLoading ? 'opacity-50 cursor-not-allowed' : ''} ${isDarkMode ? 'bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white' : 'bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white'}`}
           title="Refresh dashboard data"
         >
-          <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${leadsLoading ? 'animate-spin' : ''}`} />
           <span>Refresh</span>
         </button>
         <div className="relative flex items-center gap-2">
@@ -1762,7 +1030,7 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
             <h2 className={cx("text-base font-semibold", isDarkMode ? "text-white" : "text-gray-900")}>Business Metrics</h2>
             <p className={cx("text-xs mt-0.5", isDarkMode ? "text-gray-400" : "text-gray-500")}>Quotations, PI, payments — total, approved, pending, rejected</p>
           </div>
-          {loadingMetrics ? (
+          {(leadsLoading || targetLoading) ? (
             <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-500 border-t-transparent" /></div>
           ) : (
             <div className="overflow-x-auto">
@@ -1795,7 +1063,7 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
 
       {/* Trends & Analytics - Charts only */}
       <div className="space-y-4 mb-8">
-        {loadingMetrics ? (
+        {(leadsLoading || targetLoading) ? (
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
           </div>

@@ -10,16 +10,20 @@ import LeadFilters from '../../components/salesperson/LeadFilters'
 import EnquiryFilters from '../../components/salesperson/EnquiryFilters'
 import TagManager from '../../components/salesperson/TagManager'
 import CustomerDetailSidebar from '../../components/salesperson/CustomerDetailSidebar'
+import SendEmailForm from '../../components/salesperson/SendEmailForm'
+import UploadDocs from '../../components/salesperson/UploadDocs'
 import ImportLeadsModal from '../../components/salesperson/ImportLeadsModal'
 import ColumnVisibilityModal from '../../components/salesperson/ColumnVisibilityModal'
 import InlineStatusDropdown from '../../components/InlineStatusDropdown'
 import InlineFollowUpStatusCell from '../../components/InlineFollowUpStatusCell'
+import StatusRemarkModal from '../../components/StatusRemarkModal'
+import InlineStateDivisionCell from '../../components/InlineStateDivisionCell'
 import AddCustomerForm from './salespersonaddcustomer.jsx'
 import CreateQuotationForm from './salespersoncreatequotation.jsx'
 import CreatePIForm from './CreatePIForm.jsx'
 import Toast from '../../utils/Toast'
 import { QuotationHelper } from '../../utils/QuotationHelper'
-import { Search, RefreshCw, Plus, Filter, Eye, Pencil, FileText, Upload, Settings, Tag, X, User, Mail, Building2, Package, Hash, MapPin, Globe, Users, TrendingUp, Calendar, Clock, MoreHorizontal, ShieldCheck, Copy } from 'lucide-react'
+import { Search, RefreshCw, Plus, Filter, FileText, Upload, Settings, Tag, X, User, Mail, Building2, Package, Hash, MapPin, Globe, Users, TrendingUp, Calendar, Clock, Copy } from 'lucide-react'
 import { apiClient, API_ENDPOINTS, quotationService } from '../../utils/globalImports'
 import rfpService from '../../services/RfpService'
 import productPriceService from '../../services/ProductPriceService'
@@ -43,7 +47,7 @@ const getUserData = () => {
   }
 }
 
-export default function CustomerListContent({ isDarkMode = false, selectedCustomerId = null }) {
+export default function CustomerListContent({ isDarkMode = false, selectedCustomerId = null, filterNewLeadsOnly = false }) {
   const { customers, setCustomers, loading } = useSharedData()
   const [initialLoading, setInitialLoading] = React.useState(true)
   const user = getUserData()
@@ -92,6 +96,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   const [productSearch, setProductSearch] = React.useState('')
   const [showProductDropdown, setShowProductDropdown] = React.useState(false)
   const productDropdownRef = React.useRef(null)
+  const renderPricingFormBodyRef = React.useRef(null)
   const [savedRfpId, setSavedRfpId] = React.useState(null)
   const [savingDecision, setSavingDecision] = React.useState(false)
   const [rfpIdInput, setRfpIdInput] = React.useState('')
@@ -129,7 +134,8 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   const [showImportModal, setShowImportModal] = React.useState(false)
   const [showEditLeadStatusModal, setShowEditLeadStatusModal] = React.useState(false)
   const [selectedCustomerForLeadStatus, setSelectedCustomerForLeadStatus] = React.useState(null)
-  const [actionMenuOpen, setActionMenuOpen] = React.useState(null)
+  const [statusRemarkModal, setStatusRemarkModal] = React.useState({ open: false, leadId: null, type: null, status: '', initialRemark: '' })
+  const [pendingStatusByLeadId, setPendingStatusByLeadId] = React.useState({})
 
   const defaultColumns = React.useMemo(() => ({
     leadId: true,
@@ -162,7 +168,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     await handleRefresh()
   }
 
-  const leadsHook = useSalespersonLeads(customers)
+  const leadsHook = useSalespersonLeads(customers, filterNewLeadsOnly)
   const activeCustomerId = viewingCustomer?.id || viewingCustomerForQuotation?.id
 
   React.useEffect(() => {
@@ -812,21 +818,62 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     }
   }
 
-  const handleEditLeadStatus = (customer) => {
-    const leadFormat = {
-      id: customer.id,
-      sales_status: customer.salesStatus || '',
-      sales_status_remark: customer.salesStatusRemark || '',
-      follow_up_status: customer.followUpStatus || '',
-      follow_up_remark: customer.followUpRemark || '',
-      follow_up_date: customer.followUpDate || '',
-      follow_up_time: customer.followUpTime || '',
-      enquired_products: customer.enquired_products || customer.enquiredProducts || [],
-      other_product: customer.other_product || customer.otherProduct || ''
+  const leadFormat = (customer) => ({
+    id: customer.id,
+    sales_status: customer.salesStatus || '',
+    sales_status_remark: customer.salesStatusRemark || '',
+    follow_up_status: customer.followUpStatus || '',
+    follow_up_remark: customer.followUpRemark || '',
+    follow_up_date: customer.followUpDate || '',
+    follow_up_time: customer.followUpTime || '',
+    enquired_products: customer.enquired_products || customer.enquiredProducts || [],
+    other_product: customer.other_product || customer.otherProduct || ''
+  })
+
+  // Map enquiry row (from Enquiry tab) to shape expected by EditLeadStatusModal / leadFormat
+  const enquiryToLeadFormat = React.useCallback((enquiry) => {
+    let enquiredProducts = enquiry.enquired_products || enquiry.enquiredProducts || []
+    if (!Array.isArray(enquiredProducts) && typeof enquiredProducts === 'string') {
+      try {
+        enquiredProducts = JSON.parse(enquiredProducts || '[]')
+      } catch {
+        enquiredProducts = []
+      }
     }
-    setSelectedCustomerForLeadStatus(leadFormat)
+    if (!enquiredProducts.length && (enquiry.enquired_product || enquiry.product_quantity || enquiry.product_remark)) {
+      enquiredProducts = [{
+        product: enquiry.enquired_product || enquiry.product_name || '',
+        quantity: enquiry.product_quantity || '',
+        remark: enquiry.product_remark || ''
+      }]
+    }
+    return {
+      id: enquiry.id || enquiry.lead_id,
+      salesStatus: enquiry.sales_status || '',
+      salesStatusRemark: enquiry.sales_status_remark || '',
+      followUpStatus: enquiry.follow_up_status || '',
+      followUpRemark: enquiry.follow_up_remark || '',
+      followUpDate: enquiry.follow_up_date || '',
+      followUpTime: enquiry.follow_up_time || '',
+      enquired_products: enquiredProducts,
+      enquiredProducts,
+      other_product: enquiry.other_product || enquiry.otherProduct || '',
+      otherProduct: enquiry.other_product || enquiry.otherProduct || ''
+    }
+  }, [])
+
+  const [sidebarUpdateStatusLead, setSidebarUpdateStatusLead] = React.useState(null)
+
+  const handleEditLeadStatus = (customer) => {
+    setSelectedCustomerForLeadStatus(leadFormat(customer))
     setShowEditLeadStatusModal(true)
   }
+
+  const handleEnquiryEdit = React.useCallback((enquiry) => {
+    const asLead = enquiryToLeadFormat(enquiry)
+    setSelectedCustomerForLeadStatus(leadFormat(asLead))
+    setShowEditLeadStatusModal(true)
+  }, [enquiryToLeadFormat])
 
   const handleUpdateLeadStatus = async (leadId, statusData) => {
     try {
@@ -885,6 +932,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
         Toast.success('Enquiry updated successfully!')
         setShowEditLeadStatusModal(false)
         setSelectedCustomerForLeadStatus(null)
+        fetchEnquiries(true)
       }
     } catch (error) {
         Toast.error('Failed to update enquiry')
@@ -892,14 +940,133 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     }
   }
 
-  const handleInlineStatusChange = React.useCallback(async (leadId, field, newStatus) => {
+  const openStatusRemarkModal = React.useCallback((leadId, type, status, initialRemark = '') => {
+    setStatusRemarkModal({ open: true, leadId, type, status, initialRemark })
+  }, [])
+
+  const handleStatusRemarkSave = React.useCallback(async (status, remark) => {
+    const { leadId, type } = statusRemarkModal
+    if (!leadId || !type) return
+    const customer = leadsHook.customers.find((c) => c.id === leadId)
+    if (!customer) {
+      setStatusRemarkModal({ open: false, leadId: null, type: null, status: '', initialRemark: '' })
+      return
+    }
+    const pending = pendingStatusByLeadId[leadId] || {}
+    const payload = {
+      sales_status: type === 'sales' ? status : (pending.salesStatus ?? customer.salesStatus ?? ''),
+      sales_status_remark: type === 'sales' ? remark : (pending.salesStatusRemark ?? customer.salesStatusRemark ?? ''),
+      follow_up_status: type === 'followup' ? status : (pending.followUpStatus ?? customer.followUpStatus ?? ''),
+      follow_up_remark: type === 'followup' ? remark : (pending.followUpRemark ?? customer.followUpRemark ?? ''),
+      follow_up_date: customer.followUpDate ?? '',
+      follow_up_time: customer.followUpTime ?? '',
+      enquired_products: JSON.stringify(customer.enquired_products || customer.enquiredProducts || []),
+      other_product: customer.other_product || customer.otherProduct || ''
+    }
+    try {
+      const fd = new FormData()
+      Object.entries(payload).forEach(([k, v]) => fd.append(k, v == null ? '' : v))
+      const response = await apiClient.putFormData(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(leadId), fd)
+      if (response.success) {
+        const updated = leadsHook.customers.map((c) =>
+          c.id === leadId
+            ? {
+                ...c,
+                salesStatus: payload.sales_status,
+                salesStatusRemark: payload.sales_status_remark,
+                followUpStatus: payload.follow_up_status,
+                followUpRemark: payload.follow_up_remark,
+                sales_status_updated_at: response.data?.sales_status_updated_at,
+                followup_status_updated_at: response.data?.followup_status_updated_at,
+                updated_at: new Date().toISOString()
+              }
+            : c
+        )
+        leadsHook.setCustomers(updated)
+        setCustomers(updated)
+        setPendingStatusByLeadId((prev) => {
+          const next = { ...prev }
+          const cur = next[leadId]
+          if (!cur) return prev
+          if (type === 'sales') {
+            const { salesStatus, salesStatusRemark, ...rest } = cur
+            if (Object.keys(rest).length === 0) delete next[leadId]
+            else next[leadId] = rest
+          } else {
+            const { followUpStatus, followUpRemark, ...rest } = cur
+            if (Object.keys(rest).length === 0) delete next[leadId]
+            else next[leadId] = rest
+          }
+          return next
+        })
+        setStatusRemarkModal({ open: false, leadId: null, type: null, status: '', initialRemark: '' })
+        Toast.success(type === 'sales' ? 'Sales status saved' : 'Follow-up status saved')
+      }
+    } catch {
+      Toast.error('Failed to save status')
+    }
+  }, [statusRemarkModal, leadsHook.customers, leadsHook.setCustomers, setCustomers, pendingStatusByLeadId])
+
+  const handleStatusRemarkCancel = React.useCallback(() => {
+    setStatusRemarkModal({ open: false, leadId: null, type: null, status: '', initialRemark: '' })
+  }, [])
+
+  const handleFinalSave = React.useCallback(async (leadId) => {
+    const customer = leadsHook.customers.find((c) => c.id === leadId)
+    if (!customer) return
+    const pending = pendingStatusByLeadId[leadId] || {}
+    const payload = {
+      sales_status: pending.salesStatus ?? customer.salesStatus ?? '',
+      sales_status_remark: pending.salesStatusRemark ?? customer.salesStatusRemark ?? '',
+      follow_up_status: pending.followUpStatus ?? customer.followUpStatus ?? '',
+      follow_up_remark: pending.followUpRemark ?? customer.followUpRemark ?? '',
+      follow_up_date: customer.followUpDate ?? '',
+      follow_up_time: customer.followUpTime ?? '',
+      enquired_products: JSON.stringify(customer.enquired_products || customer.enquiredProducts || []),
+      other_product: customer.other_product || customer.otherProduct || ''
+    }
+    try {
+      const fd = new FormData()
+      Object.entries(payload).forEach(([k, v]) => fd.append(k, v == null ? '' : v))
+      const response = await apiClient.putFormData(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(leadId), fd)
+      if (response.success) {
+        const updated = leadsHook.customers.map((c) =>
+          c.id === leadId
+            ? {
+                ...c,
+                salesStatus: payload.sales_status,
+                salesStatusRemark: payload.sales_status_remark,
+                followUpStatus: payload.follow_up_status,
+                followUpRemark: payload.follow_up_remark,
+                sales_status_updated_at: response.data?.sales_status_updated_at,
+                followup_status_updated_at: response.data?.followup_status_updated_at,
+                updated_at: new Date().toISOString()
+              }
+            : c
+        )
+        leadsHook.setCustomers(updated)
+        setCustomers(updated)
+        setPendingStatusByLeadId((prev) => {
+          const next = { ...prev }
+          delete next[leadId]
+          return next
+        })
+        Toast.success('Status saved successfully')
+      }
+    } catch {
+      Toast.error('Failed to save status')
+    }
+  }, [leadsHook.customers, leadsHook.setCustomers, setCustomers, pendingStatusByLeadId])
+
+  const handleInlineStatusChange = React.useCallback(async (leadId, field, newStatus, remark) => {
     const customer = leadsHook.customers.find(c => c.id === leadId)
     if (!customer) return
+    const followUpRemark = remark !== undefined ? remark : (customer.followUpRemark ?? '')
     const payload = {
       sales_status: field === 'salesStatus' ? newStatus : (customer.salesStatus ?? ''),
       sales_status_remark: customer.salesStatusRemark ?? '',
       follow_up_status: field === 'followUpStatus' ? newStatus : (customer.followUpStatus ?? ''),
-      follow_up_remark: customer.followUpRemark ?? '',
+      follow_up_remark: followUpRemark,
       follow_up_date: customer.followUpDate ?? '',
       follow_up_time: customer.followUpTime ?? '',
       enquired_products: JSON.stringify(customer.enquired_products || customer.enquiredProducts || []),
@@ -911,7 +1078,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
       const response = await apiClient.putFormData(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(leadId), fd)
       if (response.success) {
         const updated = leadsHook.customers.map(c =>
-          c.id === leadId ? { ...c, [field]: newStatus } : c
+          c.id === leadId ? { ...c, [field]: newStatus, ...(field === 'followUpStatus' ? { followUpRemark } : {}) } : c
         )
         leadsHook.setCustomers(updated)
         setCustomers(updated)
@@ -951,6 +1118,71 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
       Toast.error('Failed to update appointment')
     }
   }, [leadsHook.customers, leadsHook.setCustomers, setCustomers])
+
+  const buildLeadFormData = React.useCallback((lead, overrides = {}) => {
+    const fd = new FormData();
+    const data = { ...lead, ...overrides };
+    fd.append('name', data.name || '');
+    fd.append('phone', data.phone || '');
+    fd.append('email', (data.email === 'N/A' ? '' : data.email) || '');
+    fd.append('business', data.business || '');
+    fd.append('address', data.address || '');
+    fd.append('gst_no', (data.gstNo === 'N/A' ? '' : data.gstNo) || '');
+    fd.append('product_type', data.productName || '');
+    fd.append('state', data.state || '');
+    fd.append('division', data.division || '');
+    fd.append('lead_source', data.enquiryBy || '');
+    fd.append('customer_type', data.customerType || '');
+    fd.append('date', data.date || '');
+    fd.append('whatsapp', (data.whatsapp || '').replace('+91', '') || '');
+    fd.append('sales_status', data.salesStatus || '');
+    fd.append('sales_status_remark', data.salesStatusRemark || '');
+    fd.append('follow_up_status', data.followUpStatus || '');
+    fd.append('follow_up_remark', data.followUpRemark || '');
+    fd.append('follow_up_date', data.followUpDate || '');
+    fd.append('follow_up_time', data.followUpTime || '');
+    fd.append('enquired_products', JSON.stringify(data.enquired_products || data.enquiredProducts || []));
+    fd.append('other_product', data.other_product || data.otherProduct || '');
+    return fd;
+  }, []);
+
+  const handleInlineStateChange = React.useCallback(async (leadId, newState) => {
+    const customer = leadsHook.customers.find((c) => c.id === leadId);
+    if (!customer) return;
+    try {
+      const fd = buildLeadFormData(customer, { state: newState, division: '' });
+      const res = await apiClient.putFormData(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(leadId), fd);
+      if (res?.success) {
+        const updated = leadsHook.customers.map((c) =>
+          c.id === leadId ? { ...c, state: newState, division: '' } : c
+        );
+        leadsHook.setCustomers(updated);
+        setCustomers(updated);
+        Toast.success('State updated');
+      }
+    } catch {
+      Toast.error('Failed to update state');
+    }
+  }, [leadsHook.customers, leadsHook.setCustomers, setCustomers, buildLeadFormData]);
+
+  const handleInlineDivisionChange = React.useCallback(async (leadId, newDivision) => {
+    const customer = leadsHook.customers.find((c) => c.id === leadId);
+    if (!customer) return;
+    try {
+      const fd = buildLeadFormData(customer, { division: newDivision });
+      const res = await apiClient.putFormData(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(leadId), fd);
+      if (res?.success) {
+        const updated = leadsHook.customers.map((c) =>
+          c.id === leadId ? { ...c, division: newDivision } : c
+        );
+        leadsHook.setCustomers(updated);
+        setCustomers(updated);
+        Toast.success('Division updated');
+      }
+    } catch {
+      Toast.error('Failed to update division');
+    }
+  }, [leadsHook.customers, leadsHook.setCustomers, setCustomers, buildLeadFormData]);
 
   const handleToggleLeadForTag = (leadId) => {
     setSelectedLeadsForTag(prev => prev.includes(leadId) ? prev.filter(id => id !== leadId) : [...prev, leadId])
@@ -1393,16 +1625,6 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
       Toast.error('Failed to load quotation details');
     }
   }
-
-  React.useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (actionMenuOpen && !event.target.closest('.action-menu-container')) {
-        setActionMenuOpen(null)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [actionMenuOpen])
 
   const truncateText = (text, maxLength = 30) => {
     if (!text || text === 'N/A' || text === '-') return text === 'N/A' || text === '-' ? '-' : (text || '-')
@@ -1882,6 +2104,17 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
             >
               <Tag className="h-4 w-4" />
             </button>
+            <button 
+              onClick={() => setShowColumnModal(true)} 
+              className={`p-2.5 rounded-xl border-2 transition-all duration-200 shadow-md ${
+                isDarkMode 
+                  ? 'bg-gray-800 border-gray-700 hover:bg-gray-700 text-gray-300' 
+                  : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-600'
+              }`}
+              title="Column Settings"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
             {selectedLeadsForTag.length > 0 && (
               <button 
                 onClick={() => setShowBulkActions(true)} 
@@ -1908,7 +2141,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
               isDarkMode ? 'from-gray-800 via-gray-750 to-gray-800 border-gray-700' : 'border-blue-200'
             }`}>
               <tr>
-                <th className="px-2 py-2 text-left text-[10px] font-bold uppercase w-10">
+                <th className="px-4 py-3 text-left text-[10px] font-bold uppercase w-10">
                   <input
                     type="checkbox"
                     checked={selectedLeadsForTag.length > 0 && selectedLeadsForTag.length === leadsHook.paginatedCustomers.length}
@@ -1921,7 +2154,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   />
                 </th>
                 {columnVisibility.leadId && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Hash className="h-4 w-4 text-purple-600" />
                       <span>LEAD ID</span>
@@ -1929,7 +2162,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {(columnVisibility.namePhone || columnVisibility.email) && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase min-w-[160px] ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <User className="h-4 w-4 text-blue-600" />
                       <span>CUSTOMER</span>
@@ -1937,7 +2170,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.business && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase min-w-[140px] ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-purple-600" />
                       <span>BUSINESS</span>
@@ -1945,7 +2178,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.productType && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Package className="h-4 w-4 text-green-600" />
                       <span>Product Type</span>
@@ -1953,7 +2186,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.gstNo && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Hash className="h-4 w-4 text-orange-600" />
                       <span>GST No</span>
@@ -1961,7 +2194,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.address && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase min-w-[180px] ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-red-600" />
                       <span>ADDRESS</span>
@@ -1969,7 +2202,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.state && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase min-w-[140px] ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Globe className="h-4 w-4 text-indigo-600" />
                       <span>STATE</span>
@@ -1977,15 +2210,15 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.division && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase min-w-[120px] ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 text-cyan-600" />
-                      <span>Division</span>
+                      <span>DIVISION</span>
                     </div>
                   </th>
                 )}
                 {columnVisibility.customerType && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Tag className="h-4 w-4 text-pink-600" />
                       <span>Customer Type</span>
@@ -1993,7 +2226,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.leadSource && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <TrendingUp className="h-4 w-4 text-emerald-600" />
                       <span>Lead Source</span>
@@ -2001,7 +2234,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.salesStatus && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Clock className="h-4 w-4 text-yellow-600" />
                       <span>SALES STATUS</span>
@@ -2009,7 +2242,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.followUpStatus && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-teal-600" />
                       <span>FOLLOW UP STATUS</span>
@@ -2017,7 +2250,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.followUpDate && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4" />
                       <span>Follow Up Date</span>
@@ -2025,7 +2258,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.followUpTime && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Clock className="h-4 w-4" />
                       <span>Follow Up Time</span>
@@ -2033,38 +2266,26 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                   </th>
                 )}
                 {columnVisibility.date && (
-                  <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <th className={`px-4 py-3 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4" />
                       <span>Date</span>
                     </div>
                   </th>
                 )}
-                <th className={`px-2 py-2 text-left text-[10px] font-bold uppercase ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                  <div className="flex items-center gap-2">
-                    <MoreHorizontal className="h-4 w-4" />
-                    <span>Actions</span>
-                    <button 
-                      onClick={() => setShowColumnModal(true)} 
-                      className={`p-1.5 rounded-lg transition-all duration-200 ${
-                        isDarkMode 
-                          ? 'hover:bg-gray-700 text-gray-300' 
-                          : 'hover:bg-gray-100 text-gray-600'
-                      }`} 
-                      title="Column Settings"
-                    >
-                      <Settings className="h-4 w-4" />
-                    </button>
-                  </div>
-                </th>
               </tr>
             </thead>
             <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
               {leadsHook.paginatedCustomers.map((customer) => (
-                <tr key={customer.id} className={`transition-colors duration-150 ${
-                  isDarkMode ? 'hover:bg-gray-700/50' : 'hover:bg-blue-50/50'
-                }`}>
-                  <td className="px-2 py-2">
+                <tr
+                  key={customer.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleView(customer)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleView(customer); } }}
+                  className={`transition-colors duration-150 cursor-pointer ${isDarkMode ? 'hover:bg-gray-700/50' : 'hover:bg-blue-50/50'}`}
+                >
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     {(() => {
                       const priority = getDisplayPriority(customer)
                       return (
@@ -2112,12 +2333,12 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                       ); })()}
                   </td>
                   {columnVisibility.leadId && (
-                    <td className={`px-2 py-2 text-xs font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={`Lead ID: ${customer.id}`}>
+                    <td className={`px-4 py-3 text-xs font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={`Lead ID: ${customer.id}`}>
                       {customer.id}
                     </td>
                   )}
                   {(columnVisibility.namePhone || columnVisibility.email) && (
-                    <td className="px-2 py-2">
+                    <td className="px-4 py-3">
                       <div className="space-y-1">
                         {columnVisibility.namePhone && (
                           <div className={`font-semibold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={customer.name}>
@@ -2134,6 +2355,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                             <Mail className={`h-3 w-3 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
                             <a 
                               href={`mailto:${customer.email}`} 
+                              onClick={(e) => e.stopPropagation()}
                               className={`text-sm ${isDarkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'}`}
                               title={customer.email}
                             >
@@ -2145,37 +2367,53 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                     </td>
                   )}
                   {columnVisibility.business && (
-                    <td className={`px-2 py-2 text-xs font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={customer.business}>
+                    <td className={`px-4 py-3 text-xs font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`} title={customer.business}>
                       {truncateText(customer.business, 30)}
                     </td>
                   )}
                   {columnVisibility.productType && (
-                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.productName !== 'N/A' ? customer.productName : ''}>
+                    <td className={`px-4 py-3 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.productName !== 'N/A' ? customer.productName : ''}>
                       {customer.productName !== 'N/A' ? truncateText(customer.productName, 20) : '-'}
                     </td>
                   )}
                   {columnVisibility.gstNo && (
-                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.gstNo !== 'N/A' ? customer.gstNo : ''}>
+                    <td className={`px-4 py-3 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.gstNo !== 'N/A' ? customer.gstNo : ''}>
                       {customer.gstNo !== 'N/A' ? truncateText(customer.gstNo, 15) : '-'}
                     </td>
                   )}
                   {columnVisibility.address && (
-                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.address}>
+                    <td className={`px-4 py-3 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.address}>
                       <div className="whitespace-pre-line">{truncateText(customer.address, 60)}</div>
                     </td>
                   )}
                   {columnVisibility.state && (
-                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.state}>
-                      {truncateText(customer.state, 20)}
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                      <InlineStateDivisionCell
+                        state={customer.state}
+                        division={customer.division}
+                        leadId={customer.id}
+                        onStateChange={handleInlineStateChange}
+                        onDivisionChange={handleInlineDivisionChange}
+                        isDarkMode={isDarkMode}
+                        onlyState
+                      />
                     </td>
                   )}
                   {columnVisibility.division && (
-                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.division || ''}>
-                      {customer.division ? truncateText(customer.division, 20) : '-'}
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                      <InlineStateDivisionCell
+                        state={customer.state}
+                        division={customer.division}
+                        leadId={customer.id}
+                        onStateChange={handleInlineStateChange}
+                        onDivisionChange={handleInlineDivisionChange}
+                        isDarkMode={isDarkMode}
+                        onlyDivision
+                      />
                     </td>
                   )}
                   {columnVisibility.customerType && (
-                    <td className="px-2 py-2">
+                    <td className="px-4 py-3">
                       <span className={`px-3 py-1 text-xs font-medium rounded-full bg-gradient-to-r from-blue-100 to-purple-100 text-blue-800 border border-blue-200 shadow-sm ${
                         isDarkMode ? 'from-blue-900/50 to-purple-900/50 text-blue-200 border-blue-700' : ''
                       }`} title={customer.customerType}>
@@ -2184,133 +2422,61 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                     </td>
                   )}
                   {columnVisibility.leadSource && (
-                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.enquiryBy !== 'N/A' ? customer.enquiryBy : ''}>
+                    <td className={`px-4 py-3 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} title={customer.enquiryBy !== 'N/A' ? customer.enquiryBy : ''}>
                       {customer.enquiryBy !== 'N/A' ? truncateText(customer.enquiryBy, 20) : '-'}
                     </td>
                   )}
                   {columnVisibility.salesStatus && (
-                    <td className="px-2 py-2">
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="space-y-1">
                         <InlineStatusDropdown
-                          value={customer.salesStatus}
+                          value={pendingStatusByLeadId[customer.id]?.salesStatus ?? customer.salesStatus}
                           leadId={customer.id}
-                          onChange={(id, status) => handleInlineStatusChange(id, 'salesStatus', status)}
+                          onStatusSelect={(id, status) => {
+                            const p = pendingStatusByLeadId[customer.id]
+                            openStatusRemarkModal(id, 'sales', status, p?.salesStatusRemark ?? customer.salesStatusRemark ?? '')
+                          }}
                         />
-                        {customer.salesStatusRemark && (
-                          <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} title={customer.salesStatusRemark}>
-                            "{truncateText(customer.salesStatusRemark, 40)}"
+                        {(pendingStatusByLeadId[customer.id]?.salesStatusRemark ?? customer.salesStatusRemark) && (
+                          <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} title={pendingStatusByLeadId[customer.id]?.salesStatusRemark ?? customer.salesStatusRemark}>
+                            "{truncateText(pendingStatusByLeadId[customer.id]?.salesStatusRemark ?? customer.salesStatusRemark, 40)}"
                           </div>
                         )}
                       </div>
                     </td>
                   )}
                   {columnVisibility.followUpStatus && (
-                    <td className="px-2 py-2">
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <InlineFollowUpStatusCell
-                        value={customer.followUpStatus}
+                        value={pendingStatusByLeadId[customer.id]?.followUpStatus ?? customer.followUpStatus}
                         leadId={customer.id}
                         followUpDate={customer.followUpDate}
                         followUpTime={customer.followUpTime}
-                        followUpRemark={customer.followUpRemark}
-                        onChange={(id, status) => handleInlineStatusChange(id, 'followUpStatus', status)}
+                        followUpRemark={pendingStatusByLeadId[customer.id]?.followUpRemark ?? customer.followUpRemark}
+                        onStatusSelect={(id, status) => {
+                          const p = pendingStatusByLeadId[customer.id]
+                          openStatusRemarkModal(id, 'followup', status, p?.followUpRemark ?? customer.followUpRemark ?? '')
+                        }}
                         onAppointmentChange={handleAppointmentChange}
                         isDarkMode={isDarkMode}
                       />
                     </td>
                   )}
                   {columnVisibility.followUpDate && (
-                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                    <td className={`px-4 py-3 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                       {customer.followUpDate || '-'}
                     </td>
                   )}
                   {columnVisibility.followUpTime && (
-                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                    <td className={`px-4 py-3 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                       {customer.followUpTime || '-'}
                     </td>
                   )}
                   {columnVisibility.date && (
-                    <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                    <td className={`px-4 py-3 text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                       {customer.date ? new Date(customer.date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}
                     </td>
                   )}
-                  <td className="px-2 py-2">
-                    <div className="relative action-menu-container">
-                      <button 
-                        onClick={() => setActionMenuOpen(actionMenuOpen === customer.id ? null : customer.id)} 
-                        className={`p-2 rounded-lg transition-all duration-200 shadow-sm ${
-                          isDarkMode 
-                            ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`} 
-                        title="Actions"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </button>
-                      {actionMenuOpen === customer.id && (
-                        <div className={`absolute right-0 top-full mt-1 z-50 rounded-lg shadow-xl border min-w-[180px] ${
-                          isDarkMode 
-                            ? 'bg-gray-800 border-gray-700' 
-                            : 'bg-white border-gray-200'
-                        }`} style={{ boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
-                          <button 
-                            onClick={() => { handleView(customer); setActionMenuOpen(null) }} 
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-                              isDarkMode 
-                                ? 'hover:bg-gray-700 text-gray-300' 
-                                : 'hover:bg-blue-50 text-gray-700'
-                            }`}
-                          >
-                            <Eye className="h-4 w-4 text-blue-600" />
-                            <span>View</span>
-                          </button>
-                          <button 
-                            onClick={() => { handleEdit(customer); setActionMenuOpen(null) }} 
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-                              isDarkMode 
-                                ? 'hover:bg-gray-700 text-gray-300' 
-                                : 'hover:bg-green-50 text-gray-700'
-                            }`}
-                          >
-                            <Pencil className="h-4 w-4 text-green-600" />
-                            <span>Edit</span>
-                          </button>
-                          <button 
-                            onClick={() => { handleEditLeadStatus(customer); setActionMenuOpen(null) }} 
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-                              isDarkMode 
-                                ? 'hover:bg-gray-700 text-gray-300' 
-                                : 'hover:bg-orange-50 text-gray-700'
-                            }`}
-                          >
-                            <Settings className="h-4 w-4 text-orange-600" />
-                            <span>Update Status</span>
-                          </button>
-                          <button 
-                            onClick={() => { handleQuotation(customer); setActionMenuOpen(null) }} 
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-                              isDarkMode 
-                                ? 'hover:bg-gray-700 text-gray-300' 
-                                : 'hover:bg-purple-50 text-gray-700'
-                            }`}
-                          >
-                            <FileText className="h-4 w-4 text-purple-600" />
-                            <span>Create Quotation</span>
-                          </button>
-                          <button
-                            onClick={() => { openPricingModal(customer); setActionMenuOpen(null) }}
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-                              isDarkMode
-                                ? 'hover:bg-gray-700 text-gray-300'
-                                : 'hover:bg-indigo-50 text-gray-700'
-                            }`}
-                          >
-                            <ShieldCheck className="h-4 w-4 text-indigo-600" />
-                            <span>Pricing / RFP</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -2475,6 +2641,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                 loading={enquiriesLoading}
                 groupedByDate={filteredEnquiriesGroupedByDate}
                 onRefresh={() => fetchEnquiries(true)}
+                onEdit={handleEnquiryEdit}
                 visibleColumns={{
                   customer_name: true,
                   business: true,
@@ -2580,8 +2747,14 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
 
       {viewingCustomer && (
         <CustomerDetailSidebar
-          customer={viewingCustomer}
-          onClose={() => setViewingCustomer(null)}
+          customer={(() => {
+            const pid = viewingCustomer?.id ?? viewingCustomer?._id
+            const pending = pid ? pendingStatusByLeadId[pid] : {}
+            return { ...viewingCustomer, ...pending }
+          })()}
+          hasPending={!!(viewingCustomer && pendingStatusByLeadId[viewingCustomer.id ?? viewingCustomer?._id])}
+          onFinalSave={viewingCustomer ? () => handleFinalSave(viewingCustomer.id ?? viewingCustomer._id) : undefined}
+          onClose={() => { setViewingCustomer(null); setSidebarUpdateStatusLead(null) }}
           onEdit={() => {
             setEditingCustomer(viewingCustomer)
             setViewingCustomer(null)
@@ -2601,6 +2774,63 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
           quotationPIs={piHook.quotationPIs}
           piHook={piHook}
           onViewPI={piHook.handleViewPI}
+          onUpdateStatus={() => handleEditLeadStatus(viewingCustomer)}
+          onPricingRfp={() => openPricingModal(viewingCustomer)}
+          onSendEmail={() => {}}
+          onDocs={() => {}}
+          renderSendEmailContent={(onClose) => (
+            <SendEmailForm customer={leadFormat(viewingCustomer)} onClose={onClose} isDarkMode={isDarkMode} />
+          )}
+          renderDocsContent={(onClose) => {
+            const leadId = viewingCustomer?.id ?? viewingCustomer?._id
+            return leadId ? <UploadDocs leadId={leadId} onClose={onClose} isDarkMode={isDarkMode} /> : null
+          }}
+          onUpdateStatusTabSelect={(c) => setSidebarUpdateStatusLead(leadFormat(c))}
+          renderUpdateStatusContent={(onClose) => sidebarUpdateStatusLead && (
+            <EditLeadStatusModal
+              lead={sidebarUpdateStatusLead}
+              onClose={() => { onClose(); setSidebarUpdateStatusLead(null) }}
+              onSave={async (id, payload) => { await handleUpdateLeadStatus(id, payload); setSidebarUpdateStatusLead(null) }}
+              embedInSidebar
+            />
+          )}
+          onPricingRfpTabSelect={async (c) => {
+            const rawSpec = (c?.productName || '').trim()
+            const productSpec = rawSpec && rawSpec.toLowerCase() !== 'n/a' ? rawSpec : ''
+            setPricingLead(c)
+            setPricingError('')
+            setPricingPrice(null)
+            setPricingStock(null)
+            setRfpValidationErrors({ products: {}, deliveryTimeline: '', general: '' })
+            setRfpForm({
+              products: productSpec ? [{ productSpec, quantity: '', quantityUnit: 'Mtr', targetPrice: '', stockStatus: null, stockLoading: true, approvedPrice: null }] : [],
+              deliveryTimeline: '',
+              specialRequirements: ''
+            })
+            setProducts(getProducts())
+            setProductSearch('')
+            setShowProductDropdown(false)
+            setPricingLoading(true)
+            if (productSpec) {
+              try {
+                const [stockRes, priceRes] = await Promise.all([checkProductStock(productSpec), productPriceService.getApprovedPrice(productSpec).catch(() => null)])
+                setPricingStock(stockRes)
+                setPricingPrice(priceRes?.data || null)
+                setRfpForm(prev => ({ ...prev, products: prev.products.map(p => p.productSpec === productSpec ? { ...p, stockStatus: stockRes, approvedPrice: priceRes?.data || null, stockLoading: false } : p) }))
+              } catch (e) {
+                setPricingError(e.message || 'Failed to load pricing details')
+              } finally {
+                setPricingLoading(false)
+              }
+            } else {
+              setPricingLoading(false)
+            }
+          }}
+          renderRfpContent={(onClose) => pricingLead && renderPricingFormBodyRef.current && (
+            <div className={`rounded-xl border overflow-hidden flex flex-col h-full min-h-0 ${isDarkMode ? 'border-gray-700 bg-gray-900' : 'border-slate-200 bg-white'}`}>
+              {renderPricingFormBodyRef.current(onClose)}
+            </div>
+          )}
         />
       )}
       {showAddCustomer && <AddCustomerForm onClose={() => { setShowAddCustomer(false); setEditingCustomer(null) }} onSave={handleSaveCustomer} editingCustomer={editingCustomer} />}
@@ -2767,23 +2997,18 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
       )}
       
       {showCreateQuotation && viewingCustomerForQuotation && <CreateQuotationForm customer={viewingCustomerForQuotation} user={user} existingQuotation={editingQuotation} onClose={() => { setShowCreateQuotation(false); setViewingCustomerForQuotation(null); setEditingQuotation(null); setRfpIdInput(''); setValidatedRfpDecision(null); sessionStorage.removeItem('pricingRfpDecisionId'); sessionStorage.removeItem('pricingRfpDecisionData'); }} onSave={handleSaveQuotation} />}
-      {showPricingModal && pricingLead && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120] p-4">
-          <div className={`w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-xl flex flex-col ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'}`}>
-            {/* Fixed Header */}
-            <div className={`flex items-start justify-between gap-4 p-6 pb-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} flex-shrink-0`}>
+      {(() => {
+        const renderPricingFormBody = (closeFn) => pricingLead ? (
+          <>
+            <div className={`flex items-start justify-between gap-4 p-6 pb-4 border-b flex-shrink-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
               <div>
                 <h2 className="text-lg font-semibold">Pricing & RFP Decision</h2>
-                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Lead: {pricingLead.name}
-                </p>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Lead: {pricingLead.name}</p>
               </div>
-              <button onClick={closePricingModal} className="p-2 rounded-lg hover:bg-black/10">
+              <button onClick={closeFn} className="p-2 rounded-lg hover:bg-black/10">
                 <X className="h-5 w-5" />
               </button>
             </div>
-
-            {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {(pricingError || rfpValidationErrors.general) && (
                 <div className={`px-4 py-3 rounded-lg border ${
@@ -2833,8 +3058,8 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                                   {product.name}
                                 </button>
                               ))}
-                  </div>
-                ) : (
+                            </div>
+                          ) : (
                             <div className={`px-4 py-2.5 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                               No products found. Press Enter to add as custom product.
                             </div>
@@ -2848,9 +3073,9 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                               >
                                 + Add "{productSearch}" as custom product
                               </button>
-              </div>
+                            </div>
                           )}
-                  </div>
+                        </div>
                       )}
                     </div>
                     <button
@@ -3097,9 +3322,21 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        ) : null;
+        renderPricingFormBodyRef.current = renderPricingFormBody;
+        return (
+          <>
+            {showPricingModal && pricingLead && (
+              <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120] p-4">
+                <div className={`w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-xl flex flex-col ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'}`}>
+                  {renderPricingFormBody(closePricingModal)}
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
       {showCreatePIModal && selectedQuotationForPI && viewingCustomerForQuotation && <CreatePIForm quotation={selectedQuotationForPI} customer={viewingCustomerForQuotation} user={user} modal={true} onClose={async (savedPI) => { 
         setShowCreatePIModal(false)
         if (selectedQuotationForPI?.id) {
@@ -3239,6 +3476,15 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
           onSave={handleUpdateLeadStatus}
         />
       )}
+      <StatusRemarkModal
+        open={statusRemarkModal.open}
+        onClose={() => setStatusRemarkModal((p) => ({ ...p, open: false }))}
+        type={statusRemarkModal.type}
+        status={statusRemarkModal.status}
+        initialRemark={statusRemarkModal.initialRemark}
+        onSave={handleStatusRemarkSave}
+        onCancel={handleStatusRemarkCancel}
+      />
     </main>
   )
 }

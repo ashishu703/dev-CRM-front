@@ -12,6 +12,7 @@ const InlineFollowUpStatusCell = ({
   followUpTime,
   followUpRemark,
   onChange,
+  onStatusSelect,
   onAppointmentChange,
   disabled = false,
   isDarkMode = false,
@@ -50,13 +51,25 @@ const InlineFollowUpStatusCell = ({
   };
 
   const handleSelect = (opt) => {
-    if (!isSelected(opt)) {
-      onChange?.(leadId, opt);
+    if (isSelected(opt)) {
+      setOpen(false);
+      return;
+    }
+    if (onStatusSelect) {
+      onStatusSelect(leadId, opt);
+      setOpen(false);
       if (/appointment\s*scheduled/i.test(opt)) {
         setLocalDate(followUpDate || '');
         setLocalTime(followUpTime || '');
         setShowDateInput(true);
       }
+      return;
+    }
+    onChange?.(leadId, opt, (followUpRemark || '').trim());
+    if (/appointment\s*scheduled/i.test(opt)) {
+      setLocalDate(followUpDate || '');
+      setLocalTime(followUpTime || '');
+      setShowDateInput(true);
     }
     setOpen(false);
   };
@@ -79,7 +92,7 @@ const InlineFollowUpStatusCell = ({
           onClick={() => !disabled && setOpen((p) => !p)}
           disabled={disabled}
           className={`
-            inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium
+            inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium
             ${badgeClasses}
             ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:ring-2 hover:ring-offset-0.5 hover:ring-gray-300'}
           `}
@@ -90,13 +103,13 @@ const InlineFollowUpStatusCell = ({
       </div>
 
       {open && (
-        <div className="absolute left-0 top-full mt-0.5 z-50 min-w-[180px] py-0.5 bg-white border border-gray-200 rounded shadow-lg">
+        <div className="absolute left-0 top-full mt-0.5 z-50 min-w-[200px] py-0.5 bg-white border border-gray-200 rounded-2xl shadow-lg overflow-hidden">
           {FOLLOW_UP_OPTIONS.map((opt) => (
             <button
               key={opt}
               type="button"
               onClick={() => handleSelect(opt)}
-              className="w-full text-left px-2 py-1 text-[10px] font-medium flex items-center justify-between hover:bg-amber-50/80 text-gray-700"
+              className={`w-full text-left px-2 py-1 text-[10px] font-medium flex items-center justify-between hover:bg-amber-50/80 ${isSelected(opt) ? 'bg-amber-100/90 text-amber-900' : 'text-gray-700'}`}
             >
               <span>{opt}</span>
               {isSelected(opt) && <Check className="w-3 h-3 text-gray-700 flex-shrink-0" />}
