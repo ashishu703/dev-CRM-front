@@ -172,22 +172,28 @@ export class QuotationDataMapper {
     if (!Array.isArray(items)) return [];
 
     return items.map(item => {
-      // Explicitly handle HSN, Quantity, and Rate - ensure correct column mapping for Live Preview
-      const hsnValue = item.hsnCode || item.hsn || '';
-      const qtyValue = item.quantity ?? item.qty ?? item.length ?? '';
+      let hsnValue = item.hsnCode || item.hsn || '';
+      if (hsnValue === '' && (item.productName || item.name)) {
+        hsnValue = '8544';
+      }
+      let qtyValue = item.quantity ?? item.qty ?? item.length ?? '';
+      if (qtyValue === '' && item.amount != null && (item.buyerRate || item.rate || item.unitPrice)) {
+        const rate = Number(item.buyerRate || item.rate || item.unitPrice) || 0;
+        if (rate > 0) qtyValue = Number(item.amount) / rate;
+      }
       const rateValue = item.rate || item.buyerRate || item.unitPrice || '';
-      
+      const qtyStr = qtyValue !== '' && qtyValue != null ? String(qtyValue) : '';
+      const hsnStr = hsnValue !== '' && hsnValue != null ? String(hsnValue) : '';
       return {
         ...item,
-        // HSN/SAC column - must show HSN code, NOT quantity
-        hsnCode: String(hsnValue),
-        hsn: String(hsnValue),
-        // QUANTITY column - quantity, qty, length (legacy) for template compatibility
-        quantity: String(qtyValue),
-        qty: String(qtyValue),
-        length: String(qtyValue), // Legacy: some templates use {{this.length}} for quantity
-        rate: String(rateValue),
-        buyerRate: String(rateValue),
+        hsnCode: hsnStr,
+        hsn: hsnStr,
+        quantity: qtyStr,
+        qty: qtyStr,
+        length: qtyStr,
+        product_quantity: qtyStr,
+        rate: rateValue !== '' && rateValue != null ? String(rateValue) : '',
+        buyerRate: rateValue !== '' && rateValue != null ? String(rateValue) : '',
         productName: item.productName || item.name || '',
         unit: item.unit || item.per || '',
         amount: item.amount || 0,

@@ -355,7 +355,7 @@ export default function CustomerDetailSidebar({
                           {quotation.quotationDate ? (quotation.quotationDate.includes('T') ? new Date(quotation.quotationDate).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : quotation.quotationDate) : 'N/A'}
                         </div>
                           <div className="text-sm font-semibold text-gray-800 mb-2">
-                            Total: <span className="text-blue-700">₹{quotation.total ? Number(quotation.total).toLocaleString('en-IN') : '0.00'}</span>
+                            Total: <span className="text-blue-700">₹{Number(quotation.total ?? quotation.total_amount ?? quotation.totalAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                           </div>
                           <span className={`inline-block text-xs px-2.5 py-1 rounded-full font-semibold shadow-sm ${
                             quotation.status === 'approved' ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' : 

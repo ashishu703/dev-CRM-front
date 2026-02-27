@@ -53,6 +53,9 @@ export default function PaymentModal({
   const [selectedPIId, setSelectedPIId] = useState(againstPiId || '');
   const [summary, setSummary] = useState({ total: 0, paid: 0, remaining: 0 });
   const [credit, setCredit] = useState(0);
+  const [adjustCredit, setAdjustCredit] = useState('no');
+  const [creditApplyMode, setCreditApplyMode] = useState('full');
+  const [customCreditAmount, setCustomCreditAmount] = useState('');
 
   const partyId = party?.id || party?.leadData?.id || party?.leadId || null;
 
@@ -69,7 +72,8 @@ export default function PaymentModal({
       if (!partyId) return;
       try {
         const res = await paymentService.getCustomerCredit(partyId);
-        setCredit(Number(res?.data?.balance || res?.balance || 0));
+        const balance = res?.data?.data?.balance ?? res?.data?.balance ?? res?.balance;
+        setCredit(Number(balance ?? 0));
       } catch (_) {
         setCredit(0);
       }
@@ -209,6 +213,15 @@ export default function PaymentModal({
       if (paymentContext === 'order') {
         payload.quotation_id = selectedQuotationId;
         payload.pi_id = selectedPIId;
+        const remainingDue = Number(summary.remaining ?? 0);
+        if (credit > 0 && adjustCredit === 'yes') {
+          const raw = creditApplyMode === 'full' ? credit : Math.min(Number(customCreditAmount) || 0, credit);
+          const toApply = Math.min(raw, remainingDue);
+          if (toApply > 0) {
+            payload.adjust_credit = true;
+            payload.credit_adjust_amount = toApply;
+          }
+        }
       }
 
       const response = await paymentService.createPayment(payload);
@@ -247,6 +260,51 @@ export default function PaymentModal({
               {party.customerName && party.customerName !== 'N/A' ? party.customerName : (party.leadData?.name || party.name || 'N/A')}
             </h4>
             <div className="mt-2 text-xs text-gray-700 font-medium">Available credit: ₹{Number(credit || 0).toLocaleString('en-IN')}</div>
+
+            {paymentContext === 'order' && credit > 0 && (
+              <div className="mt-3 p-3 rounded-lg border border-emerald-200 bg-emerald-50/50 space-y-2">
+                <p className="text-sm font-medium text-gray-900">Adjust party credit against this payment?</p>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input type="radio" name="adjustCreditModal" checked={adjustCredit === 'no'} onChange={() => setAdjustCredit('no')} className="rounded-full" />
+                    No
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input type="radio" name="adjustCreditModal" checked={adjustCredit === 'yes'} onChange={() => setAdjustCredit('yes')} className="rounded-full" />
+                    Yes
+                  </label>
+                </div>
+                {adjustCredit === 'yes' && (
+                  <div className="pl-2 space-y-2 border-l-2 border-emerald-300">
+                    <div className="flex gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="radio" name="creditModeModal" checked={creditApplyMode === 'full'} onChange={() => setCreditApplyMode('full')} className="rounded-full" />
+                        Full (₹{Number(credit).toLocaleString('en-IN', { minimumFractionDigits: 2 })})
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="radio" name="creditModeModal" checked={creditApplyMode === 'custom'} onChange={() => setCreditApplyMode('custom')} className="rounded-full" />
+                        Custom
+                      </label>
+                    </div>
+                    {creditApplyMode === 'custom' && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max={credit}
+                          step="0.01"
+                          value={customCreditAmount}
+                          onChange={(e) => setCustomCreditAmount(e.target.value)}
+                          className="w-28 px-2 py-1.5 border border-gray-300 rounded text-sm"
+                          placeholder="Amount"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-3">
               <label className="block text-sm font-medium text-gray-700 mb-1">Payment Context</label>

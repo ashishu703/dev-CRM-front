@@ -9,6 +9,50 @@ import templateService from '../../services/TemplateService';
 import companyBranchService from '../../services/CompanyBranchService';
 import { QuotationDataMapper } from '../../utils/QuotationDataMapper';
 import { getProducts, addProduct, UNITS } from '../../constants/products';
+
+function findProductForHsn(productName, productsList) {
+  if (!productName || !Array.isArray(productsList) || productsList.length === 0) return null;
+  const name = String(productName).trim();
+  const nameLower = name.toLowerCase();
+  const exact = productsList.find((p) => p.name.toLowerCase() === nameLower);
+  if (exact) return exact;
+  const normalized = nameLower.replace(/\s+/g, ' ').replace(/\s*sq\s*mm\s*$/i, ' sqmm').replace(/\s*s\s*$/i, ' sqmm');
+  return productsList.find((p) => {
+    const pNorm = p.name.toLowerCase().replace(/\s+/g, ' ').replace(/\s*sq\s*mm\s*$/i, ' sqmm');
+    return pNorm === normalized || pNorm.includes(normalized) || normalized.includes(pNorm) || pNorm.startsWith(nameLower) || nameLower.startsWith(pNorm);
+  }) || null;
+}
+
+/**
+ * Ensures quotation table rows show HSN in the HSN column and quantity in the QUANTITY column.
+ * Backend templates often use the same placeholder (e.g. {{this.hsn}}) in both cells; we fix per row.
+ */
+function fixQuotationTemplateHtml(html) {
+  if (!html || typeof html !== 'string') return html;
+  let out = html;
+  // Replace second HSN placeholder in each table row with quantity (row-scoped, so we never span </tr>)
+  out = out.replace(/(<tr[^>]*>)([\s\S]*?)(<\/tr>)/gi, (_match, openTag, rowContent, closeTag) => {
+    let occurrence = 0;
+    const fixedRow = rowContent.replace(/\{\{\s*this\.(hsn|hsnCode)\s*\}\}/g, (placeholder) => {
+      occurrence += 1;
+      return occurrence === 2 ? '{{this.quantity}}' : placeholder;
+    });
+    return openTag + fixedRow + closeTag;
+  });
+  // Legacy: some templates use {{this.length}} for quantity
+  out = out.replace(/\{\{\s*this\.length\s*\}\}/g, '{{this.quantity}}');
+  return out;
+}
+
+/** Single source for quotation live preview: context + template fix + render. */
+function QuotationPreviewContent({ previewData, companyBranches, user, selectedTemplate, availableTemplates }) {
+  const activeTemplate = availableTemplates?.find((t) => t.template_key === selectedTemplate);
+  if (!activeTemplate?.html_content) return null;
+  const context = QuotationDataMapper.prepareContext(previewData, companyBranches, user, selectedTemplate);
+  const html = fixQuotationTemplateHtml(activeTemplate.html_content);
+  return <DynamicTemplateRenderer html={html} data={context} containerId="quotation-content" />;
+}
+
 import apiClient from '../../utils/apiClient';
 import { API_ENDPOINTS } from '../../api/admin_api/api';
 import productPriceService from '../../services/ProductPriceService';
@@ -90,7 +134,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
     quotationNumber: `ANQ${Date.now().toString().slice(-6)}`,
     quotationDate: new Date().toISOString().split('T')[0],
     validUpto: getSevenDaysLater(new Date().toISOString().split('T')[0]),
-    selectedBranch: '', // Will be set from organizations list
+    selectedBranch: '', 
     items: [
       {
         id: 1,
@@ -117,7 +161,6 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
     materialType: "",
     remark: "",
     termsSections: defaultQuotationTerms.map(section => ({ ...section, points: [...section.points] })),
-    // Editable bill-to information
     billTo: {
       business: "",
       buyerName: "",
@@ -126,16 +169,14 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
       gstNo: "",
       state: ""
     },
-    // Transport Details
     transportDetails: {
       lrNo: "",
       transport: "",
       transportId: "",
       vehicleNumber: ""
     },
-    // Bank Details
     bankDetails: {
-      accountHolderName: "",
+      accountHolderName: "ANODE ELECTRIC PVT. LTD.",
       bankName: "ICICI Bank",
       branchName: "WRIGHT TOWN JABALPUR",
       accountNumber: "657605601783",
@@ -152,7 +193,6 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
   const [validatedRfpDecision, setValidatedRfpDecision] = useState(null);
   const [rfpIdValidated, setRfpIdValidated] = useState(false);
 
-  // Auto-fill bill-to from customer data
   useEffect(() => {
     if (!customer) {
       return;
@@ -160,7 +200,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
 
     setQuotationData(prev => ({
       ...prev,
-      customer: customer, // Store the full customer object
+      customer: customer, 
       billTo: {
         business: (customer.business && customer.business !== 'N/A') ? customer.business : (customer.name || ""),
         buyerName: (customer.business && customer.business !== 'N/A') ? customer.business : (customer.name || ""), // Set Buyer Name same as Business Name
@@ -172,12 +212,10 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
     }));
   }, [customer]);
 
-  // Load existing quotation data for editing
   useEffect(() => {
     if (existingQuotation && existingQuotation.id) {
       const dbQuotation = existingQuotation;
       
-      // Parse JSON fields
       const billTo = typeof dbQuotation.bill_to === 'string' 
         ? JSON.parse(dbQuotation.bill_to) 
         : (dbQuotation.bill_to || {});
@@ -185,7 +223,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
       const bankDetails = typeof dbQuotation.bank_details === 'string'
         ? JSON.parse(dbQuotation.bank_details)
         : (dbQuotation.bank_details || {
-            accountHolderName: "",
+            accountHolderName: "ANODE ELECTRIC PVT. LTD.",
             bankName: "ICICI Bank",
             branchName: "WRIGHT TOWN JABALPUR",
             accountNumber: "657605601783",
@@ -196,7 +234,6 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
         ? JSON.parse(dbQuotation.terms_sections)
         : (dbQuotation.terms_sections || defaultQuotationTerms.map(section => ({ ...section, points: [...section.points] })));
       
-      // Format items
       const items = (dbQuotation.items || []).map((item, index) => ({
         id: index + 1,
         productName: item.product_name || item.productName || "",
@@ -260,6 +297,25 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
     setProducts(getProducts());
   }, []);
 
+  useEffect(() => {
+    if (products.length === 0) return;
+    const items = quotationData.items || [];
+    let changed = false;
+    const nextItems = items.map((item) => {
+      const name = (item.productName || '').trim();
+      if (!name || (item.hsn != null && String(item.hsn).trim() !== '')) return item;
+      const match = findProductForHsn(name, products);
+      if (match && match.hsn) {
+        changed = true;
+        return { ...item, hsn: match.hsn, unit: item.unit || match.defaultUnit || 'Mtr' };
+      }
+      return item;
+    });
+    if (changed) {
+      setQuotationData((prev) => ({ ...prev, items: nextItems }));
+    }
+  }, [products.length, quotationData.items?.length]);
+
   // Load quotation templates from configuration
   useEffect(() => {
     const loadTemplates = async () => {
@@ -275,17 +331,14 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
     };
 
     loadTemplates();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load company branches (organizations) from backend
   useEffect(() => {
     const loadBranches = async () => {
       try {
         const { branches, organizations: orgs } = await companyBranchService.fetchBranches();
         setCompanyBranches(branches);
         
-        // Sort organizations alphabetically by organization_name or legal_name
         const sortedOrgs = [...orgs].sort((a, b) => {
           const nameA = (a.organization_name || a.legal_name || `Organization #${a.id}`).toLowerCase();
           const nameB = (b.organization_name || b.legal_name || `Organization #${b.id}`).toLowerCase();
@@ -306,21 +359,16 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
     };
 
     loadBranches();
-    // We intentionally omit quotationData from deps to avoid resetting selection
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Check for RFP ID in sessionStorage on mount
   useEffect(() => {
     const storedRfpId = sessionStorage.getItem('pricingRfpDecisionId');
     if (storedRfpId && !existingQuotation) {
       setRfpIdInput(storedRfpId);
       handleValidateRfpId(storedRfpId);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Validate RFP ID – only accept if RFP is linked to this lead (customer)
   const handleValidateRfpId = async (rfpId = null) => {
     const idToValidate = rfpId || rfpIdInput.trim();
     if (!idToValidate) {
@@ -372,40 +420,35 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
     }
   };
 
-  // Populate quotation from RFP decision
   const populateQuotationFromRfpDecision = async (decision) => {
     try {
       const rfpProducts = Array.isArray(decision.products) ? decision.products : [];
 
-      // Extract calculator log (if any) from decision
       let calculatorLog = decision.calculator_pricing_log || decision.rfp_request?.calculator_pricing_log || null;
       if (calculatorLog && typeof calculatorLog === 'string') {
         try {
           calculatorLog = JSON.parse(calculatorLog);
         } catch (e) {
-          // ignore parse error and keep raw
         }
       }
 
       const hasCalculator = calculatorLog && typeof calculatorLog === 'object';
       
-      // Fetch pricing for all products - Rate must be per-unit (base), never total price
       const itemsWithPricing = await Promise.all(
         rfpProducts.map(async (product, index) => {
-          // Default values
           let unitPrice = 0;
           let quantityForForm = '';
           let buyerRateForForm = '';
           let amount = 0;
-          // Don't set remark to "Quantity: X" - quantity is already in the table column; avoids redundant line under each product in template
           let remark = '';
 
-          // Prefer per-product calculator_log; fallback to legacy single decision.calculator_pricing_log for first product
+          const productInfo = findProductForHsn(product.productSpec, products);
+          const hsnForItem = (productInfo?.hsn && String(productInfo.hsn).trim()) || '8544';
+
           const log = (product.calculator_log && typeof product.calculator_log === 'object' ? product.calculator_log : null)
             || (index === 0 && hasCalculator ? calculatorLog : null);
 
           if (log && (log.totalPrice != null || log.calculatorTotalPrice != null)) {
-            // Calculator: totalPrice is TOTAL, we need per-unit rate for buyerRate
             const lengthUsedRaw = log.quantity ?? log.length ?? product.quantity ?? product.length ?? '';
             const lengthNum = lengthUsedRaw === '' ? 0 : Number.parseFloat(lengthUsedRaw);
             const safeLength = Number.isFinite(lengthNum) ? lengthNum : 0;
@@ -416,24 +459,23 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
             quantityForForm = safeLength ? String(safeLength) : '';
             amount = round2(totalFromCalculator || (safeLength * unitPrice));
 
-            // remark left empty - quantity shown in table column, no redundant line under product
           } else {
-            // No calculator: use approved price list for per-unit rate
             try {
               const priceRes = await productPriceService.getApprovedPrice(product.productSpec);
               if (priceRes?.data) {
                 unitPrice = parseFloat(priceRes.data.unit_price || 0);
               }
             } catch (error) {
-              console.error(`Failed to fetch price for ${product.productSpec}:`, error);
+              if (error?.status !== 404) {
+                console.error(`Failed to fetch price for ${product.productSpec}:`, error);
+              }
             }
 
-            const rawQty = product.quantity ?? '';
+            const rawQty = product.quantity ?? product.qty ?? product.length ?? '';
             const qtyNum = rawQty === '' ? 0 : Number.parseFloat(rawQty);
             const qtyInt = Number.isFinite(qtyNum) ? Math.trunc(qtyNum) : 0;
             quantityForForm = rawQty === '' ? '' : String(qtyInt);
 
-            // target_price from RFP is TOTAL (from calculator), not per-unit - never use as rate directly
             const targetTotal = product.targetPrice != null && product.targetPrice !== '' ? Number.parseFloat(product.targetPrice) : NaN;
             if (Number.isFinite(targetTotal) && qtyInt > 0) {
               unitPrice = round2(targetTotal / qtyInt);
@@ -444,10 +486,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
               buyerRateForForm = unitPrice > 0 ? unitPrice.toString() : '';
             }
           }
-          
-          // Find product in products list for HSN
-          const productInfo = products.find(p => p.name.toLowerCase() === product.productSpec.toLowerCase());
-          
+
           const prodLog = product.calculator_log && typeof product.calculator_log === 'object' ? product.calculator_log : (index === 0 && hasCalculator ? calculatorLog : null);
           return {
             id: index + 1,
@@ -457,7 +496,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
             companyRate: unitPrice,
             buyerRate: buyerRateForForm,
             amount: amount,
-            hsn: productInfo?.hsn || '',
+            hsn: hsnForItem,
             remark
           };
         })
@@ -523,30 +562,22 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
       [field]: value
     }
     
-    // If product name is changed, try to find matching product and auto-fill HSN and unit
     if (field === 'productName' && value) {
-      const matchingProduct = products.find(p => 
-        p.name.toLowerCase() === value.toLowerCase()
-      );
-      
+      const matchingProduct = findProductForHsn(value, products);
       if (matchingProduct) {
         updatedItems[index].hsn = matchingProduct.hsn || '';
         if (!updatedItems[index].unit) {
           updatedItems[index].unit = matchingProduct.defaultUnit || 'Mtr';
         }
       } else {
-        // If product not found, save it for future use
         const currentHsn = updatedItems[index].hsn || '';
         const currentUnit = updatedItems[index].unit || 'Mtr';
         addProduct(value, currentHsn, currentUnit);
-        // Refresh products list
         setProducts(getProducts());
       }
     }
     
-    // Calculate amount for this item
     if (['quantity', 'companyRate', 'buyerRate'].includes(field)) {
-      // Use buyerRate for amount calculation
       const qty = parseFloat(updatedItems[index].quantity) || 0;
       const rate = parseFloat(updatedItems[index].buyerRate) || 0;
       updatedItems[index].amount = round2(qty * rate);
@@ -989,7 +1020,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
   if (showPreview) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[110] p-2 sm:p-4">
-        <div className="w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto relative bg-white rounded-lg shadow-xl">
+        <div className="w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto relative bg-white rounded-lg shadow-xl">
           {/* Header with Template Selector */}
           <div className="sticky top-0 bg-white border-b border-gray-200 px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 z-10">
             <h2 className="text-lg sm:text-xl font-bold text-gray-900">Quotation Preview</h2>
@@ -1022,31 +1053,15 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
             </div>
           </div>
           
-          {/* Preview Content */}
-          <div className="p-3 sm:p-6">
-            {(() => {
-              const activeTemplate = availableTemplates.find(
-                (tpl) => tpl.template_key === selectedTemplate
-              );
-              if (!activeTemplate?.html_content) {
-                return null;
-              }
-
-              const context = QuotationDataMapper.prepareContext(
-                previewData,
-                companyBranches,
-                user,
-                selectedTemplate
-              );
-
-              return (
-                <DynamicTemplateRenderer
-                  html={activeTemplate.html_content}
-                  data={context}
-                  containerId="quotation-content"
-                />
-              );
-            })()}
+          {/* Preview Content - full width of modal */}
+          <div className="p-3 sm:p-6 w-full">
+            <QuotationPreviewContent
+              previewData={previewData}
+              companyBranches={companyBranches}
+              user={user}
+              selectedTemplate={selectedTemplate}
+              availableTemplates={availableTemplates}
+            />
           </div>
           <div className="sticky bottom-0 bg-white border-t border-gray-200 px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3">
             <Button 
@@ -1766,7 +1781,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
         </div>
 
         {/* Right Side - Live Preview */}
-        <div className="w-2/5 border-l pl-4" style={{ maxWidth: '400px' }}>
+        <div className="flex-1 min-w-[320px] border-l pl-4" style={{ maxWidth: '640px' }}>
           <div className="sticky top-4">
             <div className="mb-3">
               <div className="flex items-center justify-between mb-2">
@@ -1799,37 +1814,19 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
               </div>
             </div>
             <div
-              className="bg-white border border-gray-300 rounded-lg shadow-sm overflow-auto"
+              className="bg-white border border-gray-300 rounded-lg shadow-sm overflow-auto w-full"
               style={{
                 maxHeight: 'calc(100vh - 150px)',
-                transform: 'scale(0.8)',
-                transformOrigin: 'top left',
-                width: '125%'
+                minWidth: '280px'
               }}
             >
-              {(() => {
-                const activeTemplate = availableTemplates.find(
-                  (tpl) => tpl.template_key === selectedTemplate
-                );
-                if (!activeTemplate?.html_content) {
-                  return null;
-                }
-
-                const context = QuotationDataMapper.prepareContext(
-                  previewData,
-                  companyBranches,
-                  user,
-                  selectedTemplate
-                );
-
-                return (
-                  <DynamicTemplateRenderer
-                    html={activeTemplate.html_content}
-                    data={context}
-                    containerId="quotation-content"
-                  />
-                );
-              })()}
+              <QuotationPreviewContent
+                previewData={previewData}
+                companyBranches={companyBranches}
+                user={user}
+                selectedTemplate={selectedTemplate}
+                availableTemplates={availableTemplates}
+              />
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, DollarSign, Upload } from 'lucide-react';
+import { X, DollarSign, Upload, Wallet } from 'lucide-react';
 import paymentService from '../../../../api/admin_api/paymentService';
 import uploadService from '../../../../api/admin_api/uploadService';
 import { toDateOnly } from '../../../../utils/dateOnly';
@@ -31,6 +31,10 @@ export default function AddPaymentSidebar({ payment, onClose, onSuccess }) {
     payment_method: 'cash',
     payment_reference: '',
   });
+  const [partyCreditBalance, setPartyCreditBalance] = useState(0);
+  const [adjustCredit, setAdjustCredit] = useState('no');
+  const [creditApplyMode, setCreditApplyMode] = useState('full');
+  const [customCreditAmount, setCustomCreditAmount] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -60,6 +64,14 @@ export default function AddPaymentSidebar({ payment, onClose, onSuccess }) {
         payment_date: form.payment_date,
         ...(payment_receipt_url && { payment_receipt_url }),
       };
+      if (partyCreditBalance > 0 && adjustCredit === 'yes') {
+        const raw = creditApplyMode === 'full' ? partyCreditBalance : Math.min(Number(customCreditAmount) || 0, partyCreditBalance);
+        const toApply = Math.min(raw, dueAmount);
+        if (toApply > 0) {
+          payload.adjust_credit = true;
+          payload.credit_adjust_amount = toApply;
+        }
+      }
       const response = await paymentService.createPayment(payload);
       if (response?.data?.success !== false && response?.success !== false) {
         Toast.success('Payment added successfully.');
@@ -82,6 +94,19 @@ export default function AddPaymentSidebar({ payment, onClose, onSuccess }) {
     const id = setTimeout(() => setMounted(true), 20);
     return () => clearTimeout(id);
   }, []);
+
+  useEffect(() => {
+    if (!customerId) {
+      setPartyCreditBalance(0);
+      return;
+    }
+    let cancelled = false;
+    paymentService.getCustomerCredit(customerId).then((res) => {
+      const balance = res?.data?.data?.balance ?? res?.data?.balance ?? 0;
+      if (!cancelled) setPartyCreditBalance(Number(balance));
+    }).catch(() => { if (!cancelled) setPartyCreditBalance(0); });
+    return () => { cancelled = true; };
+  }, [customerId]);
 
   if (!payment) return null;
 
@@ -162,6 +187,54 @@ export default function AddPaymentSidebar({ payment, onClose, onSuccess }) {
               ))}
             </select>
           </div>
+          {partyCreditBalance > 0 && (
+            <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50/50 space-y-3">
+              <p className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-emerald-600" />
+                Party credit: ₹{Number(partyCreditBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-sm text-gray-700">Adjust credit against this payment?</p>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="adjustCredit" checked={adjustCredit === 'no'} onChange={() => setAdjustCredit('no')} className="rounded-full" />
+                  No
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="adjustCredit" checked={adjustCredit === 'yes'} onChange={() => setAdjustCredit('yes')} className="rounded-full" />
+                  Yes
+                </label>
+              </div>
+              {adjustCredit === 'yes' && (
+                <div className="pl-2 space-y-2 border-l-2 border-emerald-300">
+                  <div className="flex gap-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="creditMode" checked={creditApplyMode === 'full'} onChange={() => setCreditApplyMode('full')} className="rounded-full" />
+                      Full (₹{Number(partyCreditBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })})
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="creditMode" checked={creditApplyMode === 'custom'} onChange={() => setCreditApplyMode('custom')} className="rounded-full" />
+                      Custom
+                    </label>
+                  </div>
+                  {creditApplyMode === 'custom' && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max={partyCreditBalance}
+                        step="0.01"
+                        value={customCreditAmount}
+                        onChange={(e) => setCustomCreditAmount(e.target.value)}
+                        className="w-28 px-2 py-1.5 border border-gray-300 rounded text-sm"
+                        placeholder="Amount"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Reference (optional)</label>
             <input

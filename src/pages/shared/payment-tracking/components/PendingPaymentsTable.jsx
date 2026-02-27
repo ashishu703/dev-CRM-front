@@ -30,10 +30,23 @@ export default function PendingPaymentsTable({ rows, onAddPayment, getPaymentFor
           ) : (
             rows.map((r) => {
               const payment = getPaymentForRow ? getPaymentForRow(r) : null;
+              const isPartiallyCancelled = r.quotationStatus === 'partially_cancelled';
+              const rowClass = isPartiallyCancelled
+                ? 'bg-red-50/50 hover:bg-red-50/70 border-l-4 border-l-red-500'
+                : 'hover:bg-gray-50/50';
               return (
-                <tr key={r.quotationId || r.orderId} className="hover:bg-gray-50/50">
+                <tr key={r.quotationId || r.orderId} className={rowClass}>
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{r.partyName}</td>
-                  <td className="px-4 py-3 text-sm font-mono text-gray-700">{r.quotationNumber || '—'}</td>
+                  <td className="px-4 py-3 text-sm font-mono text-gray-700">
+                    <span className="inline-flex items-center gap-2 flex-wrap">
+                      {r.quotationNumber || '—'}
+                      {isPartiallyCancelled && (
+                        <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                          Partially Cancelled
+                        </span>
+                      )}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-sm font-semibold text-right text-amber-700">
                     {formatCurrency(r.pendingAmount)}
                   </td>

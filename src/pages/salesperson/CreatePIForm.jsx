@@ -92,6 +92,10 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
   const [availableTemplates, setAvailableTemplates] = useState([])
   const [paymentHistory, setPaymentHistory] = useState([])
   const [quotationTotal, setQuotationTotal] = useState(0)
+  const [partyCreditBalance, setPartyCreditBalance] = useState(0)
+  const [adjustPartyCredit, setAdjustPartyCredit] = useState('no')
+  const [creditApplyMode, setCreditApplyMode] = useState('full')
+  const [customCreditAmount, setCustomCreditAmount] = useState('')
 
   useEffect(() => {
     const buildInitialPiData = (quotation, customerLike) => {
@@ -603,6 +607,20 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    const cid = customer?.id ?? customer?._id
+    if (!cid) {
+      setPartyCreditBalance(0)
+      return
+    }
+    let cancelled = false
+    paymentService.getCustomerCredit(cid).then((res) => {
+      const balance = res?.data?.data?.balance ?? res?.data?.balance
+      if (!cancelled && balance != null) setPartyCreditBalance(Number(balance))
+    }).catch(() => { if (!cancelled) setPartyCreditBalance(0) })
+    return () => { cancelled = true }
+  }, [customer?.id, customer?._id])
+
   const handlePIInputChange = (field, value) => {
     setPiFormData(prev => ({
       ...prev,
@@ -684,6 +702,12 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
         const today = new Date().toISOString().split('T')[0]
         const validUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
         
+        const totalPi = Number(piFormData.total) || 0
+        let creditAdjustment = 0
+        if (partyCreditBalance > 0 && adjustPartyCredit === 'yes') {
+          const raw = creditApplyMode === 'full' ? partyCreditBalance : Math.min(Number(customCreditAmount) || 0, partyCreditBalance)
+          creditAdjustment = Math.min(raw, totalPi, partyCreditBalance)
+        }
         const piPayload = {
           piDate: today,
           validUntil: validUntil,
@@ -691,9 +715,10 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
           subtotal: piFormData.subtotal,
           taxAmount: piFormData.taxAmount,
           totalAmount: piFormData.total,
-          template: selectedTemplate // Include selected template
+          template: selectedTemplate
         }
-        
+        if (creditAdjustment > 0) piPayload.creditAdjustment = creditAdjustment
+
         const response = await proformaInvoiceService.createFromQuotation(quotationData.id, piPayload)
         
         if (response && response.success) {
@@ -1142,6 +1167,71 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
                       </div>
                     </div>
                   </div>
+
+                  {partyCreditBalance > 0 && (
+                    <div className="space-y-4 border-t pt-4">
+                      <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2">
+                        <DollarSign className="h-5 w-5 text-green-500" />
+                        Party credit
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        Available: <span className="font-semibold text-green-700">₹{Number(partyCreditBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </p>
+                      <div className="space-y-2">
+                        <span className="text-sm font-medium text-gray-700">Adjust party credit against this PI?</span>
+                        <div className="flex gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="adjustPartyCredit" checked={adjustPartyCredit === 'no'} onChange={() => setAdjustPartyCredit('no')} className="rounded-full" />
+                            No
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="adjustPartyCredit" checked={adjustPartyCredit === 'yes'} onChange={() => setAdjustPartyCredit('yes')} className="rounded-full" />
+                            Yes
+                          </label>
+                        </div>
+                      </div>
+                      {adjustPartyCredit === 'yes' && (
+                        <div className="space-y-2 pl-4 border-l-2 border-green-200">
+                          <div className="flex gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input type="radio" name="creditApplyMode" checked={creditApplyMode === 'full'} onChange={() => setCreditApplyMode('full')} className="rounded-full" />
+                              Full amount (₹{Number(partyCreditBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })})
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input type="radio" name="creditApplyMode" checked={creditApplyMode === 'custom'} onChange={() => setCreditApplyMode('custom')} className="rounded-full" />
+                              Custom amount
+                            </label>
+                          </div>
+                          {creditApplyMode === 'custom' && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-600">₹</span>
+                              <input
+                                type="number"
+                                min="0"
+                                max={partyCreditBalance}
+                                step="0.01"
+                                value={customCreditAmount}
+                                onChange={(e) => setCustomCreditAmount(e.target.value)}
+                                className="w-32 px-2 py-1.5 border border-gray-200 rounded text-sm"
+                              />
+                            </div>
+                          )}
+                          <p className="text-sm text-gray-700">
+                            Amount to adjust: ₹{(() => {
+                              const amt = creditApplyMode === 'full' ? partyCreditBalance : Math.min(Number(customCreditAmount) || 0, partyCreditBalance)
+                              return Number(amt).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+                            })()}
+                            {' · '}
+                            Balance due after adjustment: ₹{(() => {
+                              const total = Number(piFormData.total) || 0
+                              const amt = creditApplyMode === 'full' ? partyCreditBalance : Math.min(Number(customCreditAmount) || 0, partyCreditBalance)
+                              return Math.max(0, total - amt).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+                            })()}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </form>
               </CardContent>
             </div>

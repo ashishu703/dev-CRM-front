@@ -39,6 +39,7 @@ export default function PaymentTrackingView({
   selectedForCancelOrder,
   setSelectedForCancelOrder,
   onRefresh,
+  onSaveOrderDelivery,
 }) {
   const dispatch = useDispatch();
   const { addPaymentSidebarOpen, selectedPayment } = useSelector((state) => state.paymentTracking);
@@ -136,6 +137,7 @@ export default function PaymentTrackingView({
               cancelOrderItemForPayment={cancelOrderItemForPayment}
               onCancelOrder={(item) => setSelectedForCancelOrder(item)}
               onCancelProduct={(item) => setSelectedForCancelOrder(item)}
+              onSaveOrderDelivery={onSaveOrderDelivery}
             />
           ) : activeTab === 'pending' ? (
             <PendingPaymentsTable

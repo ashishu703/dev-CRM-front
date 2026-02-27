@@ -42,14 +42,21 @@ export default function ActiveOrdersTable({
   cancelOrderItemForPayment,
   onCancelOrder,
   onCancelProduct,
+  onSaveOrderDelivery,
 }) {
   const [localDelivery, setLocalDelivery] = useState({});
-  const handleDeliveryChange = useCallback((rowKey, field, value) => {
-    setLocalDelivery((prev) => ({
-      ...prev,
-      [rowKey]: { ...(prev[rowKey] || {}), [field]: value },
-    }));
-  }, []);
+  const handleDeliveryChange = useCallback((rowKey, field, value, row) => {
+    setLocalDelivery((prev) => {
+      const next = { ...prev, [rowKey]: { ...(prev[rowKey] || {}), [field]: value } };
+      const cell = next[rowKey] || {};
+      if (row?.quotationId && onSaveOrderDelivery && (field === 'deliveryStatus' || field === 'deliveryDate')) {
+        const delivery_date = field === 'deliveryDate' ? value : (cell.deliveryDate ?? formatDate(row.deliveryDate) ?? '');
+        const delivery_status = field === 'deliveryStatus' ? value : (cell.deliveryStatus ?? (row.deliveryStatus && row.deliveryStatus !== '—' ? row.deliveryStatus : 'Pending'));
+        onSaveOrderDelivery(row.quotationId, { delivery_date: delivery_date || null, delivery_status: delivery_status || null });
+      }
+      return next;
+    });
+  }, [onSaveOrderDelivery]);
 
   const colSpan = (showSalespersonColumn ? 9 : 8) + 1;
   return (
@@ -85,7 +92,12 @@ export default function ActiveOrdersTable({
               const cancelItemFull = cancelOrderItemForPayment && payment ? cancelOrderItemForPayment(payment) : null;
               const rules = getActionRules(deliveryStatus);
               const delivered = isDelivered(deliveryStatus);
-              const rowClass = delivered ? 'bg-emerald-50/30 hover:bg-emerald-50/50 border-l-4 border-l-emerald-500' : 'hover:bg-gray-50/50';
+              const isRowCancelled = r.quotationStatus === 'cancelled' || r.quotationStatus === 'partially_cancelled' || r.isItemCancelled;
+              const rowClass = isRowCancelled
+                ? 'bg-red-50/50 hover:bg-red-50/70 border-l-4 border-l-red-500'
+                : delivered
+                  ? 'bg-emerald-50/30 hover:bg-emerald-50/50 border-l-4 border-l-emerald-500'
+                  : 'hover:bg-gray-50/50';
 
               return (
                 <tr key={rowKey} className={rowClass}>
@@ -102,7 +114,7 @@ export default function ActiveOrdersTable({
                       <input
                         type="date"
                         value={confirmationDate}
-                        onChange={(e) => handleDeliveryChange(rowKey, 'confirmationDate', e.target.value)}
+                        onChange={(e) => handleDeliveryChange(rowKey, 'confirmationDate', e.target.value, r)}
                         className="w-full min-w-[110px] px-2 py-1.5 text-sm border border-gray-200 rounded focus:ring-2 focus:ring-indigo-500"
                       />
                     ) : (
@@ -110,18 +122,24 @@ export default function ActiveOrdersTable({
                     )}
                   </td>
                   <td className="px-4 py-2">
-                    <StatusBadge
-                      value={deliveryStatus}
-                      onChange={(val) => handleDeliveryChange(rowKey, 'deliveryStatus', val)}
-                      editable={rules.editable}
-                    />
+                    {(r.quotationStatus === 'cancelled' || r.quotationStatus === 'partially_cancelled' || r.isItemCancelled) ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded border text-xs font-medium bg-red-100 text-red-800 border-red-200">
+                        Cancelled
+                      </span>
+                    ) : (
+                      <StatusBadge
+                        value={deliveryStatus}
+                        onChange={(val) => handleDeliveryChange(rowKey, 'deliveryStatus', val, r)}
+                        editable={rules.editable}
+                      />
+                    )}
                   </td>
                   <td className="px-4 py-2">
                     {rules.editable ? (
                       <input
                         type="date"
                         value={deliveryDate}
-                        onChange={(e) => handleDeliveryChange(rowKey, 'deliveryDate', e.target.value)}
+                        onChange={(e) => handleDeliveryChange(rowKey, 'deliveryDate', e.target.value, r)}
                         className="w-full min-w-[110px] px-2 py-1.5 text-sm border border-gray-200 rounded focus:ring-2 focus:ring-indigo-500"
                       />
                     ) : (

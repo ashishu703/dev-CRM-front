@@ -4,7 +4,6 @@ import {
   AB_CABLE_EXCEL_PUBLIC_PATH,
   AB_CABLE_RATE_HEADERS,
   AB_CABLE_TYPE_ISI,
-  AB_CABLE_COMM_TYPES,
 } from "../../constants/abCableConstants";
 import {
   buildAbCableGroups,
@@ -33,6 +32,7 @@ export default function AbCableCalculator({ setActiveView, onBack, rfpContext })
   const [hasExtraCharges, setHasExtraCharges] = useState(true);
   const tableBodyRef = useRef(null);
   const sizeMismatchWarnedRef = useRef(false);
+  const ratesAppliedForEngineRef = useRef(null);
 
   const dataRows = useMemo(() => {
     if (!engine) return [];
@@ -49,7 +49,6 @@ export default function AbCableCalculator({ setActiveView, onBack, rfpContext })
     return rows;
   }, [engine]);
 
-  // One radio per SIZE (select size), one radio per TYPE within that size (select type)
   const selectedRowIndex = useMemo(() => {
     if (!selectedSize || !selectedType) return null;
     const typeUpper = selectedType.toUpperCase();
@@ -208,10 +207,8 @@ export default function AbCableCalculator({ setActiveView, onBack, rfpContext })
 
   useEffect(() => {
     loadExcel();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch account-driven rates (blue box inputs) and push into the sheet engine where possible.
   useEffect(() => {
     const fetchRatesFromBackend = async () => {
       try {
@@ -253,7 +250,10 @@ export default function AbCableCalculator({ setActiveView, onBack, rfpContext })
 
   useEffect(() => {
     if (!engine || !rates) return;
-    // Push rates into all data rows (where those columns exist).
+    // Apply rates only once per (engine, rates) to avoid setState loop (engine in deps would re-trigger).
+    const key = `${engine?.headerRowIndex ?? 0}-${JSON.stringify(rates)}`;
+    if (ratesAppliedForEngineRef.current === key) return;
+    ratesAppliedForEngineRef.current = key;
     for (const g of groups) {
       for (const rowIndex of Object.values(g.rows)) {
         for (const header of AB_CABLE_RATE_HEADERS) {
@@ -264,9 +264,7 @@ export default function AbCableCalculator({ setActiveView, onBack, rfpContext })
         }
       }
     }
-    // Trigger rerender by setting same engine (hf updates internally).
-    setEngine({ ...engine });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setEngine((prev) => (prev ? { ...prev } : prev));
   }, [rates, engine, groups]);
 
   const handleMessengerThicknessChange = (rowIndex, value) => {

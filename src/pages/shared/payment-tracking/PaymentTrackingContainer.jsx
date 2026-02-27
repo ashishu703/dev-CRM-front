@@ -7,6 +7,8 @@ import { usePaymentTrackingData } from './hooks/usePaymentTrackingData';
 import { usePaymentFilters } from './hooks/usePaymentFilters';
 import { usePagination } from './hooks/usePagination';
 import { openAddPaymentSidebar } from '../../../features/paymentTracking/paymentTrackingSlice';
+import paymentService from '../../../api/admin_api/paymentService';
+import Toast from '../../../utils/Toast';
 
 /**
  * Data + orchestration. Role-based payment tracking with single Refresh and clean tabs.
@@ -48,6 +50,21 @@ export default function PaymentTrackingContainer(props = {}) {
     return { quotationData: { id, quotationId: id } };
   }, []);
 
+  const onSaveOrderDelivery = useCallback(async (quotationId, payload) => {
+    if (!quotationId) return;
+    try {
+      const res = await paymentService.updateOrderDelivery(quotationId, payload);
+      if (res?.data?.success !== false) {
+        Toast.success((res?.data?.data?.updatedCount ?? 0) > 0 ? 'Saved' : 'No payment record to update');
+        data.refresh();
+      } else {
+        Toast.error(res?.data?.message || 'Failed to save');
+      }
+    } catch (e) {
+      Toast.error(e?.response?.data?.message || e?.message || 'Failed to save');
+    }
+  }, [data]);
+
   const salespersonOptions = useMemo(() => {
     const seen = new Set();
     const list = [];
@@ -80,6 +97,7 @@ export default function PaymentTrackingContainer(props = {}) {
       selectedForCancelOrder={selectedForCancelOrder}
       setSelectedForCancelOrder={setSelectedForCancelOrder}
       onRefresh={data.refresh}
+      onSaveOrderDelivery={onSaveOrderDelivery}
     />
   );
 }

@@ -171,6 +171,15 @@ class PaymentService {
     }
   }
 
+  async updateOrderDelivery(quotationId, payload) {
+    const response = await apiClient.patch('/api/payments/order-delivery', {
+      quotation_id: quotationId,
+      delivery_date: payload.delivery_date ?? payload.deliveryDate ?? null,
+      delivery_status: payload.delivery_status ?? payload.deliveryStatus ?? null,
+    });
+    return response;
+  }
+
   // Refund
   async refund(body) {
     try {

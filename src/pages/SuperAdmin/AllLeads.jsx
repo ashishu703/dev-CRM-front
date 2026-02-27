@@ -1258,7 +1258,6 @@ const AllLeads = () => {
             renderDocsContent={null}
           />
         )}
-      )}
               </div>
               
       {/* Pagination */}

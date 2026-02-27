@@ -25,6 +25,8 @@ function mapActiveOrderProductRow(o, item = null) {
     partyName: o.party_name || 'N/A',
     quotationNumber: o.quotation_number || '',
     quotationId: o.quotation_id,
+    quotationStatus: (o.quotation_status || '').toLowerCase(),
+    isItemCancelled: Boolean(o.is_item_cancelled),
     salespersonName: o.salesperson_name || null,
     confirmationDate: o.confirmation_date || null,
     deliveryStatus: o.delivery_status || '—',
@@ -55,6 +57,7 @@ function mapPendingRow(o) {
     quotationNumber: o.quotation_number || '',
     quotationId: o.quotation_id,
     pendingAmount: Number(o.due_amount || 0),
+    quotationStatus: (o.quotation_status || '').toLowerCase(),
     salespersonName: o.salesperson_name || null,
     orderId: o.quotation_id,
   };
