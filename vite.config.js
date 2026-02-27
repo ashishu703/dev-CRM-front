@@ -4,9 +4,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   
-  let apiBaseUrl = env.VITE_API_BASE_URL || 'http://localhost:4500'
-  if (apiBaseUrl.includes(':3000')) {
-    apiBaseUrl = apiBaseUrl.replace(':3000', ':4500')
+  let apiBaseUrl = env.VITE_API_BASE_URL || 'http://localhost:3232'
+  if (apiBaseUrl.includes(':3000') || apiBaseUrl.includes(':4500')) {
+    apiBaseUrl = apiBaseUrl.replace(':3000', ':3232').replace(':4500', ':3232')
     console.log(`[Vite Config] Detected frontend port in API URL, redirecting to backend: ${apiBaseUrl}`)
   }
   
@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
       postcss: './src/config/postcss.config.js',
     },
     server: {
-      port: 3000,
+      port: 3231,
       open: true,
       proxy: {
         '/api': {
@@ -33,6 +33,9 @@ export default defineConfig(({ mode }) => {
           },
         }
       }
+    },
+    preview: {
+      port: 3231,
     },
     build: {
       outDir: 'dist',

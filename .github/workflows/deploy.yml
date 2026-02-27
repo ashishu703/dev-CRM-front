@@ -1,27 +1,28 @@
-name: Deploy to VPS
-
+# Deploy: only on push to main (dev = default branch)
+name: Deploy Frontend
 
 on:
   push:
-    branches:
-      - master
+    branches: [main]
 
 jobs:
   deploy:
-    runs-on: self-hosted
-
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Stop and remove old container
-        run: docker-compose down || true
-
-      - name: Build new Docker image
-        run: docker-compose build --no-cache
-
-      - name: Start new container
-        run: docker-compose up -d
-
-      - name: Clean up old images
-        run: docker image prune -f
+      - name: Deploy on VPS (Frontend port 3231)
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: root
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: 22
+          script: |
+            set -e
+            cd /var/www/myapp-frontend
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose down || true
+            docker compose up -d --build
+            echo 'Frontend (3231) deployed.'
