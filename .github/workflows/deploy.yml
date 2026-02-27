@@ -33,3 +33,9 @@ jobs:
             git reset --hard origin/main
             docker compose -p anode-crm-frontend -f docker-compose.yml up -d --build
             echo 'Frontend anode-crm-frontend (3231) deployed.'
+            if [ -f deploy/nginx-dev.anocabapp.com.conf ]; then
+              sudo cp deploy/nginx-dev.anocabapp.com.conf /etc/nginx/sites-available/dev.anocabapp.com
+              sudo ln -sf /etc/nginx/sites-available/dev.anocabapp.com /etc/nginx/sites-enabled/
+              sudo nginx -t && sudo systemctl reload nginx
+              echo 'Nginx dev.anocabapp.com updated and reloaded.'
+            fi
