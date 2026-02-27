@@ -1,10 +1,11 @@
+# CI: only on dev (push to main = single Deploy workflow only)
 name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [dev]
   pull_request:
-    branches: [main, dev]
+    branches: [dev]
 
 jobs:
   build:
