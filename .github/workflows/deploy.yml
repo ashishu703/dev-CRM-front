@@ -22,12 +22,13 @@ jobs:
           port: 22
           script: |
             set -e
-            REPO_URL="https://github.com/${{ github.repository }}.git"
+            FRONTEND_REPO="https://github.com/ashishu703/dev-CRM-front.git"
             if [ ! -d /var/www/myapp-frontend ]; then
               mkdir -p /var/www/myapp-frontend
-              git clone -b main "$REPO_URL" /var/www/myapp-frontend
+              git clone -b main "$FRONTEND_REPO" /var/www/myapp-frontend
             fi
             cd /var/www/myapp-frontend
+            git remote set-url origin "$FRONTEND_REPO" 2>/dev/null || true
             git fetch origin main
             git reset --hard origin/main
             docker compose -p anode-crm-frontend -f docker-compose.yml up -d --build
