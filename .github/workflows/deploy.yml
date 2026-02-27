@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Deploy on VPS (Frontend port 3231)
         uses: appleboy/ssh-action@v1.2.5
@@ -20,6 +22,11 @@ jobs:
           port: 22
           script: |
             set -e
+            REPO_URL="https://github.com/${{ github.repository }}.git"
+            if [ ! -d /var/www/myapp-frontend ]; then
+              mkdir -p /var/www/myapp-frontend
+              git clone -b main "$REPO_URL" /var/www/myapp-frontend
+            fi
             cd /var/www/myapp-frontend
             git fetch origin main
             git reset --hard origin/main
