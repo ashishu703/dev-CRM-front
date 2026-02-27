@@ -30,6 +30,5 @@ jobs:
             cd /var/www/myapp-frontend
             git fetch origin main
             git reset --hard origin/main
-            docker compose down || true
-            docker compose up -d --build
-            echo 'Frontend (3231) deployed.'
+            docker compose -p anode-crm-frontend -f docker-compose.yml up -d --build
+            echo 'Frontend anode-crm-frontend (3231) deployed.'

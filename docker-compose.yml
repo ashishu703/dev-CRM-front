@@ -1,12 +1,7 @@
-version: '3.8'
-
 services:
   frontend-app:
-    container_name: my-frontend-app
-    
+    container_name: anode-crm-frontend
     build: .
-    
     ports:
       - "3231:80"
-      
     restart: unless-stopped
