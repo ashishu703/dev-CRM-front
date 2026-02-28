@@ -1,13 +1,7 @@
 import React, { memo } from 'react';
 import { AlertCircle, Phone } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-
-const formatAmt = (n) => {
-  const num = Number(n) || 0;
-  if (num >= 1e5) return `₹${(num / 1e5).toFixed(1)}L`;
-  if (num >= 1e3) return `₹${(num / 1e3).toFixed(0)}K`;
-  return `₹${Math.round(num)}`;
-};
+import { formatCr } from '../utils/formatUtils';
 
 function getDaysStuckColor(days) {
   if (days >= 10) return 'text-red-600 bg-red-100 border-red-200';
@@ -53,7 +47,7 @@ const StuckDealsCard = memo(function StuckDealsCard({ stuckDealsByDays = [], onN
               </div>
               <div className="rounded-lg bg-[var(--surface-secondary)] border border-[var(--border)] border-l-4 border-l-[var(--warning-500)] p-3">
                 <div className="text-[10px] text-[var(--warning-600)] font-semibold">Stuck Value</div>
-                <div className="text-lg font-bold text-[var(--text-primary)]">{formatAmt(totalStuckValue)}</div>
+                <div className="text-lg font-bold text-[var(--text-primary)]">{formatCr(totalStuckValue)}</div>
               </div>
               <div className="rounded-lg bg-[var(--surface-secondary)] border border-[var(--border)] p-3">
                 <div className="text-[10px] text-[var(--text-secondary)] font-semibold">Avg Days</div>

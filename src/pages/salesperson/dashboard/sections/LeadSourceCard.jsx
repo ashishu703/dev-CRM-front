@@ -23,19 +23,20 @@ const LeadSourceCard = memo(function LeadSourceCard({ leadSourceBreakdown = [] }
       </div>
       <div className="card-inner-padding">
         {list.length === 0 || totalLeads === 0 ? (
-          <div className="py-10 flex flex-col items-center justify-center text-slate-500">
-            <Users className="w-10 h-10 mb-2 opacity-50" />
-            <p className="text-[12px]">No lead source data</p>
+          <div className="py-10 flex flex-col items-center justify-center text-[var(--text-primary)]">
+            <Users className="w-10 h-10 mb-2 opacity-40" />
+            <p className="text-sm font-semibold">No data found</p>
+            <p className="text-xs mt-1 opacity-80">No lead source data</p>
           </div>
         ) : (
           <>
             <div className="rounded-lg bg-[var(--surface-secondary)] border border-[var(--border)] p-3 mb-4">
-              <div className="text-[10px] text-slate-500 font-semibold">Total leads</div>
-              <div className="text-lg font-bold text-slate-800 tabular-nums">{totalLeads}</div>
+              <div className="text-[10px] text-[var(--text-primary)] font-semibold opacity-90">Total leads</div>
+              <div className="text-lg font-bold text-[var(--text-primary)] tabular-nums">{totalLeads}</div>
             </div>
             {donutData.length > 0 && (
               <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] p-3">
-                <div className="text-[11px] font-semibold text-slate-600 mb-1">Source breakdown</div>
+                <div className="text-[11px] font-semibold text-[var(--text-primary)] mb-1">Source breakdown</div>
                 <ResponsiveContainer width="100%" height={160}>
                   <PieChart>
                     <Pie

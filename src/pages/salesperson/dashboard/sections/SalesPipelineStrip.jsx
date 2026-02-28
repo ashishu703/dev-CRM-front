@@ -1,13 +1,6 @@
 import React, { memo } from 'react';
 import { TrendingDown, Percent, Clock, MousePointer } from 'lucide-react';
-
-const formatAmt = (n) => {
-  const num = Number(n) || 0;
-  if (num >= 1e7) return `₹${(num / 1e7).toFixed(1)}Cr`;
-  if (num >= 1e5) return `₹${(num / 1e5).toFixed(1)}L`;
-  if (num >= 1e3) return `₹${(num / 1e3).toFixed(0)}K`;
-  return `₹${Math.round(num)}`;
-};
+import { formatCurrency } from '../utils/formatUtils';
 
 // Blue → Purple → Pink → Orange → Green (Won), Lost = red
 const STAGE_COLORS = [
@@ -19,7 +12,7 @@ const STAGE_COLORS = [
   '#ef4444', // Lost - red
 ];
 
-const SalesPipelineStrip = memo(function SalesPipelineStrip({ salesPipelineStrip, salesPipelineCRM }) {
+const SalesPipelineStrip = memo(function SalesPipelineStrip({ salesPipelineStrip, salesPipelineCRM, hidePipelineValue }) {
   const crm = salesPipelineCRM || {};
   const stages = crm.stages || [];
   const dropOffs = crm.dropOffs || [];
@@ -32,12 +25,13 @@ const SalesPipelineStrip = memo(function SalesPipelineStrip({ salesPipelineStrip
           <h3>Sales Pipeline</h3>
           <p>Horizontal funnel · Conversion & drop-off</p>
         </div>
-        <div className="card-inner-padding flex flex-col items-center justify-center text-[var(--text-secondary)] text-sm">No pipeline data</div>
+        <div className="card-inner-padding py-10 flex flex-col items-center justify-center text-[var(--text-primary)]">
+          <p className="text-sm font-semibold">No data found</p>
+          <p className="text-xs mt-1 opacity-80">No pipeline data for the selected date</p>
+        </div>
       </div>
     );
   }
-
-  const maxCount = Math.max(1, ...stages.map((s) => s.count || 0));
 
   return (
     <div className="salesperson-dashboard-card overflow-hidden">
@@ -46,40 +40,34 @@ const SalesPipelineStrip = memo(function SalesPipelineStrip({ salesPipelineStrip
         <p>Horizontal funnel · Conversion % · Drop-off · Avg days</p>
       </div>
       <div className="card-inner-padding flex flex-col gap-4">
-        {/* Horizontal segmented bar */}
-        <div className="flex items-stretch gap-0.5 rounded-lg overflow-hidden border border-slate-200 bg-slate-100" style={{ minHeight: 40 }}>
-          {stages.filter((s) => s.key !== 'CLOSED/LOST').map((s, idx) => {
-            const pct = maxCount > 0 ? (s.count / maxCount) * 100 : 0;
-            const color = STAGE_COLORS[idx % STAGE_COLORS.length];
+        {/* Step blocks: Stage → Next, Drop % — all 5 in one row (New Lead → … → Won → Lost) */}
+        <div className="grid grid-cols-5 gap-2 w-full min-w-0">
+          {stages.map((stage, index) => {
+            const next = stages[index + 1];
+            if (!next) return null;
+            const drop =
+              stage.count > 0
+                ? Number((((stage.count - next.count) / stage.count) * 100).toFixed(0))
+                : 0;
             return (
               <div
-                key={s.key}
-                className="flex-1 min-w-0 flex flex-col items-center justify-center px-1 py-1.5 transition-all"
-                style={{ background: color, minWidth: pct > 0 ? `${Math.max(12, pct)}%` : 0 }}
-                title={`${s.label}: ${s.count}`}
+                key={stage.key}
+                className="rounded-lg border border-slate-200 p-3 bg-slate-50 min-w-0"
               >
-                <span className="text-[10px] font-bold text-white drop-shadow truncate w-full text-center">{s.count}</span>
-                <span className="text-[9px] text-white/90 truncate w-full text-center hidden sm:block">{s.label}</span>
+                <div className="text-xs text-slate-500">{stage.label}</div>
+                <div className="text-lg font-bold text-slate-800 tabular-nums">{stage.count}</div>
+                <div className="mt-2 text-xs text-slate-500">
+                  → {next.label}: <span className="font-semibold text-slate-700">{next.count}</span>
+                </div>
+                <div className="mt-1 text-sm font-semibold text-rose-600">
+                  Drop: {drop}%
+                </div>
               </div>
             );
           })}
         </div>
 
-        {/* Drop-off indicators between stages */}
-        {dropOffs.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10px]">
-            {dropOffs.map((d, i) => (
-              <div key={i} className="flex items-center gap-1 text-slate-500">
-                <span className="font-semibold text-slate-700">{d.fromCount} → {d.toCount}</span>
-                <span className="text-rose-600 font-semibold flex items-center gap-0.5">
-                  <TrendingDown className="w-3 h-3" /> Drop: -{Number(d.dropPct).toFixed(0)}%
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Table: Stage, Count, Conversion %, Avg Days */}
+        {/* Table: Stage, Count, Conversion %, Avg days, Drop % */}
         <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full text-[11px]">
             <thead>
@@ -88,20 +76,26 @@ const SalesPipelineStrip = memo(function SalesPipelineStrip({ salesPipelineStrip
                 <th className="text-right py-2 px-2 font-semibold text-slate-600">Count</th>
                 <th className="text-right py-2 px-2 font-semibold text-slate-600">Conversion %</th>
                 <th className="text-right py-2 px-2 font-semibold text-slate-600">Avg days</th>
+                <th className="text-right py-2 px-2 font-semibold text-slate-600">Drop %</th>
               </tr>
             </thead>
             <tbody>
-              {stages.map((s, idx) => (
-                <tr key={s.key} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="py-2 px-2 font-medium text-slate-800 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: STAGE_COLORS[idx % STAGE_COLORS.length] }} />
-                    {s.label}
-                  </td>
-                  <td className="py-2 px-2 text-right font-semibold tabular-nums">{s.count}</td>
-                  <td className="py-2 px-2 text-right text-slate-600 tabular-nums">{s.conversionPct != null ? `${s.conversionPct}%` : '—'}</td>
-                  <td className="py-2 px-2 text-right text-slate-600 tabular-nums">{s.avgDaysSpent ?? '—'}</td>
-                </tr>
-              ))}
+              {stages.map((s, idx) => {
+                const dropToNext = dropOffs[idx];
+                const dropPct = dropToNext != null && dropToNext.dropPct != null ? `${Number(dropToNext.dropPct).toFixed(0)}%` : '—';
+                return (
+                  <tr key={s.key} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="py-2 px-2 font-medium text-slate-800 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: STAGE_COLORS[idx % STAGE_COLORS.length] }} />
+                      {s.label}
+                    </td>
+                    <td className="py-2 px-2 text-right font-semibold tabular-nums">{s.count}</td>
+                    <td className="py-2 px-2 text-right text-slate-600 tabular-nums">{s.conversionPct != null ? `${s.conversionPct}%` : '—'}</td>
+                    <td className="py-2 px-2 text-right text-slate-600 tabular-nums">{s.avgDaysSpent ?? '—'}</td>
+                    <td className="py-2 px-2 text-right text-slate-600 tabular-nums">{dropPct}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -131,14 +125,14 @@ const SalesPipelineStrip = memo(function SalesPipelineStrip({ salesPipelineStrip
           </div>
         </div>
 
-        {/* Pipeline value + Probability weighted */}
-        {(crm.pipelineValue > 0 || crm.probabilityWeightedValue > 0) && (
+        {/* Pipeline value shown only in TargetRevenueSection */}
+        {!hidePipelineValue && (crm.pipelineValue > 0 || crm.probabilityWeightedValue > 0) && (
           <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-200 text-[11px]">
             <span className="text-slate-500">
-              Expected in pipeline: <strong className="text-slate-800">{formatAmt(crm.pipelineValue)}</strong>
+              Expected in pipeline: <strong className="text-slate-800">{formatCurrency(crm.pipelineValue)}</strong>
             </span>
             <span className="text-slate-500">
-              Probability weighted: <strong className="text-indigo-600">{formatAmt(crm.probabilityWeightedValue)}</strong>
+              Probability weighted: <strong className="text-indigo-600">{formatCurrency(crm.probabilityWeightedValue)}</strong>
             </span>
           </div>
         )}

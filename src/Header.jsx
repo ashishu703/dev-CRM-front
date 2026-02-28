@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, Users, X, TrendingUp, Calendar, CheckCircle, MapPin, Award, Package, DollarSign, Moon, Sun, BarChart3, Clock, User, Factory, Wrench, HelpCircle, Activity, Server, Settings, Shield, Link, CheckCheck, Circle, FileText, Menu, ToggleRight, CheckSquare, Calculator } from 'lucide-react';
+import { useSelector } from 'react-redux';
+import { Bell, Users, X, TrendingUp, Calendar, CheckCircle, MapPin, Award, Package, DollarSign, Moon, Sun, BarChart3, Clock, User, Factory, Wrench, HelpCircle, Activity, Server, Settings, Shield, Link, CheckCheck, Circle, FileText, Menu, ToggleRight, CheckSquare, Calculator, CreditCard, MessageCircle } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
 import { useNotifications } from './hooks/useNotifications';
 import ProfileUpdateModal from './components/ProfileUpdateModal';
 
-const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMobileView = false, isDarkMode = false, onToggleDarkMode, onProfileClick, onToggleSidebar, sidebarOpen, onToggleView }) => {
+const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMobileView = false, isDarkMode = false, onToggleDarkMode, onProfileClick, onToggleSidebar, sidebarOpen, onToggleView, onChatClick }) => {
   const { user, refreshUser } = useAuth();
   const { notifications, unreadCount, isConnected, markAsRead, markAsUnread } = useNotifications();
+  const chatUnreadCount = useSelector((state) => state.chat?.unreadCount ?? 0);
   
   const [showNotifications, setShowNotifications] = useState(false);
   const [expandedNotificationId, setExpandedNotificationId] = useState(null);
@@ -113,9 +115,21 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
         };
       case 'products':
         return {
-          icon: <Users className="w-5 h-5 text-white" />,
+          icon: <Package className="w-5 h-5 text-white" />,
+          title: "Products",
+          subtitle: "Browse and manage products"
+        };
+      case 'payment-tracking':
+        return {
+          icon: <CreditCard className="w-5 h-5 text-white" />,
           title: "Payment Tracking",
-          subtitle: "Browse and manage all payment tracking"
+          subtitle: "Active orders, pending payment, statement"
+        };
+      case 'chat':
+        return {
+          icon: <MessageCircle className="w-5 h-5 text-white" />,
+          title: "Chat",
+          subtitle: "Internal chat, team chat & emails — tag teammates, share images & documents"
         };
         case 'lead-status':
           return {
@@ -491,26 +505,30 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
 
   const pageContent = getPageHeaderContent();
   const isSalesHeadTheme = userType === 'salesdepartmenthead' || userType === 'salesperson';
-  const isSalespersonLight = userType === 'salesperson';
+  const isSalespersonLight = false; // Salesperson header matches sidebar (dark)
   const headerIsDark = isDarkMode || (isSalesHeadTheme && !isSalespersonLight);
   const showToggleViewButton = onToggleView && userType !== 'salesperson';
   const showDarkModeButton = onToggleDarkMode && userType !== 'salesperson';
 
+  const isSalesperson = userType === 'salesperson';
+  const headerStyle = isSalesperson
+    ? { background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 45%, #0c1222 100%)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1)', borderBottom: '1px solid rgba(51, 65, 85, 0.6)' }
+    : isSalespersonLight
+      ? { background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #f1f5f9 100%)', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(15, 23, 42, 0.04)' }
+      : headerIsDark
+        ? { background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1)' }
+        : undefined;
+
   return (
     <header className={`sticky top-0 z-[30] border-b shadow-sm transition-all duration-300 backdrop-blur-md ${
-      headerIsDark 
-        ? 'border-slate-700/50' 
-        : 'border-slate-200'
-    }`} style={isSalespersonLight ? {
-      background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #f1f5f9 100%)',
-      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(15, 23, 42, 0.04)'
-    } : headerIsDark ? {
+      (headerIsDark || isSalesperson) ? 'border-slate-700/50' : 'border-slate-200'
+    }`} style={headerStyle ?? (headerIsDark ? {
       background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)',
       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1)'
     } : {
       background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%)',
       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-    }}>
+    })}>
       <div 
         className={`flex items-center justify-between flex-wrap gap-2 sm:gap-3 ${!isSalesHeadTheme ? 'px-3 sm:px-4 lg:px-6 py-2 sm:py-2.5 lg:py-3' : ''}`}
         style={isSalesHeadTheme ? { padding: '14px 24px' } : undefined}
@@ -522,7 +540,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
             <button
               onClick={onToggleSidebar}
               className={`p-1.5 sm:p-2 rounded-lg transition-colors flex-shrink-0 ${
-                (headerIsDark && !isSalespersonLight)
+                (headerIsDark || isSalesperson)
                   ? 'hover:bg-slate-700 text-slate-200'
                   : 'hover:bg-slate-100 text-slate-600'
               }`}
@@ -582,16 +600,35 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
               {isDarkMode ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
           )}
+          {typeof onChatClick === 'function' && (
+            <div className="relative flex-shrink-0">
+              <button
+                type="button"
+                onClick={onChatClick}
+                className={`relative p-1 sm:p-1.5 rounded-lg transition-colors ${
+                  (headerIsDark || isSalesperson) ? 'hover:bg-slate-700' : 'hover:bg-slate-100'
+                }`}
+                title="Chat"
+              >
+                <MessageCircle className={`w-4 h-4 sm:w-5 sm:h-5 ${(headerIsDark || isSalesperson) ? 'text-slate-200' : 'text-slate-600'}`} />
+                {chatUnreadCount > 0 && (
+                  <div className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] sm:min-w-[16px] sm:h-[16px] px-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] leading-[14px] sm:leading-[16px] rounded-full text-center">
+                    {Math.min(99, chatUnreadCount)}
+                  </div>
+                )}
+              </button>
+            </div>
+          )}
           <div className="relative flex-shrink-0" ref={notificationRef}>
             <button 
               onClick={() => setShowNotifications(!showNotifications)}
               className={`relative p-1 sm:p-1.5 rounded-lg transition-colors ${
-                (headerIsDark && !isSalespersonLight)
+                (headerIsDark || isSalesperson)
                   ? 'hover:bg-slate-700'
                   : 'hover:bg-slate-100'
               }`}
             >
-              <Bell className={`w-4 h-4 sm:w-5 sm:h-5 ${(headerIsDark && !isSalespersonLight) ? 'text-slate-200' : 'text-slate-600'}`} />
+              <Bell className={`w-4 h-4 sm:w-5 sm:h-5 ${(headerIsDark || isSalesperson) ? 'text-slate-200' : 'text-slate-600'}`} />
               {unreadCount > 0 && (
                 <div className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] sm:min-w-[16px] sm:h-[16px] px-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] leading-[14px] sm:leading-[16px] rounded-full text-center">
                   {Math.min(99, unreadCount)}
@@ -718,14 +755,12 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
 
           <button
             onClick={() => window.location.href = '/support'}
-className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${
-                (headerIsDark && !isSalespersonLight)
-                  ? 'hover:bg-slate-700'
-                  : 'hover:bg-slate-100'
+            className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${
+              (headerIsDark || isSalesperson) ? 'hover:bg-slate-700' : 'hover:bg-slate-100'
             }`}
             title="Support & Help"
           >
-            <HelpCircle className={`w-4 h-4 sm:w-5 sm:h-5 ${(headerIsDark && !isSalespersonLight) ? 'text-slate-200' : 'text-slate-600'}`} />
+            <HelpCircle className={`w-4 h-4 sm:w-5 sm:h-5 ${(headerIsDark || isSalesperson) ? 'text-slate-200' : 'text-slate-600'}`} />
           </button>
 
           <button
@@ -734,7 +769,7 @@ className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${
               setProfileAnchorRect(profileButtonRef.current?.getBoundingClientRect() ?? null);
               setShowProfileModal(true);
             }}
-            className={`flex items-center space-x-1.5 rounded-lg px-1.5 py-1 transition-colors cursor-pointer flex-shrink-0 ${(headerIsDark && !isSalespersonLight) ? 'hover:bg-slate-700' : 'hover:bg-slate-100'}`}
+            className={`flex items-center space-x-1.5 rounded-lg px-1.5 py-1 transition-colors cursor-pointer flex-shrink-0 ${(headerIsDark || isSalesperson) ? 'hover:bg-slate-700' : 'hover:bg-slate-100'}`}
           >
             <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center shadow ${isSalespersonLight ? 'bg-slate-600' : 'bg-gradient-to-br from-blue-600 to-purple-600'}`}>
               {user?.profile_picture || user?.profilePicture ? (
@@ -750,10 +785,10 @@ className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${
               )}
             </div>
             <div className="text-right hidden sm:block">
-<p className={`text-[11px] font-medium truncate max-w-[90px] ${(headerIsDark && !isSalespersonLight) ? 'text-white' : 'text-slate-900'}`}>
-              {user?.email ? `${user.email.split('@')[0]}@${user.email.split('@')[1]?.substring(0, 2) || ''}...` : 'user'}
+              <p className={`text-[11px] font-medium truncate max-w-[90px] ${(headerIsDark || isSalesperson) ? 'text-white' : 'text-slate-900'}`}>
+                {user?.email ? `${user.email.split('@')[0]}@${user.email.split('@')[1]?.substring(0, 2) || ''}...` : 'user'}
               </p>
-              <p className={`text-[9px] truncate ${(headerIsDark && !isSalespersonLight) ? 'text-slate-400' : 'text-slate-500'}`}>
+              <p className={`text-[9px] truncate ${(headerIsDark || isSalesperson) ? 'text-slate-400' : 'text-slate-500'}`}>
                 {user?.role ? user.role.toUpperCase().replace('_', ' ') : userType.toUpperCase()}
               </p>
             </div>

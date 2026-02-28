@@ -20,6 +20,6 @@ async function baseQuery({ url, method = 'GET', body }) {
 export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery,
-  tagTypes: ['DepartmentUsers', 'DepartmentUser', 'PaymentTracking', 'LeadTasks', 'LeadTask', 'LeadReminders', 'LeadReminder', 'ActivityTimeline', 'DashboardSummary', 'LeadDocs', 'EmailConfig'],
+  tagTypes: ['DepartmentUsers', 'DepartmentUser', 'PaymentTracking', 'LeadTasks', 'LeadTask', 'LeadReminders', 'LeadReminder', 'ActivityTimeline', 'DashboardSummary', 'LeadDocs', 'EmailConfig', 'EmailInbox', 'ChatUsers', 'ChatUnread', 'ChatConversations', 'ChatMessages', 'ChatTeams', 'ChatTeamConv', 'ChatTeamMembers', 'ChatTodos'],
   endpoints: () => ({}),
 });

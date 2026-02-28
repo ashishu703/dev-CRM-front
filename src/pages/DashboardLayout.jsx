@@ -17,7 +17,7 @@ const DashboardLayout = ({ children, onLogout, activeView, setActiveView }) => {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
-          <FixedHeader userType="superadmin" currentPage={activeView} />
+          <FixedHeader userType="superadmin" currentPage={activeView} onChatClick={() => setActiveView('chat')} />
           
           {/* Main Content */}
           <main className="flex-1 overflow-y-auto" style={{ 

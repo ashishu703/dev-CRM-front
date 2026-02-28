@@ -8,7 +8,6 @@ export function useDashboardData() {
   return ctx;
 }
 
-/** Use when component can run with or without provider (e.g. during migration). Returns null when outside provider. */
 export function useOptionalDashboardData() {
   return useContext(DashboardDataContext);
 }

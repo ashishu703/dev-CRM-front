@@ -5,7 +5,10 @@ import { baseApi } from '../../store/baseApi';
 export const dashboardApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     getDashboardSummary: build.query({
-      query: () => ({ url: '/api/dashboard/summary' }),
+      query: ({ date } = {}) => ({
+        url: '/api/dashboard/summary',
+        params: date ? { date } : {},
+      }),
       providesTags: ['DashboardSummary'],
       transformResponse: (res) => res?.data ?? res ?? null,
     }),

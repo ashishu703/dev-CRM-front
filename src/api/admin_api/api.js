@@ -196,6 +196,32 @@ export const API_ENDPOINTS = {
   EMAIL_CONFIG: () => `${API_BASE_URL}/api/email-config`,
   EMAIL_SEND: () => `${API_BASE_URL}/api/emails/send`,
   EMAILS_BY_LEAD: (leadId) => `${API_BASE_URL}/api/emails/by-lead/${leadId}`,
+  EMAIL_INBOX: () => `${API_BASE_URL}/api/emails/inbox`,
+
+  // Chat (internal, team, unread)
+  CHAT_USERS: () => `${API_BASE_URL}/api/chat/users`,
+  CHAT_UNREAD: () => `${API_BASE_URL}/api/chat/unread`,
+  CHAT_CONVERSATIONS: () => `${API_BASE_URL}/api/chat/conversations`,
+  CHAT_CONVERSATIONS_DM: () => `${API_BASE_URL}/api/chat/conversations/dm`,
+  CHAT_CONVERSATION_MESSAGES: (id, query = '') => `${API_BASE_URL}/api/chat/conversations/${id}/messages${query ? `?${query}` : ''}`,
+  CHAT_CONVERSATION_READ: (id) => `${API_BASE_URL}/api/chat/conversations/${id}/read`,
+  CHAT_TEAMS: () => `${API_BASE_URL}/api/chat/teams`,
+  CHAT_TEAM_CONVERSATION: (id) => `${API_BASE_URL}/api/chat/teams/${id}/conversation`,
+  CHAT_TEAM_MEMBERS: (id) => `${API_BASE_URL}/api/chat/teams/${id}/members`,
+  CHAT_TODOS: () => `${API_BASE_URL}/api/chat/todos`,
+  CHAT_TODOS_MINE: () => `${API_BASE_URL}/api/chat/todos/mine`,
+  CHAT_TODOS_ASSIGNED: () => `${API_BASE_URL}/api/chat/todos/assigned-by-me`,
+  CHAT_TODO_COMPLETE: (id) => `${API_BASE_URL}/api/chat/todos/${id}/complete`,
+
+  // WhatsApp Web
+  WHATSAPP_STATUS: () => `${API_BASE_URL}/api/whatsapp/status`,
+  WHATSAPP_QR: () => `${API_BASE_URL}/api/whatsapp/qr`,
+  WHATSAPP_START: () => `${API_BASE_URL}/api/whatsapp/start`,
+  WHATSAPP_CHATS: () => `${API_BASE_URL}/api/whatsapp/chats`,
+  WHATSAPP_CHAT_MESSAGES: (chatId, query = '') => `${API_BASE_URL}/api/whatsapp/chats/${chatId}/messages${query ? `?${query}` : ''}`,
+  WHATSAPP_CHAT_MESSAGE_MEDIA: (chatId, messageId) => `${API_BASE_URL}/api/whatsapp/chats/${chatId}/messages/${messageId}/media`,
+  WHATSAPP_CHAT_MESSAGE_FORWARD: (chatId, messageId) => `${API_BASE_URL}/api/whatsapp/chats/${chatId}/messages/${messageId}/forward`,
+  WHATSAPP_CHAT_SEND: (chatId) => `${API_BASE_URL}/api/whatsapp/chats/${chatId}/send`,
 
   // Lead docs (Cloudinary upload + DB)
   UPLOAD_LEAD_DOC: (leadId) => `${API_BASE_URL}/api/upload/lead-doc?leadId=${leadId}`,

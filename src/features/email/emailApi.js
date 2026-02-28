@@ -22,12 +22,18 @@ export const emailApi = baseApi.injectEndpoints({
       transformResponse: (res) => res?.data ?? [],
       providesTags: (result, err, leadId) => [{ type: 'EmailConfig', id: `emails-${leadId}` }],
     }),
+    getEmailInbox: build.query({
+      query: () => ({ url: API_ENDPOINTS.EMAIL_INBOX() }),
+      transformResponse: (res) => (res?.data?.data ?? res?.data) ?? [],
+      providesTags: ['EmailInbox'],
+    }),
     sendEmail: build.mutation({
       query: (body) => ({
         url: API_ENDPOINTS.EMAIL_SEND(),
         method: 'POST',
         body,
       }),
+      invalidatesTags: ['EmailInbox'],
     }),
   }),
 });
@@ -37,4 +43,5 @@ export const {
   useSaveEmailConfigMutation,
   useSendEmailMutation,
   useGetEmailsByLeadIdQuery,
+  useGetEmailInboxQuery,
 } = emailApi;

@@ -48,6 +48,12 @@
   --space-4: 32px;
   --space-5: 40px;
 
+  /* Dashboard layout: 24px card gap, 32px section gap (tighter enterprise) */
+  --card-gap: 24px;
+  --section-gap: 32px;
+  --dashboard-card-gap: 24px;
+  --dashboard-section-gap: 40px;
+
   /* Shadows */
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
   --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(15, 23, 42, 0.06);
@@ -116,7 +122,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Salesperson dashboard – enterprise: white cards only, no pastel backgrounds */
 .salesperson-dashboard-bg {
-  background: var(--bg-page);
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
   min-height: 100%;
 }
 .salesperson-dashboard-card {
@@ -133,7 +139,7 @@ h1, h2, h3, h4, h5, h6 {
   border-color: var(--border-hover);
 }
 
-/* Neutral card header – no tinted backgrounds */
+/* Card header – dark text for clear visibility */
 .dashboard-card-header {
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border);
@@ -147,7 +153,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 .dashboard-card-header p {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  opacity: 0.85;
   margin: 4px 0 0 0;
 }
 
@@ -179,11 +186,11 @@ h1, h2, h3, h4, h5, h6 {
 .dashboard-kpi-card-accent-warning { border-left: 4px solid var(--warning-500); }
 .dashboard-kpi-card-accent-neutral { border-left: 4px solid var(--border-hover); }
 
-/* Layout: strict 8px spacing */
+/* Layout: 40px section gap, 24px card gap */
 .dashboard-sections {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--section-gap);
 }
 .dashboard-section-row {
   display: grid;

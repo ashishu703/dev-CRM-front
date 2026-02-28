@@ -1,206 +1,20 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { Eye, Edit, Calendar, Clock, Phone, Mail, Search, X, RefreshCw, MoreHorizontal, User, Building2, MapPin, Filter } from 'lucide-react';
+import { Calendar, Clock, Phone, Mail, Search, X, RefreshCw, User, Building2, MapPin, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import apiClient from '../../utils/apiClient';
 import { API_ENDPOINTS } from '../../api/admin_api/api';
-import SalespersonCustomerTimeline from '../../components/SalespersonCustomerTimeline';
+import CustomerDetailSidebar from '../../components/salesperson/CustomerDetailSidebar';
+import SendEmailForm from '../../components/salesperson/SendEmailForm';
+import UploadDocs from '../../components/salesperson/UploadDocs';
 import toastManager from '../../utils/ToastManager';
 import { useAuth } from '../../hooks/useAuth';
 import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton';
 import { useSalespersonLeads } from '../../hooks/useSalespersonLeads';
+import { useQuotationFlow } from '../../hooks/useQuotationFlow';
+import { usePIFlow } from '../../hooks/usePIFlow';
 import LeadFilters from '../../components/salesperson/LeadFilters';
-
-// Edit Lead Status Modal Component
-const EditLeadStatusModal = ({ lead, onClose, onSave }) => {
-  const [formData, setFormData] = useState({
-    sales_status: lead?.sales_status || '',
-    sales_status_remark: lead?.sales_status_remark || '',
-    follow_up_status: lead?.follow_up_status || '',
-    follow_up_remark: lead?.follow_up_remark || '',
-    follow_up_date: lead?.follow_up_date || '',
-    follow_up_time: lead?.follow_up_time || ''
-  });
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleSave = async () => {
-    try {
-      await onSave(lead.id, formData);
-      onClose();
-    } catch (error) {
-      console.error('Error updating lead status:', error);
-      alert('Failed to update lead status');
-    }
-  };
-
-  const statusOptions = [
-    { value: '', label: 'Select Lead Status' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'running', label: 'Running' },
-    { value: 'converted', label: 'Converted' },
-    { value: 'interested', label: 'Interested' },
-    { value: 'loose', label: 'Loose' },
-    { value: 'win/closed', label: 'Win/Closed' },
-    { value: 'lost', label: 'Lost' },
-    { value: 'closed', label: 'Closed' },
-  ];
-
-  const followUpOptions = [
-    { value: '', label: 'Select Follow Up Status' },
-    { value: 'appointment scheduled', label: 'Appointment Scheduled' },
-    { value: 'not interested', label: 'Not Interested' },
-    { value: 'interested', label: 'Interested' },
-    { value: 'quotation sent', label: 'Quotation Sent' },
-    { value: 'negotiation', label: 'Negotiation' },
-    { value: 'close order', label: 'Close Order' },
-    { value: 'closed/lost', label: 'Closed/Lost' },
-    { value: 'call back request', label: 'Call Back Request' },
-    { value: 'unreachable/call not connected', label: 'Unreachable/Call Not Connected' },
-    { value: 'currently not required', label: 'Currently Not Required' },
-    { value: 'not relevant', label: 'Not Relevant' }
-  ];
-
-  // Check if date/time fields should be shown
-  const showDateTimeFields = ['appointment scheduled', 'interested', 'negotiation', 'call back request'].includes(formData.follow_up_status);
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[110]">
-      <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md mx-2 sm:mx-4">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Update Lead Status & Follow Up</h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Follow Up Status
-            </label>
-            <select
-              name="follow_up_status"
-              value={formData.follow_up_status}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              {followUpOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Follow Up Remark
-            </label>
-            <textarea
-              name="follow_up_remark"
-              value={formData.follow_up_remark}
-              onChange={handleInputChange}
-              rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter any remarks about the follow up..."
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Lead Status *
-            </label>
-            <select
-              name="sales_status"
-              value={formData.sales_status}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              {statusOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Lead Status Remark
-            </label>
-            <textarea
-              name="sales_status_remark"
-              value={formData.sales_status_remark}
-              onChange={handleInputChange}
-              rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter any remarks about the lead status..."
-            />
-          </div>
-
-          {showDateTimeFields && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Follow Up Date *
-                </label>
-                <input
-                  type="date"
-                  name="follow_up_date"
-                  value={formData.follow_up_date}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required={showDateTimeFields}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Follow Up Time *
-                </label>
-                <input
-                  type="time"
-                  name="follow_up_time"
-                  value={formData.follow_up_time}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required={showDateTimeFields}
-                />
-                <p className="text-xs text-gray-500 mt-1">Time will be saved in Indian Standard Time (IST)</p>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="flex justify-end space-x-3 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            Update Status & Follow Up
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
+import { EditLeadStatusModal } from './LeadStatus';
 
 export default function ScheduledCall() {
   const [leads, setLeads] = useState([]);
@@ -210,9 +24,8 @@ export default function ScheduledCall() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedLead, setSelectedLead] = useState(null);
-  const [openActionMenu, setOpenActionMenu] = useState(null);
-  const [timelineLead, setTimelineLead] = useState(null);
-  const [showCustomerTimeline, setShowCustomerTimeline] = useState(false);
+  const [viewingCustomer, setViewingCustomer] = useState(null);
+  const [sidebarUpdateStatusLead, setSidebarUpdateStatusLead] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   
   // Pagination state
@@ -260,7 +73,9 @@ export default function ScheduledCall() {
 
   // Use the filter hook with ALL leads (so filter options are complete)
   const filterHook = useSalespersonLeads(convertedAllLeads);
-  
+  const quotationHook = useQuotationFlow(viewingCustomer?.id ?? viewingCustomer?._id ?? null);
+  const piHook = usePIFlow(viewingCustomer, null, null);
+
   // Update hook's customers when all leads change (for filter options)
   React.useEffect(() => {
     filterHook.setCustomers(convertedAllLeads);
@@ -297,20 +112,14 @@ export default function ScheduledCall() {
       // Store ALL leads for filter options
       setAllLeads(leadsData);
       
-      // Filter leads that have scheduled meetings
+      // Filter leads that have a real scheduled date (avoid counting all assigned as "scheduled")
       const scheduledLeads = leadsData.filter(lead => {
-        const hasFollowUpDate = lead.follow_up_date && lead.follow_up_date !== 'N/A' && lead.follow_up_date !== '';
-        const hasFollowUpTime = lead.follow_up_time && lead.follow_up_time !== 'N/A' && lead.follow_up_time !== '';
-        const hasNextMeetingDate = lead.next_meeting_date && lead.next_meeting_date !== 'N/A' && lead.next_meeting_date !== '';
-        const hasNextMeetingTime = lead.next_meeting_time && lead.next_meeting_time !== 'N/A' && lead.next_meeting_time !== '';
-        const hasMeetingDate = lead.meeting_date && lead.meeting_date !== 'N/A' && lead.meeting_date !== '';
-        const hasMeetingTime = lead.meeting_time && lead.meeting_time !== 'N/A' && lead.meeting_time !== '';
-        const hasScheduledDate = lead.scheduled_date && lead.scheduled_date !== 'N/A' && lead.scheduled_date !== '';
-        const hasScheduledTime = lead.scheduled_time && lead.scheduled_time !== 'N/A' && lead.scheduled_time !== '';
-        const hasNextMeetingStatus = lead.sales_status === 'next_meeting' && lead.sales_status_remark;
-        
-        return hasFollowUpDate || hasFollowUpTime || hasNextMeetingDate || hasNextMeetingTime || 
-               hasMeetingDate || hasMeetingTime || hasScheduledDate || hasScheduledTime || hasNextMeetingStatus;
+        const hasFollowUpDate = lead.follow_up_date && String(lead.follow_up_date).trim() !== '' && lead.follow_up_date !== 'N/A';
+        const hasNextMeetingDate = lead.next_meeting_date && String(lead.next_meeting_date).trim() !== '' && lead.next_meeting_date !== 'N/A';
+        const hasMeetingDate = lead.meeting_date && String(lead.meeting_date).trim() !== '' && lead.meeting_date !== 'N/A';
+        const hasScheduledDate = lead.scheduled_date && String(lead.scheduled_date).trim() !== '' && lead.scheduled_date !== 'N/A';
+        const hasDateFromRemark = lead.sales_status === 'next_meeting' && lead.sales_status_remark && /(\d{4}-\d{2}-\d{2})/.test(lead.sales_status_remark);
+        return hasFollowUpDate || hasNextMeetingDate || hasMeetingDate || hasScheduledDate || hasDateFromRemark;
       });
       
       console.log(`[ScheduledCall] Filtered to ${scheduledLeads.length} scheduled leads for user: ${user?.email}`);
@@ -348,17 +157,6 @@ export default function ScheduledCall() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId]);
 
-  // Close action menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (openActionMenu && !event.target.closest('.action-menu-container')) {
-        setOpenActionMenu(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [openActionMenu]);
-
   // Close filter panel when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -375,7 +173,66 @@ export default function ScheduledCall() {
     }
   }, [filterHook.showFilterPanel]);
 
-  // Show skeleton loader on initial load
+  // Get sortable date for a lead (for latest-first sort) — must be before any early return (Rules of Hooks)
+  const getScheduledDate = React.useCallback((lead) => {
+    let date = lead.follow_up_date || lead.next_meeting_date || lead.meeting_date || lead.scheduled_date;
+    if (!date && lead.sales_status === 'next_meeting' && lead.sales_status_remark) {
+      const dateMatch = lead.sales_status_remark.match(/(\d{4}-\d{2}-\d{2})/);
+      if (dateMatch) date = dateMatch[1];
+    }
+    return date ? new Date(date).getTime() : 0;
+  }, []);
+
+  const sortedLeads = React.useMemo(() => {
+    return [...filteredLeads].sort((a, b) => getScheduledDate(b) - getScheduledDate(a));
+  }, [filteredLeads, getScheduledDate]);
+
+  // Date key YYYY-MM-DD for a lead's scheduled date (for grouping/counts)
+  const getScheduledDateKey = React.useCallback((lead) => {
+    let date = lead.follow_up_date || lead.next_meeting_date || lead.meeting_date || lead.scheduled_date;
+    if (!date && lead.sales_status === 'next_meeting' && lead.sales_status_remark) {
+      const dateMatch = lead.sales_status_remark.match(/(\d{4}-\d{2}-\d{2})/);
+      if (dateMatch) date = dateMatch[1];
+    }
+    if (!date) return null;
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return null;
+    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, []);
+
+  // Total calls per day (recent first); include last 7 days with 0 as "No calls on that day"
+  const callsByDate = React.useMemo(() => {
+    const countByKey = {};
+    sortedLeads.forEach((lead) => {
+      const key = getScheduledDateKey(lead);
+      if (key) countByKey[key] = (countByKey[key] || 0) + 1;
+    });
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+      const key = `${y}-${m}-${day}`;
+      days.push({ key, count: countByKey[key] || 0 });
+    }
+    return days;
+  }, [sortedLeads, getScheduledDateKey]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedLeads.length / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedLeads = sortedLeads.slice(startIndex, endIndex);
+
+  const handlePageChange = React.useCallback((page) => setCurrentPage(Math.max(1, Math.min(page, totalPages))), [totalPages]);
+  const handleItemsPerPageChange = React.useCallback((val) => {
+    setItemsPerPage(val);
+    setCurrentPage(1);
+  }, []);
+
+  // Show skeleton loader on initial load (after all hooks)
   if (initialLoading) {
     return <DashboardSkeleton />;
   }
@@ -426,18 +283,6 @@ export default function ScheduledCall() {
       console.error('Error updating lead status:', error);
       throw error;
     }
-  };
-
-  // Handle preview
-  const handlePreview = (lead) => {
-    setTimelineLead(lead);
-    setShowCustomerTimeline(true);
-  };
-
-  // Handle edit
-  const handleEdit = (lead) => {
-    setSelectedLead(lead);
-    setShowEditModal(true);
   };
 
   // Get status badge
@@ -536,45 +381,8 @@ export default function ScheduledCall() {
     });
   };
 
-  // Format date for grouping (full format)
-  const formatDateForGrouping = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  // Group leads by follow_up_date
-  const groupedLeads = filteredLeads.reduce((groups, lead) => {
-    let date = lead.follow_up_date || lead.next_meeting_date || lead.meeting_date || lead.scheduled_date;
-    
-    // For next_meeting status, extract date from sales_status_remark
-    if (!date && lead.sales_status === 'next_meeting' && lead.sales_status_remark) {
-      // Extract date from remark format like "2025-10-28 AT 19:10"
-      const dateMatch = lead.sales_status_remark.match(/(\d{4}-\d{2}-\d{2})/);
-      if (dateMatch) {
-        date = dateMatch[1];
-      }
-    }
-    
-    if (date) {
-      if (!groups[date]) {
-        groups[date] = [];
-      }
-      groups[date].push(lead);
-    }
-    return groups;
-  }, {});
-
-  // Sort dates
-  const sortedDates = Object.keys(groupedLeads).sort((a, b) => new Date(a) - new Date(b));
-
   return (
-    <div className={`p-3 sm:p-4 md:p-6 transition-all duration-300 ${showCustomerTimeline ? 'pr-0 lg:pr-[360px]' : ''}`}>
+    <div className={`p-3 sm:p-4 md:p-6 transition-all duration-300 ${viewingCustomer ? 'pr-0 lg:pr-[360px]' : ''}`}>
 
       {/* Search and Filters */}
       <div className="mb-4 sm:mb-6">
@@ -648,78 +456,70 @@ export default function ScheduledCall() {
             </div>
           </div>
         </div>
-      ) : sortedDates.length > 0 ? (
-        <div className="space-y-6">
-          {sortedDates.map(date => (
-            <div key={date} className="bg-white rounded-lg shadow-sm border border-gray-200">
-              <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
-                      <Calendar className="h-5 w-5 text-white" />
+      ) : sortedLeads.length > 0 ? (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          {/* Last 7 days total calls - rounded, light colourful strip */}
+          <div className="mx-3 sm:mx-6 mt-3 mb-3 sm:mt-4 sm:mb-4 px-4 py-3 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-100/60">
+            <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wider mb-2">Last 7 days total calls</p>
+            <div className="flex flex-wrap gap-2">
+              {callsByDate.map((day) => (
+                <span
+                  key={day.key}
+                  className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${
+                    day.count === 0
+                      ? 'bg-amber-50/80 text-amber-800 border border-amber-200/70'
+                      : 'bg-emerald-50/90 text-emerald-800 border border-emerald-200/70'
+                  }`}
+                >
+                  <span>{formatDateShort(day.key)}:</span>
+                  <span className="ml-1">{day.count === 0 ? 'No calls' : `${day.count} call${day.count !== 1 ? 's' : ''}`}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-[800px] sm:min-w-[1200px] w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">DATE</th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-blue-600" />
+                      <span>CUSTOMER</span>
                     </div>
-                    <div>
-                      <h3 className="text-lg sm:text-xl font-bold text-gray-900">
-                        {formatDateShort(date)}
-                      </h3>
-                      <p className="text-xs sm:text-sm text-gray-600">{formatDateForGrouping(date)}</p>
+                  </th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-purple-600" />
+                      <span>BUSINESS</span>
                     </div>
-                  </div>
-                  <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
-                    {groupedLeads[date].length} appointment{groupedLeads[date].length !== 1 ? 's' : ''}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="overflow-x-auto -mx-3 sm:mx-0">
-                <table className="min-w-[800px] sm:min-w-[1200px] w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">LEAD ID</th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-blue-600" />
-                          <span>CUSTOMER</span>
-                        </div>
-                      </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-purple-600" />
-                          <span>BUSINESS</span>
-                        </div>
-                      </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-red-600" />
-                          <span>ADDRESS</span>
-                        </div>
-                      </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-teal-600" />
-                          <span>FOLLOW UP</span>
-                        </div>
-                      </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-yellow-600" />
-                          <span>SALES STATUS</span>
-                        </div>
-                      </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">SCHEDULED CALL</th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <MoreHorizontal className="h-4 w-4 text-gray-600" />
-                          <span>ACTION</span>
-                        </div>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {groupedLeads[date].map((lead) => (
-                      <tr key={lead.id} className="hover:bg-gray-50">
+                  </th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-red-600" />
+                      <span>ADDRESS</span>
+                    </div>
+                  </th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-teal-600" />
+                      <span>FOLLOW UP</span>
+                    </div>
+                  </th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-yellow-600" />
+                      <span>SALES STATUS</span>
+                    </div>
+                  </th>
+                  <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">SCHEDULED CALL</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {paginatedLeads.map((lead) => (
+                      <tr key={lead.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setViewingCustomer(lead)}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {lead.id}
+                          {getScheduledDateKey(lead) ? formatDateShort(getScheduledDateKey(lead)) : 'N/A'}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-900 max-w-[200px]">
                           <div>
@@ -731,7 +531,7 @@ export default function ScheduledCall() {
                             {lead.email && lead.email !== "N/A" && (
                               <div className="text-xs mt-1 text-cyan-600 truncate">
                                 <button 
-                                  onClick={() => window.open(`mailto:${lead.email}?subject=Follow up from ANOCAB&body=Dear ${lead.name},%0D%0A%0D%0AThank you for your interest in our products.%0D%0A%0D%0ABest regards,%0D%0AANOCAB Team`, '_blank')}
+                                  onClick={(e) => { e.stopPropagation(); window.open(`mailto:${lead.email}?subject=Follow up from ANOCAB&body=Dear ${lead.name},%0D%0A%0D%0AThank you for your interest in our products.%0D%0A%0D%0ABest regards,%0D%0AANOCAB Team`, '_blank'); }}
                                   className="inline-flex items-center gap-1 transition-colors hover:text-cyan-700 truncate"
                                   title={lead.email}
                                 >
@@ -801,58 +601,68 @@ export default function ScheduledCall() {
                             })()}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="relative action-menu-container">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenActionMenu(openActionMenu === lead.id ? null : lead.id);
-                              }}
-                              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-                            >
-                              <MoreHorizontal className="h-4 w-4 text-gray-600" />
-                            </button>
-                            {openActionMenu === lead.id && (
-                              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
-                                <div className="py-1">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handlePreview(lead);
-                                      setOpenActionMenu(null);
-                                    }}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                  >
-                                    <div className="p-1 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-md">
-                                      <Eye className="h-3.5 w-3.5 text-white" />
-                                    </div>
-                                    View Details
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleEdit(lead);
-                                      setOpenActionMenu(null);
-                                    }}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                  >
-                                    <div className="p-1 bg-gradient-to-r from-purple-500 to-pink-500 rounded-md">
-                                      <Edit className="h-3.5 w-3.5 text-white" />
-                                    </div>
-                                    Edit Status
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {/* Pagination - match Last Call */}
+          <div className="px-3 sm:px-6 py-3 border-t border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              <span>Show</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                className="border border-gray-300 rounded px-2 py-1 text-sm"
+              >
+                {[10, 25, 50, 100].map((n) => (
+                  <option key={n} value={n}>{n} per page</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              <span>Showing {startIndex + 1}-{Math.min(endIndex, sortedLeads.length)} of {sortedLeads.length}</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage <= 1}
+                  className="p-1.5 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  title="First page"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage <= 1}
+                  className="p-1.5 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  title="Previous"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="px-2 text-sm font-medium">{currentPage} / {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage >= totalPages}
+                  className="p-1.5 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  title="Next"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={currentPage >= totalPages}
+                  className="p-1.5 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  title="Last page"
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </button>
               </div>
             </div>
-          ))}
+          </div>
         </div>
       ) : (
         <div className="bg-white shadow overflow-hidden sm:rounded-lg">
@@ -866,26 +676,48 @@ export default function ScheduledCall() {
         </div>
       )}
 
-      {/* Global Customer Timeline Sidebar (salesperson view) */}
-      {showCustomerTimeline && timelineLead && (
-        <SalespersonCustomerTimeline
-          lead={timelineLead}
-          onClose={() => {
-            setShowCustomerTimeline(false);
-            setTimelineLead(null);
+      {/* Customer Detail Sidebar (same as salesperson leads) */}
+      {viewingCustomer && (
+        <CustomerDetailSidebar
+          customer={viewingCustomer}
+          onClose={() => { setViewingCustomer(null); setSidebarUpdateStatusLead(null); }}
+          quotations={quotationHook.quotations}
+          onViewQuotation={quotationHook.handleViewQuotation}
+          onEditQuotation={undefined}
+          onDeleteQuotation={quotationHook.handleDeleteQuotation}
+          quotationPIs={piHook.quotationPIs}
+          piHook={piHook}
+          onViewPI={piHook.handleViewPI}
+          onUpdateStatus={() => { setSelectedLead(viewingCustomer); setShowEditModal(true); }}
+          onUpdateStatusTabSelect={(c) => setSidebarUpdateStatusLead(c)}
+          renderUpdateStatusContent={(onClose) => sidebarUpdateStatusLead && (
+            <EditLeadStatusModal
+              lead={sidebarUpdateStatusLead}
+              onClose={() => { onClose(); setSidebarUpdateStatusLead(null); }}
+              onSave={async (id, payload) => { await handleUpdateLeadStatus(id, payload); setSidebarUpdateStatusLead(null); }}
+              embedInSidebar={true}
+            />
+          )}
+          renderSendEmailContent={(onClose) => (
+            <SendEmailForm customer={viewingCustomer} onClose={onClose} />
+          )}
+          renderDocsContent={(onClose) => {
+            const leadId = viewingCustomer?.id ?? viewingCustomer?._id;
+            return leadId ? <UploadDocs leadId={leadId} onClose={onClose} /> : null;
           }}
         />
       )}
 
-      {/* Edit Modal */}
-      {showEditModal && (
+      {/* Edit Modal (standalone overlay when opened from sidebar header action) */}
+      {showEditModal && selectedLead && (
         <EditLeadStatusModal
           lead={selectedLead}
           onClose={() => {
             setShowEditModal(false);
             setSelectedLead(null);
           }}
-          onSave={handleUpdateLeadStatus}
+          onSave={async (id, payload) => { await handleUpdateLeadStatus(id, payload); setShowEditModal(false); setSelectedLead(null); }}
+          embedInSidebar={false}
         />
       )}
     </div>

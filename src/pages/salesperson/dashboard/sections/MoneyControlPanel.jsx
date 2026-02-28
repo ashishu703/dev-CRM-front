@@ -1,13 +1,6 @@
 import React, { memo } from 'react';
 import { Wallet, AlertTriangle } from 'lucide-react';
-
-const formatLac = (n) => {
-  const num = Number(n);
-  if (!Number.isFinite(num) || num === 0) return '₹0';
-  if (num >= 1e5) return `₹${(num / 1e5).toFixed(1)}L`;
-  if (num >= 1e3) return `₹${(num / 1e3).toFixed(1)}K`;
-  return `₹${Math.round(num)}`;
-};
+import { formatLac } from '../utils/formatUtils';
 
 const BUCKET_STYLE = {
   '0_7': { label: '0-7 days', color: '#22c55e', bg: 'bg-emerald-500' },

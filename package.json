@@ -15,6 +15,7 @@
     "chart.js": "^4.5.1",
     "cloudinary": "^2.8.0",
     "country-state-city": "^3.2.1",
+    "emoji-picker-react": "^4.18.0",
     "firebase": "^10.7.1",
     "framer-motion": "^10.16.5",
     "html2canvas": "^1.4.1",

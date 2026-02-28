@@ -1,15 +1,7 @@
 import React, { memo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Target, TrendingUp } from 'lucide-react';
-
-const formatCr = (n) => {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return '₹0';
-  if (num >= 1e7) return `₹${(num / 1e7).toFixed(1)}Cr`;
-  if (num >= 1e5) return `₹${(num / 1e5).toFixed(1)}L`;
-  if (num >= 1e3) return `₹${(num / 1e3).toFixed(1)}K`;
-  return `₹${Math.round(num)}`;
-};
+import { formatCr } from '../utils/formatUtils';
 
 const RevenueTargetEngine = memo(function RevenueTargetEngine({ revenueTarget, salesPipelineCRM }) {
   if (!revenueTarget) return null;

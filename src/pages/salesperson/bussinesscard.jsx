@@ -19,7 +19,7 @@ export default function BusinessCard5() {
         <div className="flex-1 px-6 py-4 flex items-center gap-4">
           <img
             src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/ABHAY-nuijcZUGrJNZtW6z7Hm6pmIb0FPILV.png"
-            alt="Abhay Tiwari"
+            alt="Image"
             className="w-16 h-16 rounded border-2 border-blue-600 object-cover flex-shrink-0"
           />
   

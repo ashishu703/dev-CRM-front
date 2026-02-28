@@ -1,17 +1,10 @@
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import IndiaMapView from './IndiaMapView';
 import { X, ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { formatCurrency } from '../utils/formatUtils';
 
 function normalizeStateName(name) {
   return (name || '').toString().trim().toLowerCase();
-}
-
-function formatRevenue(n) {
-  const num = Number(n) || 0;
-  if (num >= 1e7) return `₹${(num / 1e7).toFixed(1)}Cr`;
-  if (num >= 1e5) return `₹${(num / 1e5).toFixed(1)}L`;
-  if (num >= 1e3) return `₹${(num / 1e3).toFixed(0)}K`;
-  return `₹${Math.round(num)}`;
 }
 
 const SORT_LEADS = 'leads';
@@ -173,7 +166,7 @@ const GeoDistributionCompact = memo(function GeoDistributionCompact({ indiaGeo, 
                       <td className="py-2 px-2 font-medium text-slate-700 truncate max-w-[140px]">{s.state}</td>
                       <td className="py-2 px-2 text-right font-semibold text-slate-800 tabular-nums">{count}</td>
                       <td className="py-2 px-2 text-right text-slate-600 tabular-nums">{s.orders ?? 0}</td>
-                      <td className="py-2 px-2 text-right text-slate-600 tabular-nums">{formatRevenue(rev)}</td>
+                      <td className="py-2 px-2 text-right text-slate-600 tabular-nums">{formatCurrency(rev)}</td>
                       <td className="py-2 px-2 text-right text-slate-500 tabular-nums">{Number(s.conversionPct ?? 0).toFixed(1)}%</td>
                     </tr>
                   );
@@ -218,7 +211,7 @@ const GeoDistributionCompact = memo(function GeoDistributionCompact({ indiaGeo, 
                         <td className="py-2 px-2 font-medium text-slate-700">{s.state}</td>
                         <td className="py-2 px-2 text-right font-semibold tabular-nums">{count}</td>
                         <td className="py-2 px-2 text-right tabular-nums">{s.orders ?? 0}</td>
-                        <td className="py-2 px-2 text-right tabular-nums">{formatRevenue(rev)}</td>
+                        <td className="py-2 px-2 text-right tabular-nums">{formatCurrency(rev)}</td>
                         <td className="py-2 px-2 text-right tabular-nums">{Number(s.conversionPct ?? 0).toFixed(1)}%</td>
                       </tr>
                     );
@@ -255,7 +248,7 @@ const GeoDistributionCompact = memo(function GeoDistributionCompact({ indiaGeo, 
                 </div>
                 <div className="rounded-lg bg-slate-50 p-3 col-span-2">
                   <div className="text-slate-500 font-medium">Revenue</div>
-                  <div className="text-lg font-bold text-slate-800 tabular-nums">{formatRevenue(drawerState.revenue)}</div>
+                  <div className="text-lg font-bold text-slate-800 tabular-nums">{formatCurrency(drawerState.revenue)}</div>
                 </div>
                 <div className="rounded-lg bg-slate-50 p-3 col-span-2">
                   <div className="text-slate-500 font-medium">Conversion</div>

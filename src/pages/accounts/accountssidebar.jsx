@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart3, CreditCard, Shield, HelpCircle, Menu, X, DollarSign } from 'lucide-react';
+import { BarChart3, CreditCard, Shield, HelpCircle, Menu, X, DollarSign, MessageCircle } from 'lucide-react';
 
 const menuItems = [
   {
@@ -19,6 +19,12 @@ const menuItems = [
     label: 'Price Management',
     icon: DollarSign,
     description: 'Manage all product pricing'
+  },
+  {
+    id: 'chat',
+    label: 'Chat',
+    icon: MessageCircle,
+    description: 'Internal, team & email'
   }
 ];
 

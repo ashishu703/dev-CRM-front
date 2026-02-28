@@ -1,15 +1,7 @@
 import React, { memo } from 'react';
 import { Target, Clock, Zap, TrendingUp, TrendingDown, Minus, AlertTriangle, CheckCircle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-
-const formatCr = (n) => {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return '₹0';
-  if (num >= 1e7) return `₹${(num / 1e7).toFixed(1)}Cr`;
-  if (num >= 1e5) return `₹${(num / 1e5).toFixed(1)}L`;
-  if (num >= 1e3) return `₹${(num / 1e3).toFixed(1)}K`;
-  return `₹${Math.round(num)}`;
-};
+import { formatCr } from '../utils/formatUtils';
 
 const TargetAchievementBreakdown = memo(function TargetAchievementBreakdown({ revenueTarget }) {
   if (!revenueTarget) return null;

@@ -14,6 +14,7 @@ import ReportsPage from './Reports/ReportsPage';
 import DetailedReportPage from './Reports/DetailedReportPage';
 import RfpWorkflow from './shared/RfpWorkflow';
 import ToolboxInterface from './salesperson/ToolboxInterface';
+import ChatPage from './salesperson/ChatPage';
 
 const MainDashboard = ({ activeView, setActiveView }) => {
   const { selectedCompany } = useCompany();
@@ -57,6 +58,8 @@ const MainDashboard = ({ activeView, setActiveView }) => {
         return <RfpWorkflow />;
       case 'toolbox':
         return <ToolboxInterface />;
+      case 'chat':
+        return <ChatPage />;
       default:
         if (activeView?.startsWith('detailed-report-')) {
           return <DetailedReportPage activeView={activeView} setActiveView={setActiveView} />;

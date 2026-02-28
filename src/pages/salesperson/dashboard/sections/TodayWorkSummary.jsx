@@ -1,14 +1,7 @@
-import React, { memo, useState } from 'react';
-import { Calendar, Phone, Search, ClipboardList, UserPlus, FileText, IndianRupee, FileCheck, UserX } from 'lucide-react';
+import React, { memo } from 'react';
+import { Phone, Search, ClipboardList, UserPlus, FileText, IndianRupee, FileCheck, UserX } from 'lucide-react';
 import { useRunningCount } from '../hooks/useRunningCount';
-
-function formatAmountINR(n) {
-  const num = Number(n) || 0;
-  if (num >= 1e7) return `₹${(num / 1e7).toFixed(1)}Cr`;
-  if (num >= 1e5) return `₹${(num / 1e5).toFixed(1)}L`;
-  if (num >= 1e3) return `₹${(num / 1e3).toFixed(1)}K`;
-  return `₹${Math.round(num)}`;
-}
+import { formatCurrency } from '../utils/formatUtils';
 
 // 8 uniqu
 const GRADIENT_STYLES = [
@@ -120,24 +113,24 @@ const SummaryCard = memo(function SummaryCard({ card, gradientStyle, TrendSubtex
   );
 });
 
-const TodayWorkSummary = memo(function TodayWorkSummary({ todayWorkSummary, user, dateFilter, onDateChange, onNavigate }) {
-  const [showPicker, setShowPicker] = useState(false);
-  const displayDate = dateFilter || new Date().toISOString().split('T')[0];
+const TodayWorkSummary = memo(function TodayWorkSummary({ todayWorkSummary, user, showGreeting = true, onNavigate }) {
   const greeting = getGreeting();
   const displayName = getDisplayName(user);
 
   if (!todayWorkSummary) {
     return (
       <section className="w-full dashboard-kpi-row">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="min-w-0">
-            <p className="text-[var(--text-primary)]">
-              <span className="text-[13px] font-medium text-[var(--text-secondary)]">{greeting}, </span>
-              <span className="section-title text-[20px] md:text-[22px] font-bold">{displayName || 'Salesperson'}</span>
-            </p>
-            <p className="text-[14px] text-[var(--text-secondary)] mt-1 font-medium">See your personalised performance</p>
+        {showGreeting && (
+          <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+            <div className="min-w-0">
+              <p className="text-[var(--text-primary)]">
+                <span className="text-[13px] font-medium text-[var(--text-secondary)]">{greeting}, </span>
+                <span className="section-title text-[20px] md:text-[22px] font-bold">{displayName || 'Salesperson'}</span>
+              </p>
+              <p className="text-[14px] text-[var(--text-secondary)] mt-1 font-medium">See your personalised performance</p>
+            </div>
           </div>
-        </div>
+        )}
       </section>
     );
   }
@@ -152,50 +145,26 @@ const TodayWorkSummary = memo(function TodayWorkSummary({ todayWorkSummary, user
     { key: 'newLeadsNoFollowUp', label: 'New Leads (No Follow-up)', value: newLeadsNoFollowUp, icon: UserX, onClick: newLeadsNoFollowUp > 0 && onNavigate ? () => onNavigate('/customers?filter=newLeads') : undefined },
     { key: 'newLeadsAdded', label: 'New Leads Added', value: todayWorkSummary.newLeadsAdded?.value ?? 0, trend: todayWorkSummary.newLeadsAdded?.trend, icon: UserPlus },
     { key: 'quotationCreated', label: 'Quotations Created', value: todayWorkSummary.quotationCreated?.value ?? 0, subValue: todayWorkSummary.quotationCreated?.yesterdayValue ?? null, trend: todayWorkSummary.quotationCreated?.trend, icon: FileText },
-    { key: 'paymentApprovedToday', label: 'Payment Received', value: Number(todayWorkSummary.paymentApprovedToday?.amount) > 0 ? formatAmountINR(todayWorkSummary.paymentApprovedToday?.amount) : '₹0', count: todayWorkSummary.paymentApprovedToday?.value ?? 0, trend: todayWorkSummary.paymentApprovedToday?.trend, runningOrders, icon: IndianRupee },
+    { key: 'paymentApprovedToday', label: 'Payment Received', value: Number(todayWorkSummary.paymentApprovedToday?.amount) > 0 ? formatCurrency(todayWorkSummary.paymentApprovedToday?.amount) : '₹0', count: todayWorkSummary.paymentApprovedToday?.value ?? 0, trend: todayWorkSummary.paymentApprovedToday?.trend, runningOrders, icon: IndianRupee },
     { key: 'piCreated', label: 'PI', value: todayWorkSummary.piCreated?.value ?? 0, trend: todayWorkSummary.piCreated?.trend, icon: FileCheck },
   ];
 
   return (
     <section className="w-full dashboard-kpi-row">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="min-w-0">
-          <p className="text-[var(--text-primary)]">
-            <span className="text-[13px] font-medium text-[var(--text-secondary)]">{greeting}, </span>
-            <span className="section-title text-[20px] md:text-[22px] font-bold">{displayName}</span>
-          </p>
-          <p className="text-[14px] text-[var(--text-secondary)] mt-1 font-medium">See your personalised performance</p>
+      {showGreeting && (
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+          <div className="min-w-0">
+            <p className="text-[var(--text-primary)]">
+              <span className="text-[13px] font-medium text-[var(--text-secondary)]">{greeting}, </span>
+              <span className="section-title text-[20px] md:text-[22px] font-bold">{displayName}</span>
+            </p>
+            <p className="text-[14px] text-[var(--text-secondary)] mt-1 font-medium">See your personalised performance</p>
+          </div>
         </div>
-        <div className="relative shrink-0">
-          <button
-            type="button"
-            onClick={() => setShowPicker(!showPicker)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-700 hover:bg-slate-50 shadow-sm"
-          >
-            <Calendar className="w-4 h-4" />
-            {new Date(displayDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-          </button>
-          {showPicker && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setShowPicker(false)} aria-hidden />
-              <div className="absolute right-0 top-full mt-1 z-20">
-                <input
-                  type="date"
-                  value={displayDate}
-                  onChange={(e) => {
-                    onDateChange?.(e.target.value);
-                    setShowPicker(false);
-                  }}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] text-slate-800 shadow-lg"
-                />
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+      )}
 
-      <div className="mt-4 w-full min-w-0">
-        <div className="grid grid-cols-2 sm:grid-cols-4 sm:grid-rows-2 lg:grid-cols-8 lg:grid-rows-1 gap-2 sm:gap-3 w-full">
+      <div className="w-full min-w-0">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 w-full" style={{ gridTemplateRows: 'auto auto' }}>
           {cards.map((c, i) => (
             <div key={c.key} className="min-w-0 flex flex-1">
               <SummaryCard

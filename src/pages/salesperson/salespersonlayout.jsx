@@ -11,6 +11,7 @@ import LastCallPage from './LastCall.jsx'
 import PaymentTrackingPage from '../shared/PaymentTrackingPage'
 import ToolboxInterface from './ToolboxInterface.jsx'
 import NotificationsPage from './Notifications.jsx'
+import ChatPage from './ChatPage.jsx'
 import FixedHeader from '../../Header.jsx'
 import AshvayChat from '../../components/AshvayChat'
 import CreateQuotationForm from './salespersoncreatequotation.jsx'
@@ -253,6 +254,7 @@ export default function SalespersonLayout({ onLogout }) {
             isDarkMode={isDarkMode}
             onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
             sidebarOpen={sidebarOpen}
+            onChatClick={() => handleNavigation('chat')}
           />
           <div className="flex-1 bg-[#f8fafc]">
             <>
@@ -265,6 +267,7 @@ export default function SalespersonLayout({ onLogout }) {
               {currentPage === 'scheduled-call' && <ScheduledCallPage isDarkMode={isDarkMode} />}
               {currentPage === 'last-call' && <LastCallPage isDarkMode={isDarkMode} />}
               {currentPage === 'payment-tracking' && <PaymentTrackingPage title="Payment Tracking" subtitle="Party-centric accounting, payment-based active orders" isDarkMode={isDarkMode} />}
+              {currentPage === 'chat' && <ChatPage isDarkMode={isDarkMode} />}
               {currentPage === 'toolbox' && <ToolboxInterface isDarkMode={isDarkMode} />}
               {currentPage === 'notifications' && <NotificationsPage isDarkMode={isDarkMode} />}
             </>

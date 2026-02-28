@@ -35,6 +35,7 @@ const SalesDepartmentHeadLayout = ({ children, onLogout, activeView, setActiveVi
           currentPage={activeView} 
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           sidebarOpen={sidebarOpen}
+          onChatClick={() => setActiveView('chat')}
         />
         
         {/* Main Content */}
