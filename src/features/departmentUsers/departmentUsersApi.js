@@ -19,10 +19,13 @@ export const departmentUsersApi = baseApi.injectEndpoints({
       }),
       providesTags: (result, err, arg) =>
         result?.users ? [{ type: 'DepartmentUsers', id: buildQuery(arg) }, 'DepartmentUsers'] : ['DepartmentUsers'],
-      transformResponse: (res) => ({
-        users: res?.users ?? [],
-        pagination: res?.pagination ?? { page: 1, limit: 10, total: 0, pages: 0 },
-      }),
+      transformResponse: (res) => {
+        const data = res?.data ?? res;
+        return {
+          users: data?.users ?? [],
+          pagination: data?.pagination ?? { page: 1, limit: 10, total: 0, pages: 0 },
+        };
+      },
     }),
     listDepartmentUsersSummary: build.query({
       query: (params) => ({
@@ -44,7 +47,10 @@ export const departmentUsersApi = baseApi.injectEndpoints({
       query: (headUserId) => ({ url: API_ENDPOINTS.DEPARTMENT_USERS_BY_HEAD(headUserId) }),
       providesTags: (result, err, headUserId) =>
         result?.users ? [{ type: 'DepartmentUsers', id: `head-${headUserId}` }, 'DepartmentUsers'] : ['DepartmentUsers'],
-      transformResponse: (res) => ({ users: res?.users ?? [] }),
+      transformResponse: (res) => {
+        const data = res?.data ?? res;
+        return { users: data?.users ?? [] };
+      },
     }),
     getDepartmentUsersStats: build.query({
       query: () => ({ url: API_ENDPOINTS.DEPARTMENT_USERS_STATS() }),

@@ -113,7 +113,7 @@ const SummaryCard = memo(function SummaryCard({ card, gradientStyle, TrendSubtex
   );
 });
 
-const TodayWorkSummary = memo(function TodayWorkSummary({ todayWorkSummary, user, showGreeting = true, onNavigate }) {
+const TodayWorkSummary = memo(function TodayWorkSummary({ todayWorkSummary, user, showGreeting = true, onNavigate, onCardClick }) {
   const greeting = getGreeting();
   const displayName = getDisplayName(user);
 
@@ -137,16 +137,17 @@ const TodayWorkSummary = memo(function TodayWorkSummary({ todayWorkSummary, user
 
   const runningOrders = todayWorkSummary.runningOrders?.value ?? 0;
   const newLeadsNoFollowUp = todayWorkSummary.newLeadsWithoutFollowUp?.value ?? 0;
+  const makeClick = (key) => (onCardClick ? () => onCardClick(key) : undefined);
 
   const cards = [
-    { key: 'todayCalls', label: 'Calls Made', value: todayWorkSummary.todayCalls?.value ?? 0, trend: todayWorkSummary.todayCalls?.trend, icon: Phone },
-    { key: 'todayEnquiries', label: 'Enquiries Generated', value: todayWorkSummary.todayEnquiries?.value ?? 0, trend: todayWorkSummary.todayEnquiries?.trend, icon: Search },
-    { key: 'followUpsTaken', label: 'Follow-Ups Taken', value: todayWorkSummary.followUpsTaken?.value ?? 0, trend: todayWorkSummary.followUpsTaken?.trend, icon: ClipboardList },
-    { key: 'newLeadsNoFollowUp', label: 'New Leads (No Follow-up)', value: newLeadsNoFollowUp, icon: UserX, onClick: newLeadsNoFollowUp > 0 && onNavigate ? () => onNavigate('/customers?filter=newLeads') : undefined },
-    { key: 'newLeadsAdded', label: 'New Leads Added', value: todayWorkSummary.newLeadsAdded?.value ?? 0, trend: todayWorkSummary.newLeadsAdded?.trend, icon: UserPlus },
-    { key: 'quotationCreated', label: 'Quotations Created', value: todayWorkSummary.quotationCreated?.value ?? 0, subValue: todayWorkSummary.quotationCreated?.yesterdayValue ?? null, trend: todayWorkSummary.quotationCreated?.trend, icon: FileText },
-    { key: 'paymentApprovedToday', label: 'Payment Received', value: Number(todayWorkSummary.paymentApprovedToday?.amount) > 0 ? formatCurrency(todayWorkSummary.paymentApprovedToday?.amount) : '₹0', count: todayWorkSummary.paymentApprovedToday?.value ?? 0, trend: todayWorkSummary.paymentApprovedToday?.trend, runningOrders, icon: IndianRupee },
-    { key: 'piCreated', label: 'PI', value: todayWorkSummary.piCreated?.value ?? 0, trend: todayWorkSummary.piCreated?.trend, icon: FileCheck },
+    { key: 'todayCalls', label: 'Calls Made', value: todayWorkSummary.todayCalls?.value ?? 0, trend: todayWorkSummary.todayCalls?.trend, icon: Phone, onClick: makeClick('todayCalls') },
+    { key: 'todayEnquiries', label: 'Enquiries Generated', value: todayWorkSummary.todayEnquiries?.value ?? 0, trend: todayWorkSummary.todayEnquiries?.trend, icon: Search, onClick: makeClick('todayEnquiries') },
+    { key: 'followUpsTaken', label: 'Follow-Ups Taken', value: todayWorkSummary.followUpsTaken?.value ?? 0, trend: todayWorkSummary.followUpsTaken?.trend, icon: ClipboardList, onClick: makeClick('followUpsTaken') },
+    { key: 'newLeadsNoFollowUp', label: 'New Leads (No Follow-up)', value: newLeadsNoFollowUp, icon: UserX, onClick: makeClick('newLeadsNoFollowUp') },
+    { key: 'newLeadsAdded', label: 'New Leads Added', value: todayWorkSummary.newLeadsAdded?.value ?? 0, trend: todayWorkSummary.newLeadsAdded?.trend, icon: UserPlus, onClick: makeClick('newLeadsAdded') },
+    { key: 'quotationCreated', label: 'Quotations Created', value: todayWorkSummary.quotationCreated?.value ?? 0, subValue: todayWorkSummary.quotationCreated?.yesterdayValue ?? null, trend: todayWorkSummary.quotationCreated?.trend, icon: FileText, onClick: makeClick('quotationCreated') },
+    { key: 'paymentApprovedToday', label: 'Payment Received', value: Number(todayWorkSummary.paymentApprovedToday?.amount) > 0 ? formatCurrency(todayWorkSummary.paymentApprovedToday?.amount) : '₹0', count: todayWorkSummary.paymentApprovedToday?.value ?? 0, trend: todayWorkSummary.paymentApprovedToday?.trend, runningOrders, icon: IndianRupee, onClick: makeClick('paymentApprovedToday') },
+    { key: 'piCreated', label: 'PI', value: todayWorkSummary.piCreated?.value ?? 0, trend: todayWorkSummary.piCreated?.trend, icon: FileCheck, onClick: makeClick('piCreated') },
   ];
 
   return (

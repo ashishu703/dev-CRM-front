@@ -12,11 +12,12 @@ const STAGE_COLORS = [
   '#ef4444', // Lost - red
 ];
 
-const SalesPipelineStrip = memo(function SalesPipelineStrip({ salesPipelineStrip, salesPipelineCRM, hidePipelineValue }) {
+const SalesPipelineStrip = memo(function SalesPipelineStrip({ salesPipelineStrip, salesPipelineCRM, hidePipelineValue, onStageClick }) {
   const crm = salesPipelineCRM || {};
   const stages = crm.stages || [];
   const dropOffs = crm.dropOffs || [];
   const totalCount = stages.reduce((s, st) => s + (st.count || 0), 0);
+  const handleStageClick = (stageKey) => onStageClick && stageKey && (() => onStageClick(stageKey));
 
   if (stages.length === 0 && (!salesPipelineStrip || salesPipelineStrip.length === 0)) {
     return (
@@ -49,10 +50,15 @@ const SalesPipelineStrip = memo(function SalesPipelineStrip({ salesPipelineStrip
               stage.count > 0
                 ? Number((((stage.count - next.count) / stage.count) * 100).toFixed(0))
                 : 0;
+            const onClick = handleStageClick(stage.key);
             return (
               <div
                 key={stage.key}
-                className="rounded-lg border border-slate-200 p-3 bg-slate-50 min-w-0"
+                role={onClick ? 'button' : undefined}
+                tabIndex={onClick ? 0 : undefined}
+                onClick={onClick}
+                onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+                className={`rounded-lg border border-slate-200 p-3 bg-slate-50 min-w-0 ${onClick ? 'cursor-pointer hover:bg-slate-100 hover:border-slate-300 transition-colors' : ''}`}
               >
                 <div className="text-xs text-slate-500">{stage.label}</div>
                 <div className="text-lg font-bold text-slate-800 tabular-nums">{stage.count}</div>
@@ -83,8 +89,16 @@ const SalesPipelineStrip = memo(function SalesPipelineStrip({ salesPipelineStrip
               {stages.map((s, idx) => {
                 const dropToNext = dropOffs[idx];
                 const dropPct = dropToNext != null && dropToNext.dropPct != null ? `${Number(dropToNext.dropPct).toFixed(0)}%` : '—';
+                const rowOnClick = handleStageClick(s.key);
                 return (
-                  <tr key={s.key} className="border-b border-slate-100 hover:bg-slate-50">
+                  <tr
+                    key={s.key}
+                    role={rowOnClick ? 'button' : undefined}
+                    tabIndex={rowOnClick ? 0 : undefined}
+                    onClick={rowOnClick}
+                    onKeyDown={rowOnClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rowOnClick(); } } : undefined}
+                    className={`border-b border-slate-100 ${rowOnClick ? 'cursor-pointer hover:bg-slate-100' : 'hover:bg-slate-50'}`}
+                  >
                     <td className="py-2 px-2 font-medium text-slate-800 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: STAGE_COLORS[idx % STAGE_COLORS.length] }} />
                       {s.label}

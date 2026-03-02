@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useEffect } from "react"
-import { LayoutDashboard, Menu, X, Package, Wrench, HelpCircle, FileText, CreditCard, MessageCircle } from "lucide-react"
+import { LayoutDashboard, Menu, X, Package, Wrench, HelpCircle, FileText, CreditCard } from "lucide-react"
 import LeadStatusDropdown from './LeadStatusDropdown'
 
 function cx(...classes) {
@@ -105,13 +105,33 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen
                 </div>
               </div>
             </li>
-            {/* Leads moved into LeadStatusDropdown - standalone entry removed intentionally */}
+            {/* Lead Status (Leads, Enquiries, Scheduled Call, Last Call) */}
             <LeadStatusDropdown 
               currentPage={currentPage} 
               onNavigate={onNavigate} 
               sidebarOpen={sidebarOpen} 
               isDarkMode={isDarkMode}
             />
+            <li>
+              <div
+                className={cx(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors",
+                  currentPage === "rfp-requests"
+                    ? 'bg-[var(--sidebar-active)] text-white shadow-[0_0_0_1px_rgba(37,99,235,0.4),0_0_12px_rgba(37,99,235,0.25)]'
+                    : 'hover:bg-[var(--sidebar-hover)] text-[var(--sidebar-text)] hover:text-white'
+                )}
+                onClick={() => onNavigate("rfp-requests")}
+              >
+                <div className="flex items-center space-x-3">
+                  <div className={currentPage === "rfp-requests" ? 'text-white' : 'text-[var(--sidebar-text)]'}>
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  {sidebarOpen && (
+                    <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>RFP</span>
+                  )}
+                </div>
+              </div>
+            </li>
             <li>
               <div
                 className={cx(
@@ -128,26 +148,6 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen
                   </div>
                   {sidebarOpen && (
                     <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Payment Tracking</span>
-                  )}
-                </div>
-              </div>
-            </li>
-            <li>
-              <div
-                className={cx(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors",
-                  currentPage === "chat"
-                    ? 'bg-[var(--sidebar-active)] text-white shadow-[0_0_0_1px_rgba(37,99,235,0.4),0_0_12px_rgba(37,99,235,0.25)]'
-                    : 'hover:bg-[var(--sidebar-hover)] text-[var(--sidebar-text)] hover:text-white'
-                )}
-                onClick={() => onNavigate("chat")}
-              >
-                <div className="flex items-center space-x-3">
-                  <div className={currentPage === "chat" ? 'text-white' : 'text-[var(--sidebar-text)]'}>
-                    <MessageCircle className="w-5 h-5" />
-                  </div>
-                  {sidebarOpen && (
-                    <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Chat</span>
                   )}
                 </div>
               </div>
@@ -188,26 +188,6 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen
                   </div>
                   {sidebarOpen && (
                     <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Available Stock</span>
-                  )}
-                </div>
-              </div>
-            </li>
-            <li>
-              <div
-                className={cx(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors",
-                  currentPage === "rfp-requests"
-                    ? 'bg-[var(--sidebar-active)] text-white shadow-[0_0_0_1px_rgba(37,99,235,0.4),0_0_12px_rgba(37,99,235,0.25)]'
-                    : 'hover:bg-[var(--sidebar-hover)] text-[var(--sidebar-text)] hover:text-white'
-                )}
-                onClick={() => onNavigate("rfp-requests")}
-              >
-                <div className="flex items-center space-x-3">
-                  <div className={currentPage === "rfp-requests" ? 'text-white' : 'text-[var(--sidebar-text)]'}>
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  {sidebarOpen && (
-                    <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>RFP Raise & Approved</span>
                   )}
                 </div>
               </div>

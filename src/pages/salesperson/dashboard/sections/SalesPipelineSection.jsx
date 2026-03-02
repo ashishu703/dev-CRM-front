@@ -6,12 +6,13 @@ import SalesPipelineStrip from './SalesPipelineStrip';
  * KPI strip (conversion %, avg time to close) + funnel + stage table.
  * Pipeline value / probability weighted shown only in TargetRevenueSection.
  */
-const SalesPipelineSection = memo(function SalesPipelineSection({ salesPipelineCRM, salesPipelineStrip }) {
+const SalesPipelineSection = memo(function SalesPipelineSection({ salesPipelineCRM, salesPipelineStrip, onStageClick }) {
   return (
     <SalesPipelineStrip
       salesPipelineStrip={salesPipelineStrip}
       salesPipelineCRM={salesPipelineCRM}
       hidePipelineValue
+      onStageClick={onStageClick}
     />
   );
 });

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Ban, CheckCircle, XCircle, RefreshCw, AlertTriangle, User, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Ban, CheckCircle, XCircle, RefreshCw, AlertTriangle, User, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search } from 'lucide-react';
 import apiClient from '../../utils/apiClient';
 import { API_ENDPOINTS } from '../../api/admin_api/api';
 import Toast from '../../utils/Toast';
@@ -11,10 +11,11 @@ export default function OrderCancelApprovals({ setActiveView }) {
   const [rejectReason, setRejectReason] = useState('');
   const [rejectModalId, setRejectModalId] = useState(null);
   const [approvingId, setApprovingId] = useState(null);
-  
+  const [searchQuery, setSearchQuery] = useState('');
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const fetchPending = async () => {
     try {
@@ -78,15 +79,42 @@ export default function OrderCancelApprovals({ setActiveView }) {
     }
   };
 
-  // Pagination calculations
-  const totalPages = Math.ceil(list.length / itemsPerPage);
+  // Search filter (customer, quotation, product, reason, salesperson, status)
+  const filteredList = useMemo(() => {
+    const q = (searchQuery || '').toLowerCase().trim();
+    if (!q) return list;
+    return list.filter((req) => {
+      const customer = (req.customer_name || '').toLowerCase();
+      const quotation = (req.quotation_number || req.quotation_id || '').toLowerCase();
+      const product = (req.item_product_name || req.product_name || req.reason || '').toLowerCase();
+      const reason = (req.reason || '').toLowerCase();
+      const salesperson = (req.requested_by || req.approved_by || '').toLowerCase();
+      const status = (req.status || '').toLowerCase();
+      return (
+        customer.includes(q) ||
+        quotation.includes(q) ||
+        product.includes(q) ||
+        reason.includes(q) ||
+        salesperson.includes(q) ||
+        status.includes(q)
+      );
+    });
+  }, [list, searchQuery]);
+
+  // Pagination on filtered list
+  const totalPages = Math.max(1, Math.ceil(filteredList.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentItems = list.slice(startIndex, endIndex);
+  const currentItems = filteredList.slice(startIndex, endIndex);
 
   const goToPage = (page) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
   };
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   return (
     <div className="p-4 sm:p-6">
@@ -122,8 +150,44 @@ export default function OrderCancelApprovals({ setActiveView }) {
         </div>
       ) : (
         <>
+          {/* Search box */}
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by customer, quotation, product, reason, salesperson, status..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm"
+                  aria-label="Clear search"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="text-sm text-gray-600">
+              {filteredList.length === list.length
+                ? `${list.length} request${list.length !== 1 ? 's' : ''}`
+                : `${filteredList.length} of ${list.length} matching`}
+            </div>
+          </div>
+
           {/* Table */}
           <div className="bg-white rounded-lg shadow overflow-hidden">
+            {filteredList.length === 0 ? (
+              <div className="p-12 text-center text-gray-500">
+                <Search className="h-10 w-10 mx-auto mb-2 text-gray-300" />
+                <p className="font-medium">No requests match your search</p>
+                <p className="text-sm mt-1">Try a different search term or clear the search box.</p>
+              </div>
+            ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -274,47 +338,69 @@ export default function OrderCancelApprovals({ setActiveView }) {
                 </tbody>
               </table>
             </div>
+            )}
           </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4 px-4">
-              <div className="text-sm text-gray-700">
-                Showing {startIndex + 1} to {Math.min(endIndex, list.length)} of {list.length} requests
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => goToPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="p-2 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          {/* Pagination - always show when there is data */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-4 px-1">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-sm text-gray-700">
+                Showing {filteredList.length === 0 ? 0 : startIndex + 1} to {Math.min(endIndex, filteredList.length)} of {filteredList.length} request{filteredList.length !== 1 ? 's' : ''}
+              </span>
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                Per page
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="border border-gray-300 rounded-md px-2 py-1 text-sm"
                 >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <button
-                      key={page}
-                      onClick={() => goToPage(page)}
-                      className={`px-3 py-1 rounded-md text-sm ${
-                        currentPage === page
-                          ? 'bg-blue-600 text-white'
-                          : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      {page}
-                    </button>
+                  {[10, 25, 50, 100].map((n) => (
+                    <option key={n} value={n}>{n}</option>
                   ))}
-                </div>
-                <button
-                  onClick={() => goToPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="p-2 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
+                </select>
+              </label>
             </div>
-          )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => goToPage(1)}
+                disabled={currentPage === 1}
+                className="p-2 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="First page"
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="p-2 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Previous"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-sm text-gray-600 min-w-[100px] text-center">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages || filteredList.length === 0}
+                className="p-2 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Next"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => goToPage(totalPages)}
+                disabled={currentPage === totalPages || filteredList.length === 0}
+                className="p-2 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Last page"
+              >
+                <ChevronsRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </>
       )}
 

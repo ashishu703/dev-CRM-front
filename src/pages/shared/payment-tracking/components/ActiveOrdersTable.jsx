@@ -3,8 +3,8 @@ import { getActionRules, isDelivered } from '../constants/actionRules';
 import StatusBadge from './StatusBadge';
 import ActionMenu from './ActionMenu';
 
-const th = 'px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 tracking-wider';
-const thSticky = th + ' sticky left-0 z-10 bg-gray-50';
+const th = 'px-3 sm:px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 tracking-wider';
+const thSticky = th + ' max-md:static md:sticky md:left-0 md:z-10 bg-gray-50 min-w-[120px]';
 
 function formatDate(v) {
   if (!v) return '';
@@ -60,20 +60,20 @@ export default function ActiveOrdersTable({
 
   const colSpan = (showSalespersonColumn ? 9 : 8) + 1;
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto -mx-1 px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
       <table className="min-w-[900px] w-full">
         <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
-            {showSalespersonColumn && <th className={th}>Salesperson</th>}
+            {showSalespersonColumn && <th className={th + ' min-w-[100px]'}>Salesperson</th>}
             <th className={thSticky}>Party</th>
-            <th className={th}>Quotation</th>
-            <th className={th}>Product</th>
-            <th className={th}>Rate</th>
-            <th className={th}>Qty</th>
-            <th className={th}>Confirmation</th>
-            <th className={th}>Status</th>
-            <th className={th}>Delivery Date</th>
-            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-600 tracking-wider w-14">Actions</th>
+            <th className={th + ' min-w-[80px]'}>Quotation</th>
+            <th className={th + ' min-w-[140px]'}>Product</th>
+            <th className={th + ' min-w-[80px]'}>Rate</th>
+            <th className={th + ' min-w-[70px]'}>Qty</th>
+            <th className={th + ' min-w-[120px]'}>Confirmation</th>
+            <th className={th + ' min-w-[110px]'}>Status</th>
+            <th className={th + ' min-w-[120px]'}>Delivery Date</th>
+            <th className="px-2 sm:px-4 py-3 text-center text-xs font-semibold uppercase text-gray-600 tracking-wider w-14 min-w-[80px]">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200 bg-white">
@@ -101,29 +101,29 @@ export default function ActiveOrdersTable({
 
               return (
                 <tr key={rowKey} className={rowClass}>
-                  {showSalespersonColumn && <td className="px-4 py-3 text-sm text-gray-700">{r.salespersonName || '—'}</td>}
-                  <td className="sticky left-0 z-[1] bg-inherit px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{r.partyName}</td>
-                  <td className="px-4 py-3 text-sm font-mono text-gray-700">{r.quotationNumber || '—'}</td>
-                  <td className="px-4 py-3 text-gray-800">
+                  {showSalespersonColumn && <td className="px-3 sm:px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{r.salespersonName || '—'}</td>}
+                  <td className="max-md:static md:sticky md:left-0 md:z-[1] bg-white md:bg-inherit px-3 sm:px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap min-w-[120px] border-r border-gray-100 md:border-r-0">{r.partyName}</td>
+                  <td className="px-3 sm:px-4 py-3 text-sm font-mono text-gray-700 whitespace-nowrap">{r.quotationNumber || '—'}</td>
+                  <td className="px-3 sm:px-4 py-3 text-gray-800 min-w-0">
                     <ProductCell productName={r.productName} />
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{typeof r.rate === 'number' ? formatCurrency(r.rate) : r.rate}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{r.quantity != null ? (String(r.quantity) + ' ' + (r.unit || '').trim()).trim() || '—' : '—'}</td>
-                  <td className="px-4 py-2">
+                  <td className="px-3 sm:px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{typeof r.rate === 'number' ? formatCurrency(r.rate) : r.rate}</td>
+                  <td className="px-3 sm:px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{r.quantity != null ? (String(r.quantity) + ' ' + (r.unit || '').trim()).trim() || '—' : '—'}</td>
+                  <td className="px-3 sm:px-4 py-2 min-w-[120px]">
                     {rules.editable ? (
                       <input
                         type="date"
                         value={confirmationDate}
                         onChange={(e) => handleDeliveryChange(rowKey, 'confirmationDate', e.target.value, r)}
-                        className="w-full min-w-[110px] px-2 py-1.5 text-sm border border-gray-200 rounded focus:ring-2 focus:ring-indigo-500"
+                        className="w-full min-w-0 sm:min-w-[110px] px-2 py-1.5 text-sm border border-gray-200 rounded focus:ring-2 focus:ring-indigo-500"
                       />
                     ) : (
-                      <span className="text-sm text-gray-600">{confirmationDate || '—'}</span>
+                      <span className="text-sm text-gray-600 whitespace-nowrap">{confirmationDate || '—'}</span>
                     )}
                   </td>
-                  <td className="px-4 py-2">
+                  <td className="px-3 sm:px-4 py-2 min-w-[110px] whitespace-nowrap">
                     {(r.quotationStatus === 'cancelled' || r.quotationStatus === 'partially_cancelled' || r.isItemCancelled) ? (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded border text-xs font-medium bg-red-100 text-red-800 border-red-200">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded border text-xs font-medium bg-red-100 text-red-800 border-red-200 whitespace-nowrap">
                         Cancelled
                       </span>
                     ) : (
@@ -134,19 +134,19 @@ export default function ActiveOrdersTable({
                       />
                     )}
                   </td>
-                  <td className="px-4 py-2">
+                  <td className="px-3 sm:px-4 py-2 min-w-[120px]">
                     {rules.editable ? (
                       <input
                         type="date"
                         value={deliveryDate}
                         onChange={(e) => handleDeliveryChange(rowKey, 'deliveryDate', e.target.value, r)}
-                        className="w-full min-w-[110px] px-2 py-1.5 text-sm border border-gray-200 rounded focus:ring-2 focus:ring-indigo-500"
+                        className="w-full min-w-0 sm:min-w-[110px] px-2 py-1.5 text-sm border border-gray-200 rounded focus:ring-2 focus:ring-indigo-500"
                       />
                     ) : (
-                      <span className="text-sm text-gray-600">{deliveryDate || '—'}</span>
+                      <span className="text-sm text-gray-600 whitespace-nowrap">{deliveryDate || '—'}</span>
                     )}
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-2 whitespace-nowrap">
                     <ActionMenu
                       deliveryStatus={deliveryStatus}
                       onAddPayment={onAddPayment}

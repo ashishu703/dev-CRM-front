@@ -131,12 +131,6 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
           title: "Chat",
           subtitle: "Internal chat, team chat & emails — tag teammates, share images & documents"
         };
-        case 'lead-status':
-          return {
-            icon: <BarChart3 className="w-6 h-6 text-white" />,
-            title: "Lead Status",
-            subtitle: "Manage and track lead status updates"
-          };
         case 'scheduled-call':
           return {
             icon: <Calendar className="w-6 h-6 text-white" />,
@@ -275,10 +269,11 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
         };
       
       // Sales Department Head pages
+      case 'dashboard':
       case 'sales-dashboard':
         return {
           icon: <TrendingUp className="w-6 h-6 text-white" />,
-          title: "Sales Dashboard",
+          title: "Dashboard",
           subtitle: "Sales department overview"
         };
       case 'payment-info':
@@ -493,6 +488,18 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
           title: "Create Organisation",
           subtitle: "Set up your organization profile and details"
         };
+      case 'rfp-workflow':
+        return {
+          icon: <FileText className="w-5 h-5 text-white" />,
+          title: "RFP Workflow",
+          subtitle: "Manage RFP requests and workflow"
+        };
+      case 'toolbox':
+        return {
+          icon: <Wrench className="w-5 h-5 text-white" />,
+          title: "Toolbox Interface",
+          subtitle: "Tools and utilities"
+        };
       
       default:
         return {
@@ -505,10 +512,12 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
 
   const pageContent = getPageHeaderContent();
   const isSalesHeadTheme = userType === 'salesdepartmenthead' || userType === 'salesperson';
-  const isSalespersonLight = false; // Salesperson header matches sidebar (dark)
-  const headerIsDark = isDarkMode || (isSalesHeadTheme && !isSalespersonLight);
+  const isSalespersonLight = false;
+  const isSuperAdmin = userType === 'superadmin';
+  const headerIsDark = isDarkMode || isSuperAdmin || (isSalesHeadTheme && !isSalespersonLight);
   const showToggleViewButton = onToggleView && userType !== 'salesperson';
   const showDarkModeButton = onToggleDarkMode && userType !== 'salesperson';
+  const showChatButton = typeof onChatClick === 'function' && !isSuperAdmin;
 
   const isSalesperson = userType === 'salesperson';
   const headerStyle = isSalesperson
@@ -536,7 +545,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
         {/* Left Section - Dynamic Page Header */}
         <div className={`flex items-center min-w-0 flex-1 ${!isSalesHeadTheme ? 'space-x-2 sm:space-x-3' : ''}`} style={isSalesHeadTheme ? { gap: '12px' } : undefined}>
           {/* Hamburger Menu for Mobile and when sidebar is closed */}
-          {onToggleSidebar && (isMobileView || userType === 'salesdepartmenthead' || !sidebarOpen) && (
+          {onToggleSidebar && (isMobileView || userType === 'salesdepartmenthead' || userType === 'superadmin' || !sidebarOpen) && (
             <button
               onClick={onToggleSidebar}
               className={`p-1.5 sm:p-2 rounded-lg transition-colors flex-shrink-0 ${
@@ -600,7 +609,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
               {isDarkMode ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
           )}
-          {typeof onChatClick === 'function' && (
+          {showChatButton && (
             <div className="relative flex-shrink-0">
               <button
                 type="button"

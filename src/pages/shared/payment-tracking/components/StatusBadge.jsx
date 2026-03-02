@@ -29,7 +29,7 @@ export default function StatusBadge({ value, onChange, editable }) {
       <select
         value={status}
         onChange={(e) => onChange(e.target.value)}
-        className={`min-w-[120px] px-2 py-1 text-xs font-medium rounded border cursor-pointer focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${cls}`}
+        className={`min-w-[100px] sm:min-w-[120px] px-2 py-1 text-xs font-medium rounded border cursor-pointer focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 whitespace-nowrap ${cls}`}
       >
         {OPTIONS.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
@@ -39,7 +39,7 @@ export default function StatusBadge({ value, onChange, editable }) {
   }
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded border text-xs font-medium ${cls}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded border text-xs font-medium whitespace-nowrap shrink-0 ${cls}`}>
       {OPTIONS.find((o) => o.value === status)?.label ?? status}
     </span>
   );

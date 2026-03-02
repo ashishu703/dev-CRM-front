@@ -47,11 +47,18 @@ const getUserData = () => {
   }
 }
 
-export default function CustomerListContent({ isDarkMode = false, selectedCustomerId = null, filterNewLeadsOnly = false }) {
+function getInitialTabFromUrl() {
+  if (typeof window === 'undefined') return 'leads'
+  const tab = new URLSearchParams(window.location.search).get('tab')
+  return tab === 'enquiry' ? 'enquiry' : 'leads'
+}
+
+export default function CustomerListContent({ isDarkMode = false, selectedCustomerId = null, filterNewLeadsOnly: filterNewLeadsOnlyProp = false, dashboardFilterFromUrl = null, dashboardDateFromUrl = null }) {
   const { customers, setCustomers, loading } = useSharedData()
+  const filterNewLeadsOnly = filterNewLeadsOnlyProp || dashboardFilterFromUrl === 'no_follow_up'
   const [initialLoading, setInitialLoading] = React.useState(true)
   const user = getUserData()
-  const [activeTab, setActiveTab] = React.useState('leads')
+  const [activeTab, setActiveTab] = React.useState(getInitialTabFromUrl)
   const { user: authUser } = useAuth()
   const [enquiries, setEnquiries] = React.useState([])
   const [enquiriesGroupedByDate, setEnquiriesGroupedByDate] = React.useState({})

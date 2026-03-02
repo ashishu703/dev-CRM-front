@@ -37,9 +37,22 @@ import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton';
 import EnquiryTable from '../../components/EnquiryTable';
 import departmentHeadService from '../../api/admin_api/departmentHeadService';
 import proformaInvoiceService from '../../api/admin_api/proformaInvoiceService';
+import { DASHBOARD_FILTER_KEY } from '../salesperson/dashboard/utils/dashboardNavigation';
+
 const LeadsSimplified = () => {
   const [activeTab, setActiveTab] = useState('leads');
   const { user } = useAuth();
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(DASHBOARD_FILTER_KEY);
+      if (!raw) return;
+      const payload = JSON.parse(raw);
+      sessionStorage.removeItem(DASHBOARD_FILTER_KEY);
+      if (payload?.filter === 'last_call') setActiveTab('lastCall');
+      else if (payload?.filter === 'enquiries') setActiveTab('enquiry');
+    } catch (_) {}
+  }, []);
   const [leadsData, setLeadsData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -327,10 +340,15 @@ const LeadsSimplified = () => {
       
       const groupedParams = new URLSearchParams();
       if (enquiryFilters.enquiry_date) groupedParams.append('enquiryDate', enquiryFilters.enquiry_date);
+
+      const isSuperAdmin = (user?.role || '').toLowerCase() === 'superadmin';
+      const enquiriesEndpoint = isSuperAdmin
+        ? API_ENDPOINTS.ENQUIRIES_SUPERADMIN()
+        : API_ENDPOINTS.ENQUIRIES_DEPARTMENT_HEAD();
       
       const [paginatedResponse, groupedResponse] = await Promise.all([
-        apiClient.get(`${API_ENDPOINTS.ENQUIRIES_DEPARTMENT_HEAD()}?${params.toString()}`),
-        apiClient.get(`${API_ENDPOINTS.ENQUIRIES_DEPARTMENT_HEAD()}?${groupedParams.toString()}`)
+        apiClient.get(`${enquiriesEndpoint}?${params.toString()}`),
+        apiClient.get(`${enquiriesEndpoint}?${groupedParams.toString()}`)
       ]);
       
       if (paginatedResponse.success && groupedResponse.success) {
@@ -359,7 +377,7 @@ const LeadsSimplified = () => {
       setEnquiriesLoading(false);
       fetchEnquiriesAbortControllerRef.current = null;
     }
-  }, [activeTab, enquiryPage, enquiryLimit, enquiryFilters]);
+  }, [activeTab, enquiryPage, enquiryLimit, enquiryFilters, user?.role]);
 
   // Fetch enquiries when tab changes or pagination/filters change
   useEffect(() => {
@@ -2250,10 +2268,10 @@ const LeadsSimplified = () => {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 md:p-6">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 md:p-6 overflow-x-hidden min-w-0">
       {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex space-x-8">
+      <div className="border-b border-gray-200 mb-6 -mx-3 sm:mx-0 px-3 sm:px-0">
+        <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
           <button
             onClick={() => setActiveTab('leads')}
             className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
@@ -2308,8 +2326,8 @@ const LeadsSimplified = () => {
 
       {activeTab === 'leads' && (
         <>
-      <div className="flex items-center justify-between gap-4 mb-4">
-        <div className="flex-1">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 mb-4">
+        <div className="flex-1 min-w-0">
           <SearchBar
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}

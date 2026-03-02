@@ -3,19 +3,15 @@ import {
   ChevronDown,
   ChevronRight,
   BarChart3,
-  Users,
   UserCheck,
   DollarSign,
   Menu,
   X,
-  Calendar,
-  TrendingUp,
   Package,
   HelpCircle,
   FileText,
   Calculator,
   Wrench,
-  MessageCircle,
 } from 'lucide-react';
 
 const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, setSidebarOpen }) => {
@@ -74,67 +70,15 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
     }));
   };
 
+  // Order: Dashboard, Leads, Payment Info, RFP Workflow, Calculator, Toolbox, Stock Update (Chat & Reports deprecated)
   const sidebarItems = [
-    {
-      id: 'sales-dashboard',
-      label: 'Sales Dashboard',
-      icon: <BarChart3 className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'leads',
-      label: 'Leads',
-      icon: <UserCheck className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'rfp-workflow',
-      label: 'RFP Workflow',
-      icon: <FileText className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'payment-info',
-      label: 'Payment Info',
-      icon: <DollarSign className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'sales-department-users',
-      label: 'Department Users',
-      icon: <Users className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'stock-update',
-      label: 'Stock Update',
-      icon: <Package className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'toolbox',
-      label: 'Toolbox Interface',
-      icon: <Wrench className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'chat',
-      label: 'Chat',
-      icon: <MessageCircle className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'calculator',
-      label: 'Calculator',
-      icon: <Calculator className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'reports',
-      label: 'Reports',
-      icon: <FileText className="w-5 h-5" />,
-      hasDropdown: false
-    }
+    { id: 'dashboard', label: 'Dashboard', icon: <BarChart3 className="w-5 h-5" />, hasDropdown: false },
+    { id: 'leads', label: 'Leads', icon: <UserCheck className="w-5 h-5" />, hasDropdown: false },
+    { id: 'payment-info', label: 'Payment Info', icon: <DollarSign className="w-5 h-5" />, hasDropdown: false },
+    { id: 'rfp-workflow', label: 'RFP Workflow', icon: <FileText className="w-5 h-5" />, hasDropdown: false },
+    { id: 'calculator', label: 'Calculator', icon: <Calculator className="w-5 h-5" />, hasDropdown: false },
+    { id: 'toolbox', label: 'Toolbox Interface', icon: <Wrench className="w-5 h-5" />, hasDropdown: false },
+    { id: 'stock-update', label: 'Stock Update', icon: <Package className="w-5 h-5" />, hasDropdown: false },
   ];
 
   return (
@@ -248,20 +192,17 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
               ) : (
                 <div
                   className={`flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 ${
-                    activeView === item.id || (item.id === 'reports' && activeView?.startsWith('detailed-report-')) 
-                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/30' 
+                    activeView === item.id
+                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/30'
                       : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'
                   }`}
-                  onClick={() => {
-                    console.log('Sidebar click - setting activeView to:', item.id);
-                    setActiveView(item.id);
-                  }}
+                  onClick={() => setActiveView(item.id)}
                   style={{
-                    transform: activeView === item.id || (item.id === 'reports' && activeView?.startsWith('detailed-report-')) ? 'translateX(4px)' : 'none',
+                    transform: activeView === item.id ? 'translateX(4px)' : 'none',
                   }}
                 >
                   <div className="flex items-center space-x-3">
-                    <div className={activeView === item.id || (item.id === 'reports' && activeView?.startsWith('detailed-report-')) ? 'text-white' : 'text-slate-400'}>
+                    <div className={activeView === item.id ? 'text-white' : 'text-slate-400'}>
                       {item.icon}
                     </div>
                     {isExpanded && (

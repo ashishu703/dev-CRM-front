@@ -1,9 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
   BarChart3,
-  Users,
   Building2,
   UserCheck,
   Settings,
@@ -15,68 +14,24 @@ import {
   PlusCircle,
   FileText,
   Wrench,
-  MessageCircle,
 } from 'lucide-react';
 
-const Sidebar = ({ onLogout, activeView, setActiveView }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
+const Sidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, onToggleSidebar, isMobileView = false }) => {
+  const [internalOpen, setInternalOpen] = useState(true);
   const [openDropdowns, setOpenDropdowns] = useState({
     department: false,
     salesDepartment: false
   });
-  const collapseTimerRef = useRef(null);
-  const isManuallyToggledRef = useRef(false);
 
-  // Auto-collapse on mouse leave
-  const handleMouseEnter = () => {
-    if (collapseTimerRef.current) {
-      clearTimeout(collapseTimerRef.current);
-      collapseTimerRef.current = null;
-    }
-    // Only auto-expand if sidebar is not manually closed
-    if (!isManuallyToggledRef.current && !isExpanded) {
-      setIsExpanded(true);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    // Only auto-collapse if not manually toggled
-    if (!isManuallyToggledRef.current) {
-      collapseTimerRef.current = setTimeout(() => {
-        setIsExpanded(false);
-        setOpenDropdowns({ department: false, salesDepartment: false });
-      }, 2000); // Collapse after 2 seconds
-    }
-  };
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (collapseTimerRef.current) {
-        clearTimeout(collapseTimerRef.current);
-      }
-    };
-  }, []);
-
+  const isExpanded = onToggleSidebar != null ? (sidebarOpen ?? true) : internalOpen;
   const toggleSidebar = (e) => {
-    e?.stopPropagation(); // Prevent event bubbling if event exists
-    const newState = !isExpanded;
-    
-    // Set flag based on new state:
-    // - If closing (newState = false), set flag to true (manually closed)
-    // - If opening (newState = true), set flag to false (can auto-collapse again)
-    isManuallyToggledRef.current = !newState;
-    
-    setIsExpanded(newState);
-    
-    // Reset dropdowns when toggling
-    setOpenDropdowns({ department: false, salesDepartment: false, marketingSalesperson: false });
-    
-    // Clear any pending auto-collapse
-    if (collapseTimerRef.current) {
-      clearTimeout(collapseTimerRef.current);
-      collapseTimerRef.current = null;
+    e?.stopPropagation();
+    if (onToggleSidebar) {
+      onToggleSidebar();
+    } else {
+      setInternalOpen((prev) => !prev);
     }
+    setOpenDropdowns({ department: false, salesDepartment: false, marketingSalesperson: false });
   };
 
   const toggleDropdown = (dropdown) => {
@@ -86,61 +41,15 @@ const Sidebar = ({ onLogout, activeView, setActiveView }) => {
     }));
   };
 
+  // Order: Dashboard, Leads, Payment Info, RFP Workflow, Department, Configuration, Toolbox Interface (Chat & Reports deprecated)
   const sidebarItems = [
-    {
-      id: 'dashboard',
-      label: 'Dashboard',
-      icon: <BarChart3 className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'department',
-      label: 'Department',
-      icon: <Building2 className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'leads',
-      label: 'Leads',
-      icon: <UserCheck className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'configuration',
-      label: 'Configuration',
-      icon: <Settings className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'performance',
-      label: 'Payment Info',
-      icon: <TrendingUp className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'rfp-workflow',
-      label: 'RFP Workflow',
-      icon: <FileText className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'reports',
-      label: 'Reports',
-      icon: <FileText className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'toolbox',
-      label: 'Toolbox Interface',
-      icon: <Wrench className="w-5 h-5" />,
-      hasDropdown: false
-    },
-    {
-      id: 'chat',
-      label: 'Chat',
-      icon: <MessageCircle className="w-5 h-5" />,
-      hasDropdown: false
-    },
+    { id: 'dashboard', label: 'Dashboard', icon: <BarChart3 className="w-5 h-5" />, hasDropdown: false },
+    { id: 'leads', label: 'Leads', icon: <UserCheck className="w-5 h-5" />, hasDropdown: false },
+    { id: 'performance', label: 'Payment Info', icon: <TrendingUp className="w-5 h-5" />, hasDropdown: false },
+    { id: 'rfp-workflow', label: 'RFP Workflow', icon: <FileText className="w-5 h-5" />, hasDropdown: false },
+    { id: 'department', label: 'Department', icon: <Building2 className="w-5 h-5" />, hasDropdown: false },
+    { id: 'configuration', label: 'Configuration', icon: <Settings className="w-5 h-5" />, hasDropdown: false },
+    { id: 'toolbox', label: 'Toolbox Interface', icon: <Wrench className="w-5 h-5" />, hasDropdown: false },
   ];
 
   // Debug: Log the sidebar items structure
@@ -148,9 +57,8 @@ const Sidebar = ({ onLogout, activeView, setActiveView }) => {
 
   return (
     <div 
-      className={`bg-gradient-to-b from-slate-800 via-slate-900 to-slate-950 shadow-2xl transition-all duration-300 ${isExpanded ? 'w-64' : 'w-16'} h-screen flex flex-col border-r border-slate-700/50`}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      className={`fixed left-0 top-0 z-[40] h-screen flex flex-col border-r border-slate-700/50 bg-gradient-to-b from-slate-800 via-slate-900 to-slate-950 shadow-2xl transition-all duration-300 ease-out
+        ${isMobileView ? (isExpanded ? 'w-64 translate-x-0' : '-translate-x-full w-64') : (isExpanded ? 'w-64 translate-x-0' : 'w-16 translate-x-0')}`}
       style={{
         background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
         boxShadow: '4px 0 20px rgba(0, 0, 0, 0.3)'

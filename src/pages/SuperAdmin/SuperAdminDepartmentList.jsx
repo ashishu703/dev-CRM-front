@@ -1,6 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, RefreshCw, Edit, Trash2, LogOut, Calendar, Users, Building, User, Mail, Filter, Eye, EyeOff, X } from 'lucide-react';
 import departmentHeadService, { uiToApiDepartment, apiToUiDepartment } from '../../api/admin_api/departmentHeadService';
+
+const DEPARTMENT_FILTER_OPTIONS = [
+  'All Departments',
+  'Sales Department',
+  'Marketing Department',
+  'Telesales Department',
+  'HR Department',
+  'Production Department',
+  'Accounts Department',
+  'IT Department',
+];
 import departmentUsersApi from '../../api/admin_api/departmentUsersApi';
 import { useAuth } from '../../hooks/useAuth';
 import organizationService from '../../api/admin_api/organizationService';
@@ -250,7 +261,7 @@ const DepartmentManagement = () => {
   // Show skeleton loader on initial load
   if (initialLoading) {
     return (
-      <div className="p-6 min-h-screen" style={{ 
+      <div className="p-3 sm:p-4 md:p-6 min-h-screen overflow-x-hidden" style={{ 
         background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
         backgroundAttachment: 'fixed'
       }}>
@@ -271,7 +282,7 @@ const DepartmentManagement = () => {
   }
 
   return (
-    <div className="min-h-screen p-6" style={{ 
+    <div className="min-h-screen p-3 sm:p-4 md:p-6 overflow-x-hidden min-w-0" style={{ 
       background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
       backgroundAttachment: 'fixed'
     }}>
@@ -328,11 +339,11 @@ const DepartmentManagement = () => {
         </div>
 
         {/* Search and Controls */}
-        <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-200/50 p-6 mb-8" style={{
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-200/50 p-4 sm:p-6 mb-6 sm:mb-8" style={{
           boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
         }}>
-          <div className="flex items-center justify-between gap-6">
-            <div className="relative w-full sm:w-1/4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-6">
+            <div className="relative w-full sm:w-1/4 min-w-0">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
@@ -344,10 +355,65 @@ const DepartmentManagement = () => {
               />
             </div>
             
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              {/* Department filter */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1 sm:gap-2 min-w-0 sm:min-w-[180px]">
+                <label className="text-xs font-medium text-gray-500 sm:sr-only" htmlFor="department-filter">
+                  Department
+                </label>
+                <select
+                  id="department-filter"
+                  value={selectedFilter}
+                  onChange={(e) => {
+                    setSelectedFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  disabled={!isSuperAdmin}
+                  className={`h-11 sm:h-12 w-full sm:w-auto min-w-0 sm:min-w-[180px] px-3 sm:px-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white/90 backdrop-blur-sm text-sm font-medium shadow-sm transition-all duration-200 ${!isSuperAdmin ? 'opacity-60 cursor-not-allowed' : 'hover:border-blue-300'}`}
+                  style={{ fontFamily: 'Inter, sans-serif' }}
+                  title="Filter by department type"
+                  aria-label="Filter by department type"
+                >
+                  {DEPARTMENT_FILTER_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date filter toggle */}
+              <button
+                type="button"
+                className={`h-11 sm:h-12 px-3 sm:px-4 border-2 rounded-xl flex items-center gap-2 text-sm font-medium shadow-sm transition-all duration-200 ${
+                  showFilters || dateFrom || dateTo
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-gray-50'
+                }`}
+                onClick={() => setShowFilters((s) => !s)}
+                aria-expanded={showFilters}
+                aria-controls="advanced-filters"
+                aria-label="Date filter"
+                title="Filter by date range"
+              >
+                <Calendar className="w-4 h-4 shrink-0" />
+                <span className="hidden xs:inline">Date</span>
+              </button>
+
+              <button
+                type="button"
+                className="h-11 sm:h-12 p-2.5 border-2 border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 hover:text-blue-600 hover:border-blue-300 flex items-center justify-center transition-all duration-200 shadow-sm shrink-0"
+                aria-label="Refresh"
+                title="Refresh"
+                onClick={() => reload()}
+              >
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              </button>
+
               {isSuperAdmin && (
                 <button
-                  className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 flex items-center gap-2 text-sm font-semibold shadow-lg transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5"
+                  type="button"
+                  className="h-11 sm:h-12 px-4 sm:px-5 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 flex items-center gap-2 text-sm font-semibold shadow-lg transition-all duration-200 hover:shadow-xl shrink-0"
                   style={{
                     boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)',
                     fontFamily: 'Inter, sans-serif'
@@ -358,92 +424,54 @@ const DepartmentManagement = () => {
                   Add Department
                 </button>
               )}
-
-              <button
-                className="p-2.5 border-2 border-gray-200 text-gray-600 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 hover:border-blue-300 flex items-center justify-center transition-all duration-200 shadow-sm"
-                aria-label="Refresh"
-                title="Refresh"
-                onClick={() => reload()}
-              >
-                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              </button>
-
-              <select 
-                value={selectedFilter}
-                onChange={(e) => {
-                  setSelectedFilter(e.target.value);
-                  setPage(1); // Reset to first page when filter changes
-                }}
-                disabled={!isSuperAdmin}
-                className={`h-12 px-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white/90 backdrop-blur-sm text-sm font-medium shadow-sm transition-all duration-200 ${!isSuperAdmin ? 'opacity-60 cursor-not-allowed' : 'hover:border-blue-300'}`}
-                style={{ fontFamily: 'Inter, sans-serif' }}
-                title="Department Type"
-                aria-label="Department Type"
-              >
-                <option>All Departments</option>
-                <option>Sales Department</option>
-                <option>Marketing Department</option>
-                <option>HR Department</option>
-                <option>Production Department</option>
-                <option>Accounts Department</option>
-                <option>IT Department</option>
-                <option>Telesales Department</option>
-              </select>
-
-              <button
-                className="p-2.5 border-2 border-gray-200 text-gray-600 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 hover:border-blue-300 flex items-center justify-center transition-all duration-200 shadow-sm"
-                onClick={() => setShowFilters((s) => !s)}
-                aria-expanded={showFilters}
-                aria-controls="advanced-filters"
-                aria-label="Filter"
-                title="Filter"
-              >
-                <Filter className="w-4 h-4" />
-              </button>
             </div>
           </div>
+
+          {/* Date range filter panel */}
           {showFilters && (
-            <div id="advanced-filters" className="mt-4 border-t border-gray-100 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">From</label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">To</label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                />
-              </div>
-              <div className="md:col-span-2 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  className="px-4 py-2 text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
-                  onClick={() => {
-                    setDateFrom('');
-                    setDateTo('');
-                    setPage(1); // Reset to first page when clearing filters
-                  }}
-                >
-                  Clear
-                </button>
-                <button
-                  type="button"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  onClick={() => {
-                    // Date filter is applied on frontend, no need to refetch
-                    setShowFilters(false);
-                  }}
-                >
-                  Apply
-                </button>
+            <div id="advanced-filters" className="mt-4 pt-4 border-t border-gray-200">
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Filter by date range</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 items-end">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="date-from">From</label>
+                  <input
+                    id="date-from"
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full h-11 px-3 py-2 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="date-to">To</label>
+                  <input
+                    id="date-to"
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full h-11 px-3 py-2 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-2">
+                  <button
+                    type="button"
+                    className="px-4 py-2.5 text-gray-700 border-2 border-gray-200 rounded-xl hover:bg-gray-50 font-medium text-sm"
+                    onClick={() => {
+                      setDateFrom('');
+                      setDateTo('');
+                      setPage(1);
+                    }}
+                  >
+                    Clear dates
+                  </button>
+                  <button
+                    type="button"
+                    className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium text-sm"
+                    onClick={() => setShowFilters(false)}
+                  >
+                    Apply
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -955,12 +983,9 @@ const DepartmentManagement = () => {
                       onChange={(e) => setSelectedDept({ ...selectedDept, departmentType: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                     >
-                      <option>Sales Department</option>
-                      <option>Marketing Department</option>
-                      <option>Production Department</option>
-                      <option>Accounts Department</option>
-                      <option>IT Department</option>
-                      <option>Telesales Department</option>
+                      {DEPARTMENT_FILTER_OPTIONS.filter((o) => o !== 'All Departments').map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -968,7 +993,7 @@ const DepartmentManagement = () => {
                     <select
                       value={selectedDept.companyName}
                       onChange={(e) => setSelectedDept({ ...selectedDept, companyName: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus-border-blue-500 outline-none bg-white"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
                     >
                       {companies.length === 0 ? (
                         <option value={selectedDept.companyName || ''}>

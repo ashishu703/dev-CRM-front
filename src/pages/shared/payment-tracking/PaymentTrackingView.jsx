@@ -62,9 +62,9 @@ export default function PaymentTrackingView({
   const showPagination = activeTab !== 'target' && totalItems > 0;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
+    <div className="min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6 overflow-x-hidden min-w-0">
+      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-between gap-3 mb-4">
+        <h1 className="text-lg sm:text-xl font-semibold text-gray-900">{title}</h1>
         <div className="flex items-center gap-2 flex-wrap">
           {showSalespersonFilter && salespersonOptions.length > 0 && (
             <select
@@ -92,7 +92,7 @@ export default function PaymentTrackingView({
       <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6 shadow-sm">
         {activeTab !== 'target' && (
           <div className="mb-4">
-            <div className="relative max-w-xs">
+            <div className="relative w-full sm:max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="search"
@@ -105,14 +105,14 @@ export default function PaymentTrackingView({
           </div>
         )}
 
-        <div className="rounded-xl border border-gray-200 overflow-hidden">
-          <div className="border-b border-gray-200 flex flex-wrap">
+        <div className="rounded-xl border border-gray-200 overflow-hidden min-w-0">
+          <div className="border-b border-gray-200 flex overflow-x-auto scrollbar-thin">
             {TABS.map(({ id, label, Icon }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => setActiveTab(id)}
-                className={`flex-1 min-w-[120px] px-4 py-3 text-sm font-semibold border-b-2 ${
+                className={`flex-shrink-0 min-w-[100px] sm:min-w-[120px] px-3 sm:px-4 py-3 text-sm font-semibold border-b-2 ${
                   activeTab === id
                     ? 'border-indigo-600 text-indigo-700 bg-indigo-50/40'
                     : 'border-transparent text-gray-700 hover:bg-gray-50'

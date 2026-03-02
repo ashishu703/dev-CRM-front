@@ -622,7 +622,7 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-4">
+    <div className="p-3 sm:p-4 md:p-6 space-y-4 overflow-x-hidden min-w-0">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900">RFP Workflow</h1>
@@ -998,8 +998,8 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120] p-3 sm:p-4">
+          <div className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4">
             <h2 className="text-lg font-semibold">Raise RFP</h2>
             <div className="space-y-3">
               <select
@@ -1075,8 +1075,8 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       )}
 
       {showPrice && selectedRfp && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120] p-3 sm:p-4">
+          <div className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4">
             <h2 className="text-lg font-semibold">Add Pricing</h2>
             <div className="grid grid-cols-2 gap-3">
               <input
@@ -1113,8 +1113,8 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       )}
 
       {showAccountsSubmit && selectedRfp && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120] p-3 sm:p-4">
+          <div className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4">
             <h2 className="text-lg font-semibold">Submit to Accounts</h2>
             <div className="space-y-3">
               <input
@@ -1139,8 +1139,8 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       )}
 
       {showAccountsApproval && selectedRfp && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120] p-3 sm:p-4">
+          <div className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4">
             <h2 className="text-lg font-semibold">Accounts Decision</h2>
             <div className="space-y-3">
               <select
@@ -1168,8 +1168,8 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       )}
 
       {showSeniorApproval && selectedRfp && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120] p-3 sm:p-4">
+          <div className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4">
             <h2 className="text-lg font-semibold">Senior Management Decision</h2>
             <div className="space-y-3">
               <select
@@ -1197,8 +1197,8 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       )}
 
       {showOperations && selectedRfp && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120] p-3 sm:p-4">
+          <div className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4">
             <h2 className="text-lg font-semibold">Operations Action</h2>
             <div className="space-y-3">
               <select
@@ -1736,8 +1736,8 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       )}
 
       {showCustomPriceModal && customPriceProduct && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[130]">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[130] p-3 sm:p-4">
+          <div className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto space-y-4">
             <h2 className="text-lg font-semibold">Set Custom Price (not in calculator / price list)</h2>
             <p className="text-sm text-slate-600">Product: <span className="font-semibold">{customPriceProduct.product_spec}</span></p>
             <div className="space-y-3">
@@ -1768,8 +1768,8 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
       )}
 
       {showPriceListModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120]">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120] p-3 sm:p-4">
+          <div className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4">
             <h2 className="text-lg font-semibold">Set Approved Price</h2>
             <div className="space-y-3">
               <select

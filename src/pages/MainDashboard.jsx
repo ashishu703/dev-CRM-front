@@ -1,20 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useCompany } from '../context/CompanyContext';
-import SuperAdminDashboard from './SuperAdmin/SuperAdminDashboard';
 import AllcustomerList from './SuperAdmin/AllcustomerList';
 import SuperAdminDepartmentList from './SuperAdmin/SuperAdminDepartmentList';
-import AllLeads from './SuperAdmin/AllLeads';
+import Leads from './SalesDepartmentHead/Leads';
 import Configuration from './SuperAdmin/Configuration';
 import PaymentInfo from './SuperAdmin/PaymentInfo';
 import TodayVisit from './SalesDepartmentHead/TodayVisit';
 import TeleSalesDashboard from './SuperAdmin/TeleSalesDashboard';
 import OfficeSalesPersonDashboard from './SuperAdmin/OfficeSalesPersonDashboard';
 import CreateOrganisation from './SuperAdmin/CreateOrganisation';
-import ReportsPage from './Reports/ReportsPage';
 import DetailedReportPage from './Reports/DetailedReportPage';
 import RfpWorkflow from './shared/RfpWorkflow';
 import ToolboxInterface from './salesperson/ToolboxInterface';
-import ChatPage from './salesperson/ChatPage';
+import SalesIntelligenceDashboard from './salesperson/dashboard/SalesIntelligenceDashboard';
 
 const MainDashboard = ({ activeView, setActiveView }) => {
   const { selectedCompany } = useCompany();
@@ -26,9 +24,9 @@ const MainDashboard = ({ activeView, setActiveView }) => {
   const renderContent = () => {
     switch (activeView) {
       case 'dashboard':
-        return <SuperAdminDashboard />;
+        return <SalesIntelligenceDashboard mode="superadmin" onNavigate={setActiveView} />;
       case 'leads':
-        return <AllLeads />;
+        return <Leads />;
       case 'today-visit':
         try {
           return <TodayVisit />;
@@ -41,7 +39,7 @@ const MainDashboard = ({ activeView, setActiveView }) => {
       case 'department':
         return <SuperAdminDepartmentList />;
       case 'all-leads':
-        return <AllLeads />;
+        return <Leads />;
       case 'configuration':
         return <Configuration />;
       case 'performance':
@@ -52,19 +50,15 @@ const MainDashboard = ({ activeView, setActiveView }) => {
         return <OfficeSalesPersonDashboard />;
       case 'create-organisation':
         return <CreateOrganisation />;
-      case 'reports':
-        return <ReportsPage setActiveView={setActiveView} />;
       case 'rfp-workflow':
         return <RfpWorkflow />;
       case 'toolbox':
         return <ToolboxInterface />;
-      case 'chat':
-        return <ChatPage />;
       default:
         if (activeView?.startsWith('detailed-report-')) {
           return <DetailedReportPage activeView={activeView} setActiveView={setActiveView} />;
         }
-        return <SuperAdminDashboard />;
+        return <SalesIntelligenceDashboard mode="superadmin" onNavigate={setActiveView} />;
     }
   };
 

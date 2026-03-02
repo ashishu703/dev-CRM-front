@@ -3510,7 +3510,7 @@ const ToolboxInterface = ({ isDarkMode = false }) => {
   }
 
   return (
-    <div className={`flex min-h-screen ${
+    <div className={`flex min-h-screen min-w-0 overflow-x-hidden ${
       isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
     }`}>
       {/* Mobile Sidebar Toggle Button */}

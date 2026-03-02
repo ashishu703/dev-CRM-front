@@ -1433,7 +1433,7 @@ const Configuration = () => {
 
   if (loading) {
     return (
-      <div className="p-6 min-h-screen" style={{ 
+      <div className="p-3 sm:p-4 md:p-6 min-h-screen overflow-x-hidden" style={{ 
         background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
         backgroundAttachment: 'fixed'
       }}>
@@ -1453,7 +1453,7 @@ const Configuration = () => {
   }
 
   return (
-    <div className="p-6 min-h-screen" style={{ 
+    <div className="p-3 sm:p-4 md:p-6 min-h-screen overflow-x-hidden min-w-0" style={{ 
       background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
       backgroundAttachment: 'fixed'
     }}>

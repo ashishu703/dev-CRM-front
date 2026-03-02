@@ -17,14 +17,29 @@ const getBaseURL = () => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:4500/api';
+      return 'http://localhost:3232';
     }
     return `${window.location.origin}/api`;
   }
-  return 'http://localhost:4500/api';
+  return 'http://localhost:3232';
 };
 
 const BASE_URL = getBaseURL();
+
+/** Socket must connect to backend (same host as API), not frontend dev server */
+const getSocketURL = () => {
+  const apiUrl = import.meta.env.VITE_API_BASE_URL || '';
+  const socketUrl = import.meta.env.VITE_SOCKET_URL || '';
+  const origin = (socketUrl || apiUrl).trim();
+  if (origin && (origin.startsWith('http') || origin.startsWith('//'))) {
+    return origin.replace(/\/api.*$/, '').replace(/\/$/, '');
+  }
+  if (BASE_URL && BASE_URL.startsWith('http')) {
+    return BASE_URL.replace(/\/api.*$/, '').replace(/\/$/, '');
+  }
+  if (typeof window !== 'undefined') return window.location.origin;
+  return 'http://localhost:3232';
+};
 
 let sharedSocket = null;
 
@@ -143,16 +158,9 @@ export const useNotifications = () => {
     const shouldCreateSocket = !socket;
 
     if (shouldCreateSocket) {
-      let socketURL;
-      if (BASE_URL.includes('/api')) {
-        socketURL = BASE_URL.split('/api')[0].trim();
-      } else if (BASE_URL.includes('localhost:4500')) {
-        socketURL = 'http://localhost:4500';
-      } else {
-        socketURL = typeof window !== 'undefined' ? window.location.origin : BASE_URL;
-      }
+      let socketURL = getSocketURL();
       if (!socketURL || socketURL.endsWith('/')) {
-        socketURL = socketURL.replace(/\/$/, '');
+        socketURL = (socketURL || '').replace(/\/$/, '');
       }
       socket = io(socketURL, {
         auth: { token },
