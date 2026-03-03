@@ -6,6 +6,7 @@ import StockUpdate from './StockUpdate';
 import CalculatorProductList from './CalculatorProductList';
 import RfpWorkflow from '../shared/RfpWorkflow';
 import ToolboxInterface from '../salesperson/ToolboxInterface';
+import SalesDepartmentUser from './SalesDepartmentUser';
 
 const SalesDepartmentHeadDashboard = ({ activeView, setActiveView }) => {
   const hasInitializedRef = React.useRef(false);
@@ -36,6 +37,8 @@ const SalesDepartmentHeadDashboard = ({ activeView, setActiveView }) => {
         return <ToolboxInterface />;
       case 'stock-update':
         return <StockUpdate />;
+      case 'users':
+        return <SalesDepartmentUser setActiveView={setActiveView} />;
       default:
         return <SalesIntelligenceDashboard mode="head" onNavigate={setActiveView} />;
     }

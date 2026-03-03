@@ -180,6 +180,16 @@ class ApiClient {
   }
 
   /**
+   * PATCH request
+   */
+  async patch(url, data = {}) {
+    return this.request(url, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
    * DELETE request
    */
   async delete(url, data = {}) {

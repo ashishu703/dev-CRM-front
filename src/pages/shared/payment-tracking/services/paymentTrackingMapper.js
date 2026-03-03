@@ -163,8 +163,10 @@ export function mapPaymentTrackingResponse(data) {
         achieved: Number(data.targetSummary.achieved || 0),
         remaining: Math.max(0, Number(data.targetSummary.remaining ?? (data.targetSummary.totalTarget - data.targetSummary.achieved))),
         progressPct: Number(data.targetSummary.progressPct ?? 0),
+        requiredPerDay: Number(data.targetSummary.requiredPerDay ?? 0),
+        daysLeftInPeriod: Number(data.targetSummary.daysLeftInPeriod ?? 0),
       }
-    : { totalTarget: 0, achieved: 0, remaining: 0, progressPct: 0 };
+    : { totalTarget: 0, achieved: 0, remaining: 0, progressPct: 0, requiredPerDay: 0, daysLeftInPeriod: 0 };
 
   const targetList = Array.isArray(data?.targetList)
     ? data.targetList.map((t) => ({
@@ -173,6 +175,8 @@ export function mapPaymentTrackingResponse(data) {
         achieved: Number(t.achieved || 0),
         remaining: Math.max(0, Number(t.remaining ?? ((t.target || 0) - (t.achieved || 0)))),
         progressPct: Number(t.progressPct ?? (t.target ? ((t.achieved || 0) / t.target) * 100 : 0)),
+        requiredPerDay: Number(t.requiredPerDay ?? 0),
+        daysLeftInPeriod: Number(t.daysLeftInPeriod ?? 0),
       }))
     : [];
 

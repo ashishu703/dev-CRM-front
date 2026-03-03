@@ -10,7 +10,7 @@ const EMPTY = {
   creditRows: [],
   outstandingRows: [],
   allPayments: [],
-  targetSummary: { totalTarget: 0, achieved: 0, remaining: 0, progressPct: 0 },
+  targetSummary: { totalTarget: 0, achieved: 0, remaining: 0, progressPct: 0, requiredPerDay: 0, daysLeftInPeriod: 0 },
   targetList: [],
 };
 

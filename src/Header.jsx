@@ -269,7 +269,6 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
         };
       
       // Sales Department Head pages
-      case 'dashboard':
       case 'sales-dashboard':
         return {
           icon: <TrendingUp className="w-6 h-6 text-white" />,

@@ -55,7 +55,7 @@ export default function PaymentTrackingContainer(props = {}) {
     try {
       const res = await paymentService.updateOrderDelivery(quotationId, payload);
       if (res?.data?.success !== false) {
-        Toast.success((res?.data?.data?.updatedCount ?? 0) > 0 ? 'Saved' : 'No payment record to update');
+        Toast.success((res?.data?.data?.updatedCount ?? 0) > 0 ? 'Saved' : 'No payment record to update for this order.');
         data.refresh();
       } else {
         Toast.error(res?.data?.message || 'Failed to save');

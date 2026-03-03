@@ -4,6 +4,7 @@ import {
   ChevronRight,
   BarChart3,
   UserCheck,
+  Users,
   DollarSign,
   Menu,
   X,
@@ -70,7 +71,7 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
     }));
   };
 
-  // Order: Dashboard, Leads, Payment Info, RFP Workflow, Calculator, Toolbox, Stock Update (Chat & Reports deprecated)
+  // Order: Dashboard, Leads, Payment Info, RFP Workflow, Calculator, Toolbox, Stock Update, User
   const sidebarItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <BarChart3 className="w-5 h-5" />, hasDropdown: false },
     { id: 'leads', label: 'Leads', icon: <UserCheck className="w-5 h-5" />, hasDropdown: false },
@@ -79,6 +80,7 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
     { id: 'calculator', label: 'Calculator', icon: <Calculator className="w-5 h-5" />, hasDropdown: false },
     { id: 'toolbox', label: 'Toolbox Interface', icon: <Wrench className="w-5 h-5" />, hasDropdown: false },
     { id: 'stock-update', label: 'Stock Update', icon: <Package className="w-5 h-5" />, hasDropdown: false },
+    { id: 'users', label: 'User', icon: <Users className="w-5 h-5" />, hasDropdown: false },
   ];
 
   return (

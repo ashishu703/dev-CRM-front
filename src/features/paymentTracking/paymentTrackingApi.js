@@ -17,7 +17,11 @@ export const paymentTrackingApi = baseApi.injectEndpoints({
         url: `/api/payments/tracking${buildQuery(params) ? `?${buildQuery(params)}` : ''}`,
       }),
       providesTags: ['PaymentTracking'],
-      transformResponse: (res) => res?.data ?? res ?? {},
+      // Backend returns { success: true, data: payload }; result is axios response so result.data = body
+      transformResponse: (result) => {
+        const body = result?.data ?? result ?? {};
+        return (body && typeof body === 'object' && body.data !== undefined) ? body.data : body;
+      },
     }),
   }),
 });

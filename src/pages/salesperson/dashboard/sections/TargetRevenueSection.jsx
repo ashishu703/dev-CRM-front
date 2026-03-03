@@ -20,6 +20,7 @@ const TargetRevenueSection = memo(function TargetRevenueSection({ revenueTarget,
     daysLeftInPeriod = 0,
     achievedPct = 0,
     last7DaysTrend = [],
+    isPeriodExpired = false,
   } = revenueTarget;
 
   const targetNum = Number(target) || 0;
@@ -46,19 +47,99 @@ const TargetRevenueSection = memo(function TargetRevenueSection({ revenueTarget,
     return <TrendingDown className="w-4 h-4 text-rose-500" />;
   };
 
-  if (!hasTarget && achieved <= 0) {
+  // No active target and no achieved: show card with "No target set" and timeline area
+  if (!hasTarget && achievedNum <= 0 && !isPeriodExpired) {
     return (
       <div className="salesperson-dashboard-card overflow-hidden">
         <div className="dashboard-card-header flex flex-row items-center gap-2">
           <Target className="w-4 h-4 text-[var(--primary-600)] shrink-0" />
           <div>
             <h3>Target & Revenue</h3>
-            <p>Single view · Progress · Trend · Forecast</p>
+            <p>Progress · Pace · Last 7 days</p>
           </div>
         </div>
-        <div className="card-inner-padding py-10 flex flex-col items-center justify-center text-[var(--text-primary)]">
-          <p className="text-sm font-semibold">No data found</p>
-          <p className="text-xs mt-1 opacity-80">No target or revenue data</p>
+        <div className="card-inner-padding">
+          <div className="py-6 flex flex-col items-center justify-center text-[var(--text-primary)] rounded-lg bg-slate-50 border border-slate-200 mb-4">
+            <p className="text-sm font-semibold">No target set</p>
+            <p className="text-xs mt-1 opacity-80">Set target in Department Management to see progress here</p>
+          </div>
+          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-semibold text-slate-600">Last 7 days</span>
+              <TrendIcon />
+            </div>
+            {trendData.length > 0 ? (
+              <div className="h-[140px] w-full">
+                <ResponsiveContainer width="100%" height={140}>
+                  <AreaChart data={trendData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="targetRevenueTrendGradEmpty" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#14b8a6" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="#f1f5f9" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                    <YAxis hide domain={['auto', 'auto']} />
+                    <Tooltip formatter={(v) => [formatCurrency(v), 'Revenue']} contentStyle={{ fontSize: 11 }} />
+                    <Area type="monotone" dataKey="amount" stroke="#14b8a6" strokeWidth={1.5} fill="url(#targetRevenueTrendGradEmpty)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-[100px] flex flex-col items-center justify-center text-[var(--text-primary)]">
+                <p className="text-xs opacity-80">No trend data for last 7 days</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Period expired: show message and achieved only (no active target)
+  if (isPeriodExpired) {
+    return (
+      <div className="salesperson-dashboard-card overflow-hidden">
+        <div className="dashboard-card-header flex flex-row items-center gap-2">
+          <Target className="w-4 h-4 text-[var(--primary-600)] shrink-0" />
+          <div>
+            <h3>Target & Revenue</h3>
+            <p>Progress · Pace · Last 7 days</p>
+          </div>
+        </div>
+        <div className="card-inner-padding">
+          <div className="rounded-lg bg-amber-50 border border-amber-200 border-l-4 border-l-amber-500 p-3 mb-4">
+            <p className="text-sm font-semibold text-amber-800">Target period expired</p>
+            <p className="text-xs mt-1 text-amber-700">Set a new target period in Department Management. Last period achieved: {formatCurrency(achieved)}</p>
+          </div>
+          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-semibold text-slate-600">Last 7 days</span>
+              <TrendIcon />
+            </div>
+            {trendData.length > 0 ? (
+              <div className="h-[140px] w-full">
+                <ResponsiveContainer width="100%" height={140}>
+                  <AreaChart data={trendData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="targetRevenueTrendGradExpired" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#14b8a6" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="#f1f5f9" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                    <YAxis hide domain={['auto', 'auto']} />
+                    <Tooltip formatter={(v) => [formatCurrency(v), 'Revenue']} contentStyle={{ fontSize: 11 }} />
+                    <Area type="monotone" dataKey="amount" stroke="#14b8a6" strokeWidth={1.5} fill="url(#targetRevenueTrendGradExpired)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-[100px] flex flex-col items-center justify-center text-[var(--text-primary)]">
+                <p className="text-xs opacity-80">No trend data for last 7 days</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
