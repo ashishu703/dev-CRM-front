@@ -46,9 +46,14 @@ function fixQuotationTemplateHtml(html) {
 
 /** Single source for quotation live preview: context + template fix + render. */
 function QuotationPreviewContent({ previewData, companyBranches, user, selectedTemplate, availableTemplates }) {
-  const activeTemplate = availableTemplates?.find((t) => t.template_key === selectedTemplate);
+  const list = Array.isArray(availableTemplates) ? availableTemplates : [];
+  const activeTemplate =
+    list.find((t) => t.template_key === selectedTemplate && t?.html_content) ||
+    list.find((t) => t?.html_content) ||
+    null;
   if (!activeTemplate?.html_content) return null;
-  const context = QuotationDataMapper.prepareContext(previewData, companyBranches, user, selectedTemplate);
+  const templateKeyForContext = activeTemplate.template_key || selectedTemplate || null;
+  const context = QuotationDataMapper.prepareContext(previewData, companyBranches, user, templateKeyForContext);
   const html = fixQuotationTemplateHtml(activeTemplate.html_content);
   return <DynamicTemplateRenderer html={html} data={context} containerId="quotation-content" />;
 }
@@ -57,6 +62,7 @@ import apiClient from '../../utils/apiClient';
 import { API_ENDPOINTS } from '../../api/admin_api/api';
 import productPriceService from '../../services/ProductPriceService';
 import Toast from '../../utils/Toast';
+import * as XLSX from 'xlsx';
 
 function Card({ className, children }) {
   return <div className={`rounded-lg border bg-white shadow-sm ${className || ''}`}>{children}</div>;
@@ -120,7 +126,7 @@ const calculateTotals = (items, discountRate, taxRate) => {
   };
 };
 
-export default function CreateQuotationForm({ customer, user, onClose, onSave, standalone = false, existingQuotation = null }) {
+export default function CreateQuotationForm({ customer, user, onClose, onSave, standalone = false, existingQuotation = null, creationMode = 'rfp' }) {
   const getSevenDaysLater = (dateString) => {
     const date = new Date(dateString);
     date.setDate(date.getDate() + 7);
@@ -192,6 +198,8 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
   const [validatingRfpId, setValidatingRfpId] = useState(false);
   const [validatedRfpDecision, setValidatedRfpDecision] = useState(null);
   const [rfpIdValidated, setRfpIdValidated] = useState(false);
+  const needsRfpValidation = creationMode === 'rfp' && !existingQuotation;
+  const [excelLoading, setExcelLoading] = useState(false);
 
   useEffect(() => {
     if (!customer) {
@@ -363,11 +371,128 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
 
   useEffect(() => {
     const storedRfpId = sessionStorage.getItem('pricingRfpDecisionId');
-    if (storedRfpId && !existingQuotation) {
+    if (storedRfpId && needsRfpValidation) {
       setRfpIdInput(storedRfpId);
       handleValidateRfpId(storedRfpId);
     }
-  }, []);
+  }, [needsRfpValidation]);
+
+  const buildQuotationExcelTemplate = () => {
+    const headers = ['Product Name', 'Quantity', 'Unit'];
+    const hint = ['Use exact product spec', 'Number', 'Mtr / Nos / Kg'];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([headers, hint, []]);
+    ws['!cols'] = [{ wch: 40 }, { wch: 12 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Quotation Items');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Quotation_Items_Template.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const applyItemsFromExcelFile = async (file) => {
+    if (!file) return;
+    setExcelLoading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+      if (!rows.length) {
+        Toast.error('Excel file has no rows.');
+        return;
+      }
+
+      const normKey = (k) => String(k || '').trim().toLowerCase();
+      const resolveKey = (obj, keys) => {
+        const found = Object.keys(obj).find((h) => keys.includes(normKey(h)));
+        return found ? obj[found] : null;
+      };
+
+      const parsed = rows
+        .map((row) => {
+          const productName = resolveKey(row, ['product name', 'product spec', 'product', 'product_spec']);
+          const quantityVal = resolveKey(row, ['quantity', 'qty', 'length']);
+          const unitVal = resolveKey(row, ['unit', 'uom', 'quantity unit', 'length unit']);
+          const productSpec = String(productName || '').trim();
+          const qtyNum = quantityVal === '' || quantityVal == null ? NaN : Number.parseFloat(quantityVal);
+          const quantity = Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum : NaN;
+          const unit = String(unitVal || '').trim() || 'Mtr';
+          if (!productSpec) return null;
+          if (!Number.isFinite(quantity)) return { productSpec, quantity: null, unit };
+          return { productSpec, quantity, unit };
+        })
+        .filter(Boolean);
+
+      if (!parsed.length) {
+        Toast.error('No valid product rows found. Check columns: Product Name, Quantity, Unit.');
+        return;
+      }
+
+      const badQty = parsed.filter((r) => r.quantity == null);
+      if (badQty.length) {
+        Toast.error(`Invalid quantity in ${badQty.length} row(s). Fix and re-upload.`);
+        return;
+      }
+
+      const uniqueSpecs = Array.from(new Set(parsed.map((r) => r.productSpec)));
+      const pricePairs = await Promise.all(
+        uniqueSpecs.map(async (spec) => {
+          try {
+            const res = await productPriceService.getApprovedPrice(spec);
+            const unitPrice = res?.data ? Number.parseFloat(res.data.unit_price || 0) : NaN;
+            return [spec, Number.isFinite(unitPrice) ? unitPrice : null];
+          } catch {
+            return [spec, null];
+          }
+        })
+      );
+      const priceBySpec = new Map(pricePairs);
+
+      const nextItems = parsed.map((row, idx) => {
+        const unitPrice = priceBySpec.get(row.productSpec);
+        const buyerRate = unitPrice != null ? String(round2(unitPrice)) : '';
+        const amount = unitPrice != null ? round2((Number(row.quantity) || 0) * unitPrice) : 0;
+        const match = findProductForHsn(row.productSpec, products);
+        return {
+          id: idx + 1,
+          productName: row.productSpec,
+          quantity: String(row.quantity),
+          unit: row.unit || (match?.defaultUnit || 'Mtr'),
+          companyRate: unitPrice || 0,
+          buyerRate,
+          amount,
+          hsn: (match?.hsn && String(match.hsn).trim()) || '',
+          remark: unitPrice == null ? 'Price not found in approved list' : ''
+        };
+      });
+
+      const totals = calculateTotals(nextItems, quotationData.discountRate, quotationData.taxRate);
+      setQuotationData((prev) => ({
+        ...prev,
+        items: nextItems.length ? nextItems : prev.items,
+        subtotal: totals.subtotal,
+        discountAmount: totals.discountAmount,
+        taxAmount: totals.taxAmount,
+        total: totals.total
+      }));
+
+      const missing = nextItems.filter((i) => !i.buyerRate).length;
+      if (missing) Toast.warning(`${missing} item(s) missing approved price. You can edit rates manually before submitting.`);
+      Toast.success(`Loaded ${nextItems.length} item(s) from Excel.`);
+    } catch (e) {
+      Toast.error(e?.message || 'Failed to read Excel. Please check file format.');
+    } finally {
+      setExcelLoading(false);
+    }
+  };
 
   const handleValidateRfpId = async (rfpId = null) => {
     const idToValidate = rfpId || rfpIdInput.trim();
@@ -693,7 +818,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
     e.preventDefault();
 
     // RFP ID validation is mandatory
-    if (!existingQuotation && (!rfpIdValidated || !validatedRfpDecision)) {
+    if (needsRfpValidation && (!rfpIdValidated || !validatedRfpDecision)) {
       Toast.error('Please enter and validate RFP ID before creating quotation.');
       return;
     }
@@ -709,6 +834,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
         customer,
         createdAt: new Date().toISOString(),
         template: selectedTemplate,
+        creationMode,
         quotationId: existingQuotation?.id || null // Pass quotation ID if editing
       });
       // Let parent decide whether to close (onSave may handle it)
@@ -1075,8 +1201,8 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
             <Button 
               type="button" 
               onClick={() => {
-                // RFP ID validation is mandatory for new quotations
-                if (!existingQuotation && (!rfpIdValidated || !validatedRfpDecision)) {
+                // RFP ID validation is mandatory only for RFP mode
+                if (needsRfpValidation && (!rfpIdValidated || !validatedRfpDecision)) {
                   Toast.error('Please validate RFP ID before saving quotation.');
                   return;
                 }
@@ -1085,14 +1211,14 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
                   template: selectedTemplate // Include the selected template
                 });
               }}
-              disabled={!existingQuotation && (!rfpIdValidated || !validatedRfpDecision)}
+              disabled={needsRfpValidation && (!rfpIdValidated || !validatedRfpDecision)}
               className={`bg-green-600 hover:bg-green-700 ${
-                !existingQuotation && (!rfpIdValidated || !validatedRfpDecision)
+                needsRfpValidation && (!rfpIdValidated || !validatedRfpDecision)
                   ? 'opacity-50 cursor-not-allowed'
                   : ''
               }`}
             >
-              {!existingQuotation && (!rfpIdValidated || !validatedRfpDecision) 
+              {needsRfpValidation && (!rfpIdValidated || !validatedRfpDecision) 
                 ? 'Validate RFP ID First' 
                 : 'Save Quotation'}
             </Button>
@@ -1126,7 +1252,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
           <CardContent className="p-0">
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* RFP ID Validation Box - Already validated before opening this modal */}
-            {!existingQuotation && (
+            {needsRfpValidation && (
               <div className={`p-4 border-2 rounded-lg ${rfpIdValidated ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
                 {customer && (
                   <p className="text-sm font-medium text-blue-700 mb-2">
@@ -1176,6 +1302,34 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
                     ✓ RFP ID validated successfully! Quotation populated with {validatedRfpDecision.products?.length || 0} product(s).
                   </p>
                 )}
+              </div>
+            )}
+
+            {creationMode === 'price_list' && !existingQuotation && (
+              <div className="p-4 border-2 rounded-lg bg-blue-50 border-blue-200">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="text-sm font-semibold text-blue-900">Via Price List (Excel Upload)</p>
+                    <p className="text-xs text-blue-700">Upload items Excel. Rates are auto-filled from approved price list.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={buildQuotationExcelTemplate}
+                    className="px-3 py-2 text-xs font-semibold rounded-lg border border-blue-300 text-blue-800 bg-white hover:bg-blue-100"
+                  >
+                    Download Template
+                  </button>
+                </div>
+                <div className="mt-3 flex items-center gap-3">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    disabled={excelLoading}
+                    onChange={(e) => applyItemsFromExcelFile(e.target.files?.[0] || null)}
+                    className="block w-full text-sm"
+                  />
+                  <span className="text-xs text-blue-700 whitespace-nowrap">{excelLoading ? 'Loading…' : ''}</span>
+                </div>
               </div>
             )}
             
@@ -1762,15 +1916,15 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
                 </Button>
                 <Button 
                   type="submit"
-                  disabled={!existingQuotation && (!rfpIdValidated || !validatedRfpDecision)}
+                  disabled={needsRfpValidation && (!rfpIdValidated || !validatedRfpDecision)}
                   className={`bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white ${
-                    !existingQuotation && (!rfpIdValidated || !validatedRfpDecision)
+                    needsRfpValidation && (!rfpIdValidated || !validatedRfpDecision)
                       ? 'opacity-50 cursor-not-allowed'
                       : ''
                   }`}
-                  title={!existingQuotation && (!rfpIdValidated || !validatedRfpDecision) ? 'Please validate RFP ID first' : ''}
+                  title={needsRfpValidation && (!rfpIdValidated || !validatedRfpDecision) ? 'Please validate RFP ID first' : ''}
                 >
-                  {!existingQuotation && (!rfpIdValidated || !validatedRfpDecision) 
+                  {needsRfpValidation && (!rfpIdValidated || !validatedRfpDecision) 
                     ? 'Validate RFP ID First' 
                     : 'Save Quotation'}
                 </Button>

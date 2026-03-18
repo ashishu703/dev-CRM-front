@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
 import departmentUsersApi from '../../api/admin_api/departmentUsersApi';
 import { findIndiaStateByName, getIndiaDivisionsForStateIso, getIndiaStates } from '../../utils/indiaLocation';
 
@@ -68,7 +69,6 @@ export default function AddCustomerModal({ onClose, onSave, editingCustomer }) {
     return getIndiaDivisionsForStateIso(selectedStateIso);
   }, [selectedStateIso]);
 
-  // Keep selectedStateIso in sync when editingCustomer changes
   useEffect(() => {
     const found = findIndiaStateByName(editingCustomer?.state);
     setSelectedStateIso(found?.isoCode || '');
@@ -107,7 +107,6 @@ export default function AddCustomerModal({ onClose, onSave, editingCustomer }) {
     setFormData((prev) => ({
       ...prev,
       state: stateName,
-      // Reset division if state changes
       division: ''
     }));
   };
@@ -123,23 +122,34 @@ export default function AddCustomerModal({ onClose, onSave, editingCustomer }) {
     e.preventDefault();
     try {
       await onSave(formData);
-      // Only close if save was successful (no error thrown)
       onClose();
     } catch (error) {
-      // Keep modal open on error so user can see the error and retry
       console.error('Error saving customer:', error);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">{editingCustomer ? 'Edit Customer' : 'Add New Customer'}</h2>
-            <p className="text-sm text-gray-600">Fill in the customer details below</p>
+    <>
+      <div
+        className="fixed inset-0 bg-black/50 z-50 transition-opacity"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div className="fixed right-0 top-0 bottom-0 w-full sm:w-[500px] md:w-[600px] lg:w-[700px] bg-white shadow-2xl z-[51] overflow-y-auto">
+        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 z-10">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-bold">{editingCustomer ? 'Edit Customer' : 'Add New Customer'}</h3>
+              <p className="text-sm text-white/90 mt-0.5">Fill in the customer details below</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6">
@@ -255,8 +265,6 @@ export default function AddCustomerModal({ onClose, onSave, editingCustomer }) {
           </div>
         </form>
       </div>
-    </div>
+    </>
   );
 }
-
-

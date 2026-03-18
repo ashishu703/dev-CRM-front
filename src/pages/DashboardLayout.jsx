@@ -20,10 +20,7 @@ const DashboardLayout = ({ children, onLogout, activeView, setActiveView }) => {
 
   return (
     <CompanyProvider>
-      <div className="flex h-screen overflow-hidden" style={{
-        background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-        backgroundAttachment: 'fixed'
-      }}>
+      <div className="flex h-screen overflow-hidden bg-white">
         <SuperAdminSidebar
           onLogout={onLogout}
           activeView={activeView}
@@ -51,7 +48,7 @@ const DashboardLayout = ({ children, onLogout, activeView, setActiveView }) => {
             sidebarOpen={sidebarOpen}
             isMobileView={isMobileView}
           />
-          <main className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 p-3 sm:p-4 md:p-6" style={{ background: 'transparent' }}>
+          <main className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 p-3 sm:p-4 md:p-6 bg-white">
             {children}
           </main>
         </div>

@@ -18,7 +18,6 @@ import {
 const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, setSidebarOpen }) => {
   const [isExpanded, setIsExpanded] = useState(sidebarOpen !== undefined ? sidebarOpen : true);
   
-  // Update parent state when internal state changes
   const updateExpanded = useCallback((newValue) => {
     setIsExpanded(newValue);
     if (setSidebarOpen) {
@@ -26,7 +25,6 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
     }
   }, [setSidebarOpen]);
   
-  // Sync internal state with prop if provided
   useEffect(() => {
     if (sidebarOpen !== undefined && sidebarOpen !== isExpanded) {
       setIsExpanded(sidebarOpen);
@@ -36,16 +34,12 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
   const collapseTimerRef = useRef(null);
   const isManuallyToggledRef = useRef(false);
 
-  // Disable hover auto-expand; sidebar only opens/closes manually
   const handleMouseEnter = () => {
-    // No auto-expand on hover
   };
 
   const handleMouseLeave = () => {
-    // No auto-collapse on hover
   };
 
-  // Cleanup timer on unmount
   useEffect(() => {
     return () => {
       if (collapseTimerRef.current) {
@@ -55,9 +49,8 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
   }, []);
 
   const toggleSidebar = () => {
-    isManuallyToggledRef.current = !isExpanded; // If expanding manually, set flag; if collapsing, clear flag
+    isManuallyToggledRef.current = !isExpanded;
     updateExpanded(!isExpanded);
-    // Clear any pending auto-collapse
     if (collapseTimerRef.current) {
       clearTimeout(collapseTimerRef.current);
       collapseTimerRef.current = null;
@@ -71,7 +64,6 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
     }));
   };
 
-  // Order: Dashboard, Leads, Payment Info, RFP Workflow, Calculator, Toolbox, Stock Update, User
   const sidebarItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <BarChart3 className="w-5 h-5" />, hasDropdown: false },
     { id: 'leads', label: 'Leads', icon: <UserCheck className="w-5 h-5" />, hasDropdown: false },

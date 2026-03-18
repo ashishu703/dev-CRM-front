@@ -307,6 +307,19 @@ class PIService {
   }
 
   buildPIPreviewData(pi, completeQuotation, mappedItems, totals, finalTotal, advancePayment, originalQuotationTotal, billTo) {
+    const creditAdjustedRaw =
+      Number(
+        pi?.credit_adjusted ??
+        pi?.creditAdjusted ??
+        pi?.creditAdjustment ??
+        pi?.credit_adjustment ??
+        0
+      ) || 0;
+    const totalBeforeCredit =
+      Number(pi?.total_amount ?? pi?.totalAmount ?? finalTotal ?? 0) || 0;
+    const netPayableAfterCredit = Math.max(0, totalBeforeCredit - creditAdjustedRaw);
+    const formatMoney = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
     return {
       quotationNumber: completeQuotation.quotation_number || pi.pi_number,
       items: mappedItems,
@@ -321,6 +334,22 @@ class PIService {
       advancePayment: advancePayment,
       billTo,
       dispatchMode: pi.dispatch_mode,
+      // Party credit adjustment (persisted on PI row)
+      credit_adjusted: creditAdjustedRaw,
+      creditAdjusted: creditAdjustedRaw,
+      creditAdjustment: creditAdjustedRaw,
+      credit_adjustment: creditAdjustedRaw,
+      creditAdjustedFormatted: formatMoney(creditAdjustedRaw),
+      partyCreditAdjustEnabled: creditAdjustedRaw > 0,
+      partyCreditApplied: creditAdjustedRaw,
+      partyCreditAppliedFormatted: formatMoney(creditAdjustedRaw),
+      piTotalBeforeCredit: totalBeforeCredit,
+      piTotalBeforeCreditFormatted: formatMoney(totalBeforeCredit),
+      piNetPayableAfterCredit: netPayableAfterCredit,
+      piNetPayableAfterCreditFormatted: formatMoney(netPayableAfterCredit),
+      netPayable: netPayableAfterCredit,
+      net_payable: netPayableAfterCredit,
+      netPayableFormatted: formatMoney(netPayableAfterCredit),
       shippingDetails: {
         transportName: pi.transport_name,
         vehicleNumber: pi.vehicle_number,

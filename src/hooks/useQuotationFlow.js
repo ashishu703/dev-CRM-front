@@ -61,6 +61,8 @@ export function useQuotationFlow(customerId, isRefreshing = false) {
     try {
       console.log('💾 Saving quotation with data:', quotationData);
       const isEdit = !!quotationId;
+      const creationMode = quotationData?.creationMode || 'rfp';
+      const requiresDhApproval = creationMode === 'direct' || creationMode === 'price_list';
       
       const quotationPayload = {
         customerId: viewingCustomer.id, 
@@ -80,8 +82,9 @@ export function useQuotationFlow(customerId, isRefreshing = false) {
         discountRate: quotationData.discountRate || 0, 
         discountAmount: quotationData.discountAmount || 0,
         totalAmount: quotationData.total, 
-        // Pricing is already decided upstream; quotation doesn't need DH approval
-        status: isEdit ? undefined : 'approved',
+        // RFP flow: approved by default (pricing already decided). Direct/price-list: send to DH verification.
+        status: isEdit ? undefined : (requiresDhApproval ? 'draft' : 'approved'),
+        submitForVerification: !isEdit && requiresDhApproval,
         template: quotationData.template || '',
         
         paymentMode: quotationData.paymentMode || '',
@@ -117,8 +120,8 @@ export function useQuotationFlow(customerId, isRefreshing = false) {
           remark: item.remark || ''
         })),
         
-        rfpId: quotationData.rfpId || sessionStorage.getItem('pricingRfpDecisionId') || null,
-        masterRfpId: quotationData.masterRfpId || sessionStorage.getItem('pricingRfpDecisionId') || null
+        rfpId: (creationMode === 'rfp' ? (quotationData.rfpId || sessionStorage.getItem('pricingRfpDecisionId')) : null) || null,
+        masterRfpId: (creationMode === 'rfp' ? (quotationData.masterRfpId || sessionStorage.getItem('pricingRfpDecisionId')) : null) || null
       }
       
       console.log('📤 Quotation payload being sent:', quotationPayload);

@@ -157,7 +157,7 @@ const CustomerDashboard = () => {
   };
 
   return (
-    <div className="p-3 sm:p-4 md:p-6 bg-gray-50 min-h-screen overflow-x-hidden min-w-0">
+    <div className="p-3 sm:p-4 md:p-6 bg-white min-h-screen overflow-x-hidden min-w-0">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Customer Management</h1>

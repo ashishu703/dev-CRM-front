@@ -106,6 +106,9 @@ export default function CustomerDetailSidebar({
   onViewActivity,
   onDeleteActivity,
   onEditEnquiry,
+  onApproveQuotation,
+  onRejectQuotation,
+  canApproveQuotations = false,
 }) {
   if (!customer) return null
 
@@ -340,6 +343,8 @@ export default function CustomerDetailSidebar({
               <div className="space-y-3">
                 {quotations.filter(q => (q.customerId || q.customer_id) === customer.id || !(q.customerId || q.customer_id)).map((quotation, index) => {
                   const pis = getPIsForQuotation(quotation.id)
+                  const statusNorm = String(quotation.status || '').toLowerCase()
+                  const isPendingQuotation = statusNorm === 'pending' || statusNorm === 'pending_verification'
                   return (
                     <div key={quotation.id || index} className="p-4 border-2 border-gray-200 rounded-lg bg-gradient-to-br from-white to-gray-50 hover:border-purple-300 hover:shadow-md transition-all duration-200 overflow-hidden">
                       <div className="flex items-start justify-between mb-2 gap-2">
@@ -377,6 +382,26 @@ export default function CustomerDetailSidebar({
                           >
                             <Eye className="h-3.5 w-3.5" />
                           </button>
+                          {canApproveQuotations && isPendingQuotation && (
+                            <>
+                              <button
+                                onClick={() => typeof onApproveQuotation === 'function' && onApproveQuotation(quotation.id)}
+                                disabled={typeof onApproveQuotation !== 'function'}
+                                className="p-1.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white hover:from-emerald-600 hover:to-green-700 rounded-lg shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Approve quotation"
+                              >
+                                <CheckCircle className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => typeof onRejectQuotation === 'function' && onRejectQuotation(quotation.id)}
+                                disabled={typeof onRejectQuotation !== 'function'}
+                                className="p-1.5 bg-gradient-to-r from-rose-500 to-red-600 text-white hover:from-rose-600 hover:to-red-700 rounded-lg shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Reject quotation"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
                           {quotation.id && onEditQuotation && (
                             <button 
                               onClick={() => {

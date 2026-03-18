@@ -27,7 +27,7 @@ import UserService from '../../services/UserService';
 import PIService from '../../services/PIService';
 import QuotationService from '../../services/QuotationService';
 import { generateQuotationPDF } from '../../utils/pdfUtils';
-import { downloadCSVTemplate, parseCSV, exportToExcel } from '../../utils/csvUtils';
+import { downloadCSVTemplate, parseCSV, exportToExcel, formatDate } from '../../utils/csvUtils';
 import { getStatusBadge as getStatusBadgeUtil } from '../../utils/statusUtils';
 import { calculateAssignedCounts, getUnassignedLeadIds, filterLeads } from '../../utils/leadFilters';
 import { COMPANY_BRANCHES, DEFAULT_USER, DEFAULT_BRANCH } from '../../config/appConfig';
@@ -942,7 +942,7 @@ const LeadsSimplified = () => {
           if (!payload) {
             return null; // Row was skipped due to validation
           }
-          payload.date = formatDateUtil(row['Date (DD/MM/YYYY or YYYY-MM-DD)'] || row['Date (YYYY-MM-DD)'] || row['Date'] || '');
+          payload.date = formatDate(row['Date (DD/MM/YYYY or YYYY-MM-DD)'] || row['Date (YYYY-MM-DD)'] || row['Date'] || '');
           return payload;
         })
         .filter(payload => payload !== null); // Remove null payloads (skipped rows)
@@ -2058,6 +2058,9 @@ const LeadsSimplified = () => {
         totalAdvance: formattedTotalAdvance,
         balanceDue: formattedBalanceDue,
 
+        // Party credit adjustment (persisted on PI as credit_adjusted)
+        credit_adjusted: Number(pi.credit_adjusted ?? pi.creditAdjusted ?? pi.creditAdjustment ?? pi.credit_adjustment ?? 0) || 0,
+
         // Additional details from quotation
         paymentMode: completeQuotation.payment_mode || completeQuotation.paymentMode || '',
         transportTc: completeQuotation.transport_tc || completeQuotation.transportTc || '',
@@ -2082,6 +2085,30 @@ const LeadsSimplified = () => {
         template: templateKey,
         selectedBranch
       };
+
+      // Add common aliases + formatted values for templates / injected block
+      {
+        const creditAdjustedRaw = Number(formattedPiData.credit_adjusted || 0) || 0;
+        const totalBeforeCredit = Number(pi.total_amount ?? pi.totalAmount ?? finalTotal ?? 0) || 0;
+        const netPayableAfterCredit = Math.max(0, totalBeforeCredit - creditAdjustedRaw);
+        const formatMoney = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        Object.assign(formattedPiData, {
+          creditAdjusted: creditAdjustedRaw,
+          creditAdjustment: creditAdjustedRaw,
+          credit_adjustment: creditAdjustedRaw,
+          creditAdjustedFormatted: formatMoney(creditAdjustedRaw),
+          partyCreditAdjustEnabled: creditAdjustedRaw > 0,
+          partyCreditApplied: creditAdjustedRaw,
+          partyCreditAppliedFormatted: formatMoney(creditAdjustedRaw),
+          piTotalBeforeCredit: totalBeforeCredit,
+          piTotalBeforeCreditFormatted: formatMoney(totalBeforeCredit),
+          piNetPayableAfterCredit: netPayableAfterCredit,
+          piNetPayableAfterCreditFormatted: formatMoney(netPayableAfterCredit),
+          netPayable: netPayableAfterCredit,
+          net_payable: netPayableAfterCredit,
+          netPayableFormatted: formatMoney(netPayableAfterCredit),
+        });
+      }
 
       setPiPreviewData(formattedPiData);
       setShowPIPreview(true);
@@ -2963,6 +2990,9 @@ const LeadsSimplified = () => {
         isValueAssigned={isValueAssigned}
         onViewQuotation={handleViewQuotation}
         onDownloadPDF={handleDownloadPDF}
+        onApproveQuotation={handleApproveQuotation}
+        onRejectQuotation={handleRejectQuotation}
+        canApproveQuotations={['department_head', 'superadmin'].includes((user?.role || '').toLowerCase())}
         onViewPI={handleViewPI}
         onApprovePI={handleApprovePI}
         onRejectPI={handleRejectPI}
@@ -3371,6 +3401,9 @@ const LeadsSimplified = () => {
               toastManager.error('Quotation data is missing');
             }
           }}
+          onApproveQuotation={handleApproveQuotation}
+          onRejectQuotation={handleRejectQuotation}
+          canApproveQuotations={['department_head', 'superadmin'].includes((user?.role || '').toLowerCase())}
           onEditQuotation={(quotation, customer) => {
             setShowCustomerTimeline(false);
             toastManager.info('Please use the quotation editing workflow from the main page');

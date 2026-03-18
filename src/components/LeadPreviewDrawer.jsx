@@ -15,6 +15,7 @@ const LeadPreviewDrawer = ({
   onDownloadPDF,
   onApproveQuotation,
   onRejectQuotation,
+  canApproveQuotations = false,
   onViewPI,
   onApprovePI,
   onRejectPI,
@@ -204,6 +205,7 @@ const LeadPreviewDrawer = ({
             ) : (
               quotations.map((quotation) => {
                 const isCancelled = (quotation.status || '').toLowerCase() === 'cancelled';
+                const isPending = ['pending', 'pending_verification'].includes((quotation.status || '').toLowerCase());
                 return (
                 <div key={quotation.id} className={`rounded-lg p-4 border ${isCancelled ? 'bg-gray-100 border-gray-300 opacity-75' : 'bg-white border-gray-200'}`}>
                   <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
@@ -246,6 +248,28 @@ const LeadPreviewDrawer = ({
                             >
                               Download PDF
                             </button>
+                            {canApproveQuotations && isPending && (
+                              <>
+                                <button
+                                  onClick={() => typeof onApproveQuotation === 'function' && onApproveQuotation(quotation.id)}
+                                  disabled={typeof onApproveQuotation !== 'function'}
+                                  className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs inline-flex items-center gap-1"
+                                  title="Approve quotation"
+                                >
+                                  <CheckCircle className="h-4 w-4" />
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => typeof onRejectQuotation === 'function' && onRejectQuotation(quotation.id)}
+                                  disabled={typeof onRejectQuotation !== 'function'}
+                                  className="px-3 py-1.5 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs inline-flex items-center gap-1"
+                                  title="Reject quotation"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                  Reject
+                                </button>
+                              </>
+                            )}
                           </>
                         )}
                       </div>

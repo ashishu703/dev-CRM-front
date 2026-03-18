@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { X, Pencil } from 'lucide-react';
 import { findIndiaStateByName, getIndiaDivisionsForStateIso, getIndiaStates } from '../utils/indiaLocation';
 
 const EditLeadModal = ({
@@ -24,6 +24,22 @@ const EditLeadModal = ({
     return getIndiaDivisionsForStateIso(selectedStateIso);
   }, [selectedStateIso]);
 
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const animationFrame = requestAnimationFrame(() => setIsVisible(true));
+    return () => cancelAnimationFrame(animationFrame);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
   const handleStateSelect = (isoCode) => {
     const st = indiaStates.find((s) => s.isoCode === isoCode);
     onFormChange({
@@ -34,16 +50,39 @@ const EditLeadModal = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Edit Lead</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="h-5 w-5" />
-          </button>
+    <>
+      <div
+        className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-[110] transition-opacity duration-300 ease-out ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      <div
+        className={`fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-[120] flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <div className="flex-shrink-0 border-b bg-gradient-to-r from-blue-50 to-purple-50 px-6 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                <Pencil className="h-5 w-5 text-white" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold text-gray-900 truncate">Edit Lead</h2>
+                <p className="text-sm text-gray-600 mt-0.5 truncate">Update lead/customer details</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-white/60 rounded-lg transition-colors text-gray-500 hover:text-gray-700 flex-shrink-0"
+              aria-label="Close"
+              type="button"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
-        
-        <div className="p-6">
+
+        <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
@@ -221,24 +260,28 @@ const EditLeadModal = ({
               </select>
             </div>
           </div>
-          
-          <div className="flex items-center justify-end gap-3 mt-6">
+        </div>
+
+        <div className="flex-shrink-0 border-t bg-gray-50 px-6 py-4">
+          <div className="flex items-center justify-end gap-3">
             <button
+              type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
               Cancel
             </button>
             <button
+              type="button"
               onClick={onSave}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md"
             >
               Update
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

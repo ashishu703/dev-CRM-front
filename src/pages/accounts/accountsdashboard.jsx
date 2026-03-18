@@ -4,7 +4,6 @@ import paymentService from '../../api/admin_api/paymentService';
 import AccountsPayInfo from './accountspayinfo';
 import PriceManagement from './PriceManagement';
 import RfpWorkflow from '../shared/RfpWorkflow';
-import ChatPage from '../salesperson/ChatPage';
 
 const STATUS_CONFIG = {
   pending: {
@@ -254,9 +253,6 @@ const AccountsDashboard = ({ activeView, setActiveView }) => {
   }
   if (activeView === 'rfp-workflow') {
     return <RfpWorkflow />;
-  }
-  if (activeView === 'chat') {
-    return <ChatPage />;
   }
 
   return <AccountsOverview onViewPayments={() => setActiveView('accounts-payments')} />;

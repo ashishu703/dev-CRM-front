@@ -261,10 +261,7 @@ const DepartmentManagement = () => {
   // Show skeleton loader on initial load
   if (initialLoading) {
     return (
-      <div className="p-3 sm:p-4 md:p-6 min-h-screen overflow-x-hidden" style={{ 
-        background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-        backgroundAttachment: 'fixed'
-      }}>
+      <div className="p-3 sm:p-4 md:p-6 min-h-screen overflow-x-hidden bg-white">
         <div className="mb-6">
           <div className="h-8 bg-gray-200 rounded w-64 mb-4 animate-pulse"></div>
         </div>
@@ -282,10 +279,7 @@ const DepartmentManagement = () => {
   }
 
   return (
-    <div className="min-h-screen p-3 sm:p-4 md:p-6 overflow-x-hidden min-w-0" style={{ 
-      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-      backgroundAttachment: 'fixed'
-    }}>
+    <div className="min-h-screen p-3 sm:p-4 md:p-6 overflow-x-hidden min-w-0 bg-white">
       <div className="max-w-7xl mx-auto">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

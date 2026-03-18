@@ -97,6 +97,35 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
   const [creditApplyMode, setCreditApplyMode] = useState('full')
   const [customCreditAmount, setCustomCreditAmount] = useState('')
 
+  // Inject party-credit adjustment section into PI templates at render-time (no DB template edits).
+  const injectPartyCreditIntoPiTemplate = (html) => {
+    if (!html || typeof html !== 'string') return html
+    if (html.includes('partyCreditAppliedFormatted') || html.includes('piNetPayableAfterCreditFormatted')) return html
+
+    const block =
+      `{{#if partyCreditAdjustEnabled}}` +
+      `<br>` +
+      `<span style="font-size:12px; line-height:1.4;">` +
+      `<span>Party Credit Adjusted: ₹{{partyCreditAppliedFormatted}}</span><br>` +
+      `<b>Net Payable: ₹{{piNetPayableAfterCreditFormatted}}</b>` +
+      `</span>` +
+      `{{/if}}`
+
+    if (html.includes('{{balanceDue}}')) {
+      return html.replaceAll('{{balanceDue}}', `{{balanceDue}}${block}`)
+    }
+    if (html.includes('{{total}}')) {
+      return html.replaceAll('{{total}}', `{{total}}${block}`)
+    }
+    if (html.includes('{{totalAmount}}')) {
+      return html.replaceAll('{{totalAmount}}', `{{totalAmount}}${block}`)
+    }
+    if (html.includes('{{total_amount}}')) {
+      return html.replaceAll('{{total_amount}}', `{{total_amount}}${block}`)
+    }
+    return html
+  }
+
   useEffect(() => {
     const buildInitialPiData = (quotation, customerLike) => {
       const toInt = (v) => Math.round(Number(v) || 0)
@@ -481,6 +510,20 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
       const formattedTotalAdvance = totalAdvance.toFixed(2)
       const formattedBalanceDue = balanceDue.toFixed(2)
 
+      // Party credit adjustment (for live preview + template)
+      const totalPi = Number(piFormData.total) || 0
+      const creditAvailable = Number(partyCreditBalance) || 0
+      const creditEligible = creditAvailable > 0 && adjustPartyCredit === 'yes'
+      const requestedCredit = creditApplyMode === 'full'
+        ? creditAvailable
+        : Math.min(Number(customCreditAmount) || 0, creditAvailable)
+      const creditApplied = creditEligible
+        ? Math.max(0, Math.min(requestedCredit, creditAvailable, totalPi))
+        : 0
+      const netPayableAfterCredit = Math.max(0, totalPi - creditApplied)
+
+      const formatMoney = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
       console.log('💰 Advance Payment Calculation:', {
         quotationTotal: quotationTotalAmount,
         totalAdvance,
@@ -533,7 +576,19 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
         // Advance payment history data for template
         advancePayments: approvedPayments,
         totalAdvance: formattedTotalAdvance,
-        balanceDue: formattedBalanceDue
+        balanceDue: formattedBalanceDue,
+
+        // Party credit adjustment data for template + preview (works for both PI templates)
+        partyCreditAvailable: creditAvailable,
+        partyCreditAvailableFormatted: formatMoney(creditAvailable),
+        partyCreditAdjustEnabled: creditEligible,
+        partyCreditApplyMode: creditEligible ? creditApplyMode : 'none',
+        partyCreditApplied: creditApplied,
+        partyCreditAppliedFormatted: formatMoney(creditApplied),
+        piTotalBeforeCredit: totalPi,
+        piTotalBeforeCreditFormatted: formatMoney(totalPi),
+        piNetPayableAfterCredit: netPayableAfterCredit,
+        piNetPayableAfterCreditFormatted: formatMoney(netPayableAfterCredit),
       }
       
       console.log('📊 CreatePIForm - formattedPiData for preview:', {
@@ -546,7 +601,16 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
       
       setPiPreviewData(formattedPiData)
     }
-  }, [piFormData, quotationData, paymentHistory, quotationTotal])
+  }, [
+    piFormData,
+    quotationData,
+    paymentHistory,
+    quotationTotal,
+    partyCreditBalance,
+    adjustPartyCredit,
+    creditApplyMode,
+    customCreditAmount,
+  ])
 
   // Load PI templates from config  uration
   useEffect(() => {
@@ -1299,7 +1363,7 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
 
                     return (
                       <DynamicTemplateRenderer
-                        html={activeTemplate.html_content}
+                        html={injectPartyCreditIntoPiTemplate(activeTemplate.html_content)}
                         data={withRfpTemplateFields(context, {
                           candidates: [
                             quotationData?.master_rfp_id,

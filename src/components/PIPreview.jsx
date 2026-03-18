@@ -12,6 +12,27 @@ export default function PIPreview({ piData, companyBranches, user, onClose }) {
   const [templateHtml, setTemplateHtml] = React.useState('')
   const [loading, setLoading] = React.useState(false)
 
+  // Inject party-credit adjustment section into PI templates at render-time (no DB template edits).
+  const injectPartyCreditIntoPiTemplate = React.useCallback((html) => {
+    if (!html || typeof html !== 'string') return html
+    if (html.includes('partyCreditAppliedFormatted') || html.includes('piNetPayableAfterCreditFormatted')) return html
+
+    const block =
+      `{{#if partyCreditAdjustEnabled}}` +
+      `<br>` +
+      `<span style="font-size:12px; line-height:1.4;">` +
+      `<span>Party Credit Adjusted: ₹{{partyCreditAppliedFormatted}}</span><br>` +
+      `<b>Net Payable: ₹{{piNetPayableAfterCreditFormatted}}</b>` +
+      `</span>` +
+      `{{/if}}`
+
+    if (html.includes('{{balanceDue}}')) return html.split('{{balanceDue}}').join(`{{balanceDue}}${block}`)
+    if (html.includes('{{total}}')) return html.split('{{total}}').join(`{{total}}${block}`)
+    if (html.includes('{{totalAmount}}')) return html.split('{{totalAmount}}').join(`{{totalAmount}}${block}`)
+    if (html.includes('{{total_amount}}')) return html.split('{{total_amount}}').join(`{{total_amount}}${block}`)
+    return html
+  }, [])
+
   React.useEffect(() => {
     const templateKey = piData?.template || piData?.templateKey
     
@@ -98,6 +119,28 @@ export default function PIPreview({ piData, companyBranches, user, onClose }) {
       account_holder_name: branchName
     }
 
+  // Party credit adjustment fields: ensure templates can show it for saved PIs too.
+  const creditAdjustedRaw =
+    Number(
+      piData?.credit_adjusted ??
+      piData?.creditAdjusted ??
+      piData?.creditAdjustment ??
+      piData?.credit_adjustment ??
+      0
+    ) || 0
+  const totalRaw = Number(piData?.total_amount ?? piData?.totalAmount ?? piData?.total ?? 0) || 0
+  const netPayableRaw = Math.max(0, totalRaw - creditAdjustedRaw)
+  const formatMoney = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const partyCreditContext = {
+    partyCreditAdjustEnabled: creditAdjustedRaw > 0,
+    partyCreditApplied: creditAdjustedRaw,
+    partyCreditAppliedFormatted: formatMoney(creditAdjustedRaw),
+    piTotalBeforeCredit: totalRaw,
+    piTotalBeforeCreditFormatted: formatMoney(totalRaw),
+    piNetPayableAfterCredit: netPayableRaw,
+    piNetPayableAfterCreditFormatted: formatMoney(netPayableRaw),
+  }
+
   return (
     <div className="fixed inset-0 z-[120] overflow-auto bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
@@ -108,9 +151,10 @@ export default function PIPreview({ piData, companyBranches, user, onClose }) {
           </div>
           <div id="pi-preview-content">
             <DynamicTemplateRenderer
-              html={templateHtml}
+              html={injectPartyCreditIntoPiTemplate(templateHtml)}
               data={withRfpTemplateFields({
                 ...piData,
+                ...partyCreditContext,
                 branch,
                 billTo: piData.billTo,
                 bankDetails,

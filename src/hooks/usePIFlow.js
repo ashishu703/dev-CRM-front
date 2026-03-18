@@ -290,6 +290,42 @@ export function usePIFlow(viewingCustomer, viewingCustomerForQuotation, selected
         rfp_id: completeQuotation.rfp_id || completeQuotation.rfpId || null,
         master_rfp_id: completeQuotation.master_rfp_id || completeQuotation.masterRfpId || pi.master_rfp_id || null
       }
+
+      // Party credit adjusted (persisted on PI row as credit_adjusted)
+      const creditAdjustedRaw =
+        Number(
+          pi.credit_adjusted ??
+          pi.creditAdjusted ??
+          pi.creditAdjustment ??
+          pi.credit_adjustment ??
+          0
+        ) || 0
+      const totalBeforeCredit =
+        Number(pi.total_amount ?? pi.totalAmount ?? finalTotal ?? 0) || 0
+      const netPayableAfterCredit = Math.max(0, totalBeforeCredit - creditAdjustedRaw)
+      const formatMoney = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      Object.assign(piPreviewData, {
+        // raw + aliases commonly used by templates
+        credit_adjusted: creditAdjustedRaw,
+        creditAdjusted: creditAdjustedRaw,
+        creditAdjustment: creditAdjustedRaw,
+        credit_adjustment: creditAdjustedRaw,
+        creditAdjustedFormatted: formatMoney(creditAdjustedRaw),
+
+        // new standardized fields (used by our injected block too)
+        partyCreditAdjustEnabled: creditAdjustedRaw > 0,
+        partyCreditApplied: creditAdjustedRaw,
+        partyCreditAppliedFormatted: formatMoney(creditAdjustedRaw),
+        piTotalBeforeCredit: totalBeforeCredit,
+        piTotalBeforeCreditFormatted: formatMoney(totalBeforeCredit),
+        piNetPayableAfterCredit: netPayableAfterCredit,
+        piNetPayableAfterCreditFormatted: formatMoney(netPayableAfterCredit),
+
+        // extra aliases some templates may use
+        netPayable: netPayableAfterCredit,
+        net_payable: netPayableAfterCredit,
+        netPayableFormatted: formatMoney(netPayableAfterCredit),
+      })
       
       // PI must use its own template key
       const templateKey = pi.template;

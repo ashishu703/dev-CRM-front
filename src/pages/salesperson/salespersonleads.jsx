@@ -110,6 +110,8 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
   const [validatingRfpId, setValidatingRfpId] = React.useState(false)
   const [validatedRfpDecision, setValidatedRfpDecision] = React.useState(null)
   const [showRfpIdValidationModal, setShowRfpIdValidationModal] = React.useState(false)
+  const [quotationEntryMode, setQuotationEntryMode] = React.useState(null) // 'rfp' | 'direct' | 'price_list'
+  const [activeQuotationCreationMode, setActiveQuotationCreationMode] = React.useState('rfp')
   const [validationError, setValidationError] = React.useState('')
   const [rfpValidationErrors, setRfpValidationErrors] = React.useState({
     products: {},
@@ -254,7 +256,16 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     setRfpIdInput('')
     setValidatedRfpDecision(null)
     setValidationError('')
+    setQuotationEntryMode(null)
+    setActiveQuotationCreationMode('rfp')
     setShowRfpIdValidationModal(true)
+  }
+
+  const openQuotationForm = (mode) => {
+    setActiveQuotationCreationMode(mode)
+    setShowRfpIdValidationModal(false)
+    setEditingQuotation(null)
+    setShowCreateQuotation(true)
   }
 
   // Filter products based on search – when empty show first 150 so dropdown lists all products/types
@@ -2907,7 +2918,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
           <div className={`w-full max-w-md rounded-lg shadow-xl ${isDarkMode ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}>
             <div className={`p-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold">Validate RFP ID</h2>
+                <h2 className="text-xl font-bold">{quotationEntryMode === 'rfp' ? 'Validate RFP ID' : 'Create Quotation'}</h2>
                 <button
                   onClick={() => {
                     setShowRfpIdValidationModal(false)
@@ -2915,6 +2926,8 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                     setValidatedRfpDecision(null)
                     setValidationError('')
                     setViewingCustomerForQuotation(null)
+                    setQuotationEntryMode(null)
+                    setActiveQuotationCreationMode('rfp')
                   }}
                   className="p-1 rounded-lg hover:bg-black/10"
                 >
@@ -2922,7 +2935,7 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                 </button>
               </div>
               <p className={`text-sm mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                Please enter your RFP ID to proceed with creating quotation.
+                Choose how you want to create the quotation.
               </p>
               {viewingCustomerForQuotation && (
                 <p className={`text-sm mt-1 font-medium ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>
@@ -2935,39 +2948,78 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
             </div>
             
             <div className="p-6 space-y-4">
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                  RFP ID <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={rfpIdInput}
-                  onChange={(e) => {
-                    setRfpIdInput(e.target.value)
-                    setValidationError('')
-                  }}
-                  placeholder="Enter RFP ID (e.g., RFP-202412-0001)"
-                  className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none focus:ring-2 ${
-                    validationError
-                      ? 'border-red-400 focus:ring-red-500 focus:border-red-500'
-                      : validatedRfpDecision
-                      ? 'border-green-400 focus:ring-green-500 focus:border-green-500'
-                      : isDarkMode
-                      ? 'bg-gray-700 border-gray-600 text-gray-100 focus:ring-blue-500 focus:border-blue-500'
-                      : 'bg-white border-gray-300 text-gray-900 focus:ring-blue-500 focus:border-blue-500'
-                  }`}
-                  disabled={validatingRfpId || !!validatedRfpDecision}
-                  autoFocus
-                />
-                {validationError && (
-                  <p className="mt-2 text-sm text-red-600">{validationError}</p>
-                )}
-                {validatedRfpDecision && (
-                  <p className="mt-2 text-sm text-green-600">
-                    ✓ RFP ID validated successfully! Opening quotation form...
-                  </p>
-                )}
-              </div>
+              {/* Entry mode chooser */}
+              {!quotationEntryMode && (
+                <div className="grid grid-cols-1 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setQuotationEntryMode('rfp')}
+                    className={`px-4 py-3 rounded-lg text-left border transition-colors ${
+                      isDarkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="font-semibold">1) Validate from RFP</div>
+                    <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Same flow as current (RFP ID required).</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openQuotationForm('direct')}
+                    className={`px-4 py-3 rounded-lg text-left border transition-colors ${
+                      isDarkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="font-semibold">2) Direct Quote</div>
+                    <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Manual entry → goes to Department Head approval → then PI.</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openQuotationForm('price_list')}
+                    className={`px-4 py-3 rounded-lg text-left border transition-colors ${
+                      isDarkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="font-semibold">3) Via Price List</div>
+                    <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Upload Excel items → auto-fill rates from approved price list → DH approval → PI.</div>
+                  </button>
+                </div>
+              )}
+
+              {/* RFP validation (unchanged UI) */}
+              {quotationEntryMode === 'rfp' && (
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    RFP ID <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={rfpIdInput}
+                    onChange={(e) => {
+                      setRfpIdInput(e.target.value)
+                      setValidationError('')
+                    }}
+                    placeholder="Enter RFP ID (e.g., RFP-202412-0001)"
+                    className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none focus:ring-2 ${
+                      validationError
+                        ? 'border-red-400 focus:ring-red-500 focus:border-red-500'
+                        : validatedRfpDecision
+                        ? 'border-green-400 focus:ring-green-500 focus:border-green-500'
+                        : isDarkMode
+                        ? 'bg-gray-700 border-gray-600 text-gray-100 focus:ring-blue-500 focus:border-blue-500'
+                        : 'bg-white border-gray-300 text-gray-900 focus:ring-blue-500 focus:border-blue-500'
+                    }`}
+                    disabled={validatingRfpId || !!validatedRfpDecision}
+                    autoFocus
+                  />
+                  {validationError && (
+                    <p className="mt-2 text-sm text-red-600">{validationError}</p>
+                  )}
+                  {validatedRfpDecision && (
+                    <p className="mt-2 text-sm text-green-600">
+                      ✓ RFP ID validated successfully! Opening quotation form...
+                    </p>
+                  )}
+                </div>
+              )}
               
               <div className="flex gap-3 justify-end">
                 <button
@@ -2977,6 +3029,8 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                     setValidatedRfpDecision(null)
                     setValidationError('')
                     setViewingCustomerForQuotation(null)
+                    setQuotationEntryMode(null)
+                    setActiveQuotationCreationMode('rfp')
                   }}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                     isDarkMode
@@ -2986,24 +3040,26 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
                 >
                   Cancel
                 </button>
-                <button
-                  onClick={handleValidateRfpId}
-                  disabled={validatingRfpId || !rfpIdInput.trim() || !!validatedRfpDecision}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                    validatedRfpDecision
-                      ? 'bg-green-600 text-white hover:bg-green-700'
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
-                  }`}
-                >
-                  {validatingRfpId ? 'Validating...' : validatedRfpDecision ? '✓ Validated' : 'Validate'}
-                </button>
+                {quotationEntryMode === 'rfp' && (
+                  <button
+                    onClick={handleValidateRfpId}
+                    disabled={validatingRfpId || !rfpIdInput.trim() || !!validatedRfpDecision}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                      validatedRfpDecision
+                        ? 'bg-green-600 text-white hover:bg-green-700'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {validatingRfpId ? 'Validating...' : validatedRfpDecision ? '✓ Validated' : 'Validate'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
       )}
       
-      {showCreateQuotation && viewingCustomerForQuotation && <CreateQuotationForm customer={viewingCustomerForQuotation} user={user} existingQuotation={editingQuotation} onClose={() => { setShowCreateQuotation(false); setViewingCustomerForQuotation(null); setEditingQuotation(null); setRfpIdInput(''); setValidatedRfpDecision(null); sessionStorage.removeItem('pricingRfpDecisionId'); sessionStorage.removeItem('pricingRfpDecisionData'); }} onSave={handleSaveQuotation} />}
+      {showCreateQuotation && viewingCustomerForQuotation && <CreateQuotationForm creationMode={activeQuotationCreationMode} customer={viewingCustomerForQuotation} user={user} existingQuotation={editingQuotation} onClose={() => { setShowCreateQuotation(false); setViewingCustomerForQuotation(null); setEditingQuotation(null); setRfpIdInput(''); setValidatedRfpDecision(null); setQuotationEntryMode(null); setActiveQuotationCreationMode('rfp'); sessionStorage.removeItem('pricingRfpDecisionId'); sessionStorage.removeItem('pricingRfpDecisionData'); }} onSave={handleSaveQuotation} />}
       {(() => {
         const renderPricingFormBody = (closeFn) => pricingLead ? (
           <>
