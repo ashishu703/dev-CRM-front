@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { X, Download } from 'lucide-react';
 import DynamicTemplateRenderer from './DynamicTemplateRenderer';
 import templateService from '../services/TemplateService';
+import { fixQuotationTemplateHtml } from '../utils/quotationTemplateFix';
 
 const QuotationPreviewModal = ({ isOpen, onClose, quotationData, companyBranches, user, onDownloadPDF }) => {
   const [templateHtml, setTemplateHtml] = useState('');
@@ -67,7 +68,7 @@ const QuotationPreviewModal = ({ isOpen, onClose, quotationData, companyBranches
         <div className="p-6">
           {!loading && templateHtml && (
             <DynamicTemplateRenderer
-              html={templateHtml}
+              html={fixQuotationTemplateHtml(templateHtml)}
               data={context}
               containerId="quotation-content"
           />

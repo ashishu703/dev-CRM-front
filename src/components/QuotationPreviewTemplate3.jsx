@@ -5,6 +5,7 @@ import { PDFDownloader } from '../utils/PDFDownloader'
 import Toast from '../utils/Toast'
 import { Download, X, Printer } from 'lucide-react'
 import { QuotationDataMapper } from '../utils/QuotationDataMapper'
+import { fixQuotationTemplateHtml } from '../utils/quotationTemplateFix'
 
 export default function QuotationPreviewTemplate3({ data, companyBranches, user, onClose }) {
   const [templateHtml, setTemplateHtml] = React.useState('')
@@ -95,7 +96,11 @@ export default function QuotationPreviewTemplate3({ data, companyBranches, user,
             )}
           </div>
           <div id="quotation-preview-content">
-            <DynamicTemplateRenderer html={templateHtml} data={templateData} containerId="quotation-preview-content" />
+            <DynamicTemplateRenderer
+              html={fixQuotationTemplateHtml(templateHtml)}
+              data={templateData}
+              containerId="quotation-preview-content"
+            />
           </div>
         </div>
         <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 flex justify-between items-center">

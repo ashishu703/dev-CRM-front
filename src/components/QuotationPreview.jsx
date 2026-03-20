@@ -5,6 +5,7 @@ import { PDFDownloader } from '../utils/PDFDownloader'
 import Toast from '../utils/Toast'
 import { Download, X, Printer } from 'lucide-react'
 import { QuotationDataMapper } from '../utils/QuotationDataMapper'
+import { fixQuotationTemplateHtml } from '../utils/quotationTemplateFix'
 
 export default function QuotationPreview({ quotationData, companyBranches, user, onClose }) {
   const [templateHtml, setTemplateHtml] = React.useState('')
@@ -76,6 +77,8 @@ export default function QuotationPreview({ quotationData, companyBranches, user,
   if (loading) return <div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
   if (!templateHtml) return null
 
+  const fixedTemplateHtml = fixQuotationTemplateHtml(templateHtml)
+
   // Use the centralized QuotationDataMapper to prepare context
   // This ensures consistent data mapping across create/edit/view modes
   const templateData = QuotationDataMapper.prepareContext(
@@ -94,7 +97,11 @@ export default function QuotationPreview({ quotationData, companyBranches, user,
             <button onClick={onClose} className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-100 self-end sm:self-auto"><X className="h-5 w-5" /></button>
           </div>
           <div id="quotation-preview-content">
-            <DynamicTemplateRenderer html={templateHtml} data={templateData} containerId="quotation-preview-content" />
+            <DynamicTemplateRenderer
+              html={fixedTemplateHtml}
+              data={templateData}
+              containerId="quotation-preview-content"
+            />
           </div>
         </div>
         <div className="bg-gray-50 px-3 sm:px-4 py-2 sm:py-3 border-t border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
