@@ -51,10 +51,6 @@ const InlineFollowUpStatusCell = ({
   };
 
   const handleSelect = (opt) => {
-    if (isSelected(opt)) {
-      setOpen(false);
-      return;
-    }
     if (onStatusSelect) {
       onStatusSelect(leadId, opt);
       setOpen(false);
@@ -63,6 +59,10 @@ const InlineFollowUpStatusCell = ({
         setLocalTime(followUpTime || '');
         setShowDateInput(true);
       }
+      return;
+    }
+    if (isSelected(opt)) {
+      setOpen(false);
       return;
     }
     onChange?.(leadId, opt, (followUpRemark || '').trim());

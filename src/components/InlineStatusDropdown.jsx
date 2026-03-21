@@ -26,12 +26,12 @@ const InlineStatusDropdown = ({
   };
 
   const handleSelect = (opt) => {
-    if (isSelected(opt)) {
+    if (onStatusSelect) {
+      onStatusSelect(leadId, opt);
       setOpen(false);
       return;
     }
-    if (onStatusSelect) {
-      onStatusSelect(leadId, opt);
+    if (isSelected(opt)) {
       setOpen(false);
       return;
     }
