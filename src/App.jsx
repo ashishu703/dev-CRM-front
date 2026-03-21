@@ -4,6 +4,8 @@ import { useAuth } from './hooks/useAuth'
 import LoginPage from './pages/Auth/LoginPage.jsx'
 import AnocabLanding from './pages/landingpage.jsx'
 import SupportPage from './pages/support.jsx'
+import PrivacyPolicyPage from './pages/privacy-policy.jsx'
+import TermsAndConditionPage from './pages/terms-and-condition.jsx'
 import DashboardLayout from './pages/DashboardLayout.jsx'
 import MainDashboard from './pages/MainDashboard.jsx'
 import SalesDepartmentHeadLayout from './pages/SalesDepartmentHead/SalesDepartmentHeadLayout.jsx'
@@ -55,6 +57,29 @@ function AppContent() {
   const handleLogout = async () => {
     await logout()
     setActiveView('dashboard')
+  }
+
+  const isPrivacyPolicyPage = currentPath === '/privacy-policy' || currentPath.startsWith('/privacy-policy')
+  const isTermsPage =
+    currentPath === '/terms-and-condition' ||
+    currentPath.startsWith('/terms-and-condition') ||
+    currentPath === '/terms-and-conditions' ||
+    currentPath.startsWith('/terms-and-conditions')
+
+  if (isPrivacyPolicyPage) {
+    return (
+      <div className="App">
+        <PrivacyPolicyPage />
+      </div>
+    )
+  }
+
+  if (isTermsPage) {
+    return (
+      <div className="App">
+        <TermsAndConditionPage />
+      </div>
+    )
   }
 
   const shouldShowDashboard = isAuthenticated
