@@ -17,6 +17,79 @@ import { useQuotationFlow } from '../../hooks/useQuotationFlow';
 import { usePIFlow } from '../../hooks/usePIFlow';
 import LeadFilters from '../../components/salesperson/LeadFilters';
 
+/** Do not use generic updated_at — it changes on any edit and inflates "calls today" into thousands. */
+function getFollowupActivityAt(lead) {
+  return lead.followup_status_updated_at || lead.follow_up_status_updated_at || null;
+}
+
+/**
+ * Leads eligible for Last Call + date used for sorting / 7-day strip.
+ * Prefers scheduled/call dates; last resort is follow-up status timestamp (not updated_at).
+ */
+function filterLeadsForLastCall(leadsData, todayStartOfDay) {
+  return leadsData.filter((lead) => {
+    const hasFollowUpStatus = lead.follow_up_status && lead.follow_up_status.trim() !== '';
+    const hasFollowUpRemark = lead.follow_up_remark && lead.follow_up_remark.trim() !== '';
+
+    const hasFollowUpDate = lead.follow_up_date && lead.follow_up_date !== 'N/A' && lead.follow_up_date !== '';
+    const hasFollowUpTime = lead.follow_up_time && lead.follow_up_time !== 'N/A' && lead.follow_up_time !== '';
+    const hasNextMeetingDate = lead.next_meeting_date && lead.next_meeting_date !== 'N/A' && lead.next_meeting_date !== '';
+    const hasNextMeetingTime = lead.next_meeting_time && lead.next_meeting_time !== 'N/A' && lead.next_meeting_time !== '';
+    const hasMeetingDate = lead.meeting_date && lead.meeting_date !== 'N/A' && lead.meeting_date !== '';
+    const hasMeetingTime = lead.meeting_time && lead.meeting_time !== 'N/A' && lead.meeting_time !== '';
+    const hasScheduledDate = lead.scheduled_date && lead.scheduled_date !== 'N/A' && lead.scheduled_date !== '';
+    const hasScheduledTime = lead.scheduled_time && lead.scheduled_time !== 'N/A' && lead.scheduled_time !== '';
+    const hasNextMeetingStatus = lead.sales_status === 'next_meeting' && lead.sales_status_remark;
+
+    const hasScheduledDateOrTime =
+      hasFollowUpDate ||
+      hasFollowUpTime ||
+      hasNextMeetingDate ||
+      hasNextMeetingTime ||
+      hasMeetingDate ||
+      hasMeetingTime ||
+      hasScheduledDate ||
+      hasScheduledTime ||
+      hasNextMeetingStatus;
+
+    if (!hasFollowUpStatus && !hasFollowUpRemark && !hasScheduledDateOrTime) {
+      return false;
+    }
+
+    let callDate = null;
+    if (lead.follow_up_date) {
+      callDate = new Date(lead.follow_up_date);
+      callDate.setHours(0, 0, 0, 0);
+    } else if (lead.next_meeting_date) {
+      callDate = new Date(lead.next_meeting_date);
+      callDate.setHours(0, 0, 0, 0);
+    } else if (lead.meeting_date) {
+      callDate = new Date(lead.meeting_date);
+      callDate.setHours(0, 0, 0, 0);
+    } else if (lead.scheduled_date) {
+      callDate = new Date(lead.scheduled_date);
+      callDate.setHours(0, 0, 0, 0);
+    } else if (lead.sales_status === 'next_meeting' && lead.sales_status_remark) {
+      const dateMatch = lead.sales_status_remark.match(/(\d{4}-\d{2}-\d{2})/);
+      if (dateMatch) {
+        callDate = new Date(dateMatch[1]);
+        callDate.setHours(0, 0, 0, 0);
+      }
+    } else {
+      const fsu = getFollowupActivityAt(lead);
+      if (fsu) {
+        callDate = new Date(fsu);
+        callDate.setHours(0, 0, 0, 0);
+      }
+    }
+
+    if (!callDate || isNaN(callDate.getTime())) {
+      return false;
+    }
+    return callDate <= todayStartOfDay;
+  });
+}
+
 // Lead Status Preview Modal Component
 const LeadStatusPreview = ({ lead, onClose }) => {
   if (!lead) return null;
@@ -404,72 +477,14 @@ export default function LastCall() {
         // Get today's date at midnight in local timezone for proper comparison
         const today = new Date();
         today.setHours(0, 0, 0, 0); // Set to start of today
-        
-        const lastCallLeads = leadsData.filter(lead => {
-          const hasFollowUpStatus = lead.follow_up_status && lead.follow_up_status.trim() !== '';
-          const hasFollowUpRemark = lead.follow_up_remark && lead.follow_up_remark.trim() !== '';
-          
-          // Check for scheduled dates (same logic as ScheduledCall page)
-          const hasFollowUpDate = lead.follow_up_date && lead.follow_up_date !== 'N/A' && lead.follow_up_date !== '';
-          const hasFollowUpTime = lead.follow_up_time && lead.follow_up_time !== 'N/A' && lead.follow_up_time !== '';
-          const hasNextMeetingDate = lead.next_meeting_date && lead.next_meeting_date !== 'N/A' && lead.next_meeting_date !== '';
-          const hasNextMeetingTime = lead.next_meeting_time && lead.next_meeting_time !== 'N/A' && lead.next_meeting_time !== '';
-          const hasMeetingDate = lead.meeting_date && lead.meeting_date !== 'N/A' && lead.meeting_date !== '';
-          const hasMeetingTime = lead.meeting_time && lead.meeting_time !== 'N/A' && lead.meeting_time !== '';
-          const hasScheduledDate = lead.scheduled_date && lead.scheduled_date !== 'N/A' && lead.scheduled_date !== '';
-          const hasScheduledTime = lead.scheduled_time && lead.scheduled_time !== 'N/A' && lead.scheduled_time !== '';
-          const hasNextMeetingStatus = lead.sales_status === 'next_meeting' && lead.sales_status_remark;
-          
-          const hasScheduledDateOrTime = hasFollowUpDate || hasFollowUpTime || hasNextMeetingDate || hasNextMeetingTime || 
-                                         hasMeetingDate || hasMeetingTime || hasScheduledDate || hasScheduledTime || hasNextMeetingStatus;
-          
-          // Include leads that have follow-up status/remark OR scheduled dates
-          if (!hasFollowUpStatus && !hasFollowUpRemark && !hasScheduledDateOrTime) {
-            return false;
-          }
-          
-          // Check if the follow-up/scheduled date is <= today
-          let callDate = null;
-          
-          // Priority: follow_up_date > next_meeting_date > meeting_date > scheduled_date
-          if (lead.follow_up_date) {
-            callDate = new Date(lead.follow_up_date);
-            callDate.setHours(0, 0, 0, 0); // Normalize to start of day
-          } else if (lead.next_meeting_date) {
-            callDate = new Date(lead.next_meeting_date);
-            callDate.setHours(0, 0, 0, 0);
-          } else if (lead.meeting_date) {
-            callDate = new Date(lead.meeting_date);
-            callDate.setHours(0, 0, 0, 0);
-          } else if (lead.scheduled_date) {
-            callDate = new Date(lead.scheduled_date);
-            callDate.setHours(0, 0, 0, 0);
-          } else if (lead.sales_status === 'next_meeting' && lead.sales_status_remark) {
-            // Extract date from remark format like "2025-10-28 AT 19:10"
-            const dateMatch = lead.sales_status_remark.match(/(\d{4}-\d{2}-\d{2})/);
-            if (dateMatch) {
-              callDate = new Date(dateMatch[1]);
-              callDate.setHours(0, 0, 0, 0);
-            }
-          } else if (lead.updated_at) {
-            callDate = new Date(lead.updated_at);
-            callDate.setHours(0, 0, 0, 0);
-          }
-          
-          // If no date is available, exclude the lead
-          if (!callDate || isNaN(callDate.getTime())) {
-            return false;
-          }
-          
-          // Only include if call/scheduled date is <= today (compare dates, not times)
-          return callDate <= today;
-        });
+
+        const lastCallLeads = filterLeadsForLastCall(leadsData, today);
         
         console.log(`[LastCall] Filtered to ${lastCallLeads.length} last call leads for user: ${user?.email}`);
         
-        // Debug: Log date distribution
+        // Debug: Log date distribution (same keys as badge strip — not updated_at)
         const dateCounts = {};
-        lastCallLeads.forEach(lead => {
+        lastCallLeads.forEach((lead) => {
           let dateKey = '';
           if (lead.follow_up_date) {
             const d = new Date(lead.follow_up_date);
@@ -477,8 +492,17 @@ export default function LastCall() {
           } else if (lead.next_meeting_date) {
             const d = new Date(lead.next_meeting_date);
             dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-          } else if (lead.updated_at) {
-            const d = new Date(lead.updated_at);
+          } else if (lead.meeting_date) {
+            const d = new Date(lead.meeting_date);
+            dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          } else if (lead.scheduled_date) {
+            const d = new Date(lead.scheduled_date);
+            dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          } else if (lead.sales_status === 'next_meeting' && lead.sales_status_remark) {
+            const m = lead.sales_status_remark.match(/(\d{4}-\d{2}-\d{2})/);
+            if (m) dateKey = m[1];
+          } else if (getFollowupActivityAt(lead)) {
+            const d = new Date(getFollowupActivityAt(lead));
             dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
           }
           if (dateKey) {
@@ -541,11 +565,15 @@ export default function LastCall() {
       const response = await apiClient.putFormData(`/api/leads/assigned/salesperson/lead/${leadId}`, fd);
       
       if (response.success) {
+        const row = response.data || {};
+        const tsPatch = { updated_at: row.updated_at || new Date().toISOString() };
+        if (row.followup_status_updated_at != null) tsPatch.followup_status_updated_at = row.followup_status_updated_at;
+        if (row.sales_status_updated_at != null) tsPatch.sales_status_updated_at = row.sales_status_updated_at;
         // Update the leads list
         setLeads(prevLeads => 
           prevLeads.map(lead => 
             lead.id === leadId 
-              ? { ...lead, ...payload, updated_at: new Date().toISOString() }
+              ? { ...lead, ...payload, ...tsPatch }
               : lead
           )
         );
@@ -554,7 +582,7 @@ export default function LastCall() {
         setFilteredLeads(prevFiltered => 
           prevFiltered.map(lead => 
             lead.id === leadId 
-              ? { ...lead, ...payload, updated_at: new Date().toISOString() }
+              ? { ...lead, ...payload, ...tsPatch }
               : lead
           )
         );
@@ -673,7 +701,8 @@ export default function LastCall() {
       const dateMatch = lead.sales_status_remark.match(/(\d{4}-\d{2}-\d{2})/);
       if (dateMatch) return dateMatch[1];
     }
-    if (lead.updated_at) return normalizeDateKey(lead.updated_at);
+    const fsu = getFollowupActivityAt(lead);
+    if (fsu) return normalizeDateKey(fsu);
     return null;
   };
 
@@ -776,30 +805,10 @@ export default function LastCall() {
                   
                   // Store ALL leads for filter options
                   setAllLeads(leadsData);
-                  
+
                   const today = new Date();
-                  today.setHours(23, 59, 59, 999);
-                  const lastCallLeads = leadsData.filter(lead => {
-                    const hasFollowUpStatus = lead.follow_up_status && lead.follow_up_status.trim() !== '';
-                    const hasFollowUpRemark = lead.follow_up_remark && lead.follow_up_remark.trim() !== '';
-                    const hasFollowUpDate = lead.follow_up_date && lead.follow_up_date !== 'N/A' && lead.follow_up_date !== '';
-                    const hasNextMeetingDate = lead.next_meeting_date && lead.next_meeting_date !== 'N/A' && lead.next_meeting_date !== '';
-                    const hasMeetingDate = lead.meeting_date && lead.meeting_date !== 'N/A' && lead.meeting_date !== '';
-                    const hasScheduledDate = lead.scheduled_date && lead.scheduled_date !== 'N/A' && lead.scheduled_date !== '';
-                    const hasScheduledDateOrTime = hasFollowUpDate || hasNextMeetingDate || hasMeetingDate || hasScheduledDate;
-                    if (!hasFollowUpStatus && !hasFollowUpRemark && !hasScheduledDateOrTime) return false;
-                    let callDate = null;
-                    if (lead.follow_up_date) callDate = new Date(lead.follow_up_date);
-                    else if (lead.next_meeting_date) callDate = new Date(lead.next_meeting_date);
-                    else if (lead.meeting_date) callDate = new Date(lead.meeting_date);
-                    else if (lead.scheduled_date) callDate = new Date(lead.scheduled_date);
-                    else if (lead.sales_status === 'next_meeting' && lead.sales_status_remark) {
-                      const dateMatch = lead.sales_status_remark.match(/(\d{4}-\d{2}-\d{2})/);
-                      if (dateMatch) callDate = new Date(dateMatch[1]);
-                    } else if (lead.updated_at) callDate = new Date(lead.updated_at);
-                    if (!callDate || isNaN(callDate.getTime())) return false;
-                    return callDate <= today;
-                  });
+                  today.setHours(0, 0, 0, 0);
+                  const lastCallLeads = filterLeadsForLastCall(leadsData, today);
                   setLeads(lastCallLeads);
                   setFilteredLeads(lastCallLeads);
                 } catch (err) {
@@ -838,7 +847,12 @@ export default function LastCall() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           {/* Last 7 days total calls - rounded, light colourful strip */}
           <div className="mx-3 sm:mx-6 mt-3 mb-3 sm:mt-4 sm:mb-4 px-4 py-3 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-100/60">
-            <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wider mb-2">Last 7 days total calls</p>
+            <p
+              className="text-xs font-semibold text-indigo-700 uppercase tracking-wider mb-2"
+              title="Counts use follow-up / scheduled call dates (or last follow-up status change), not generic record updates."
+            >
+              Last 7 days — follow-ups by date
+            </p>
             <div className="flex flex-wrap gap-2">
               {callsByDate.map((day) => (
                 <span
@@ -850,7 +864,7 @@ export default function LastCall() {
                   }`}
                 >
                   <span>{formatDateShort(day.key)}:</span>
-                  <span className="ml-1">{day.count === 0 ? 'No calls' : `${day.count} call${day.count !== 1 ? 's' : ''}`}</span>
+                  <span className="ml-1">{day.count === 0 ? 'None' : `${day.count} lead${day.count !== 1 ? 's' : ''}`}</span>
                 </span>
               ))}
             </div>

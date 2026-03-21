@@ -458,9 +458,14 @@ export default function ScheduledCall() {
         </div>
       ) : sortedLeads.length > 0 ? (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          {/* Last 7 days total calls - rounded, light colourful strip */}
+          {/* Last 7 days — counts by scheduled follow-up date (not generic updates) */}
           <div className="mx-3 sm:mx-6 mt-3 mb-3 sm:mt-4 sm:mb-4 px-4 py-3 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-100/60">
-            <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wider mb-2">Last 7 days total calls</p>
+            <p
+              className="text-xs font-semibold text-indigo-700 uppercase tracking-wider mb-2"
+              title="One row per lead with a scheduled date on that calendar day."
+            >
+              Last 7 days — scheduled by date
+            </p>
             <div className="flex flex-wrap gap-2">
               {callsByDate.map((day) => (
                 <span
@@ -472,7 +477,7 @@ export default function ScheduledCall() {
                   }`}
                 >
                   <span>{formatDateShort(day.key)}:</span>
-                  <span className="ml-1">{day.count === 0 ? 'No calls' : `${day.count} call${day.count !== 1 ? 's' : ''}`}</span>
+                  <span className="ml-1">{day.count === 0 ? 'None' : `${day.count} lead${day.count !== 1 ? 's' : ''}`}</span>
                 </span>
               ))}
             </div>

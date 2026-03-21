@@ -27,7 +27,9 @@ export function mapApiRowToLead(r) {
     enquiryBy: r.lead_source || 'N/A',
     customerType: r.customer_type || 'N/A',
     date: r.date ? new Date(r.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-    salesStatus: r.sales_status || 'pending',
+    // Do not default null/empty DB values to 'pending' — that string was being re-sent on save and
+    // made the backend think sales was set while the UI showed "PENDING" as placeholder.
+    salesStatus: r.sales_status != null && String(r.sales_status).trim() !== '' ? String(r.sales_status).trim() : '',
     salesStatusRemark: r.sales_status_remark || null,
     salesStatusDate: new Date(r.updated_at || r.created_at || Date.now()).toLocaleString(),
     whatsapp: r.whatsapp ? `+91${String(r.whatsapp).replace(/\D/g, '').slice(-10)}` : null,

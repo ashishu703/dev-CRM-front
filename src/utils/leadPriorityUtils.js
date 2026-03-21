@@ -94,6 +94,28 @@ export function isHighEngagementLead(followWeight, salesWeight) {
   return followWeight > 3 || salesWeight > 3
 }
 
+/** Align with backend: score/priority only applies when both sales + follow-up are meaningfully set. */
+export function hasBothStatusesForPriority(lead) {
+  const s = norm(lead?.salesStatus ?? lead?.sales_status ?? '')
+  const f = norm(lead?.followUpStatus ?? lead?.follow_up_status ?? '')
+  if (!s || s === 'PENDING') return false
+  if (!f || f === 'PENDING') return false
+  return true
+}
+
+function storedLeadScore(lead) {
+  const raw = lead?.leadScore ?? lead?.lead_score
+  if (raw == null || raw === '') return null
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : null
+}
+
+function storedLeadPriority(lead) {
+  const p = (lead?.leadPriority ?? lead?.lead_priority ?? 'LOW').toString().toUpperCase()
+  if (['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'IGNORE'].includes(p)) return p
+  return 'LOW'
+}
+
 function isSalesClosed(salesStatus) {
   const k = norm(salesStatus)
   const lower = k.toLowerCase()
@@ -138,6 +160,11 @@ export function getLeadPriorityFromStatuses(salesStatus, followUpStatus) {
 }
 
 function computeDisplayScore(lead) {
+  if (!hasBothStatusesForPriority(lead)) {
+    const stored = storedLeadScore(lead)
+    if (stored != null) return Math.min(PRIORITY_CONFIG.scoreCap, stored)
+    return 2
+  }
   const sales = lead.salesStatus || lead.sales_status || ''
   const followUp = lead.followUpStatus || lead.follow_up_status || ''
   const s = norm(sales)
@@ -157,6 +184,9 @@ function computeDisplayScore(lead) {
 }
 
 export function getDisplayPriority(lead) {
+  if (!hasBothStatusesForPriority(lead)) {
+    return storedLeadPriority(lead)
+  }
   const sales = lead.salesStatus || lead.sales_status || ''
   if (!norm(sales) || norm(sales) === 'PENDING') return 'LOW'
   const score = computeDisplayScore(lead)

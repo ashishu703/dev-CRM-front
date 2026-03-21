@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { apiClient, API_ENDPOINTS } from '../utils/globalImports'
 import Toast from '../utils/Toast'
-import { getDisplayPriority, getDisplayScore, getSalesWeight } from '../utils/leadPriorityUtils'
+import { getDisplayPriority, getDisplayScore, getSalesWeight, hasBothStatusesForPriority } from '../utils/leadPriorityUtils'
 import { mapApiRowToLead } from '../utils/leadMapping'
 
 function isNoFollowUp(c) {
@@ -187,8 +187,11 @@ export function useSalespersonLeads(initialCustomers = [], filterNewLeadsOnly = 
       const scoreA = getDisplayScore(a)
       const scoreB = getDisplayScore(b)
       if (scoreB !== scoreA) return scoreB - scoreA
-      const swDiff = getSalesWeight(b.salesStatus || '') - getSalesWeight(a.salesStatus || '')
-      if (swDiff !== 0) return swDiff
+      // Avoid reordering when only one of the two status columns is set (weights use live sales)
+      if (hasBothStatusesForPriority(a) && hasBothStatusesForPriority(b)) {
+        const swDiff = getSalesWeight(b.salesStatus || '') - getSalesWeight(a.salesStatus || '')
+        if (swDiff !== 0) return swDiff
+      }
       if (sortBy && sortBy !== 'none') {
         let aVal = a[sortBy]
         let bVal = b[sortBy]
@@ -202,7 +205,9 @@ export function useSalespersonLeads(initialCustomers = [], filterNewLeadsOnly = 
         if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1
         if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1
       }
-      return 0
+      const idA = Number(a.id) || 0
+      const idB = Number(b.id) || 0
+      return idB - idA
     })
 
     return filtered
