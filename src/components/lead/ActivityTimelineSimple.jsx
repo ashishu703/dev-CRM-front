@@ -1,6 +1,21 @@
 import React, { useMemo, useState } from 'react';
-import { Clock, Loader, Eye, Mail, FileText, Package, Trash2, Edit } from 'lucide-react';
+import { Clock, Loader, Eye, Mail, FileText, Package, Trash2, Edit, MessageSquare } from 'lucide-react';
 import { useActivityTimeline } from './ActivityTimelineBase';
+
+/** API may return metadata as JSON string; lead_activities stores JSON text */
+function parseActivityMetadata(activity) {
+  let m = activity?.metadata;
+  if (m == null) return {};
+  if (typeof m === 'string') {
+    try {
+      const p = JSON.parse(m);
+      return typeof p === 'object' && p !== null ? p : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof m === 'object' ? m : {};
+}
 
 const formatTimeAgo = (dateString) => {
   const date = new Date(dateString);
@@ -51,14 +66,19 @@ const getActivityConfig = (activityType) => {
     payment_added: { icon: Package, color: 'text-emerald-500', bg: 'bg-emerald-50' },
     remark_added: { icon: FileText, color: 'text-gray-500', bg: 'bg-gray-50' },
     document_uploaded: { icon: FileText, color: 'text-indigo-500', bg: 'bg-indigo-50' },
+    followup_history_entry: { icon: MessageSquare, color: 'text-sky-600', bg: 'bg-sky-50' },
+    lead_created: { icon: Clock, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    lead_assigned: { icon: Package, color: 'text-violet-600', bg: 'bg-violet-50' },
+    lead_transferred: { icon: Package, color: 'text-purple-600', bg: 'bg-purple-50' },
+    note_added: { icon: FileText, color: 'text-amber-600', bg: 'bg-amber-50' },
   };
   return configs[activityType] || { icon: Clock, color: 'text-gray-500', bg: 'bg-gray-50' };
 };
 
 // Get activity title
 const getActivityTitle = (activity) => {
-  const metadata = activity.metadata || {};
-  
+  const metadata = parseActivityMetadata(activity);
+
   switch (activity.activity_type) {
     case 'followup_scheduled':
       const date = metadata.date || metadata.followupDate;
@@ -97,6 +117,28 @@ const getActivityTitle = (activity) => {
       return 'Remark Added';
     case 'document_uploaded':
       return `Document: ${metadata.filename || 'Uploaded'}`;
+    case 'followup_history_entry': {
+      const m = parseActivityMetadata(activity);
+      const fu = m.followUpStatus ?? m.follow_up_status;
+      const sales = m.salesStatus ?? m.sales_status;
+      if (fu && sales) return `Follow-up: ${fu} · Sales: ${sales}`;
+      if (fu) return `Follow-up: ${fu}`;
+      if (sales) return `Sales: ${sales}`;
+      return 'Follow-up & sales snapshot';
+    }
+    case 'lead_created':
+      return 'Lead created';
+    case 'lead_assigned':
+      return (
+        metadata.assigneeName ||
+        metadata.assignee ||
+        metadata.assignedTo ||
+        'Lead assigned'
+      );
+    case 'lead_transferred':
+      return metadata.toName || metadata.to || 'Lead transferred';
+    case 'note_added':
+      return metadata.title || 'Note added';
     default:
       return activity.activity_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   }
@@ -104,13 +146,36 @@ const getActivityTitle = (activity) => {
 
 // Get activity subtitle/details
 const getActivitySubtitle = (activity) => {
-  const metadata = activity.metadata || {};
-  
+  const metadata = parseActivityMetadata(activity);
+
   switch (activity.activity_type) {
-    case 'followup_status_changed':
-      return metadata.remark || null;
-    case 'sales_status_changed':
-      return metadata.remark || null;
+    case 'followup_scheduled': {
+      const notes = metadata.notes || metadata.remark;
+      if (notes) return String(notes);
+      return metadata.description || null;
+    }
+    case 'followup_status_changed': {
+      const parts = [];
+      if (metadata.status) parts.push(`Status: ${metadata.status}`);
+      if (metadata.remark) parts.push(`Follow-up remark: ${metadata.remark}`);
+      return parts.length ? parts.join('\n') : null;
+    }
+    case 'sales_status_changed': {
+      const parts = [];
+      if (metadata.oldValue != null && metadata.newValue != null) {
+        parts.push(`${metadata.oldValue} → ${metadata.newValue}`);
+      }
+      if (metadata.remark) parts.push(`Sales remark: ${metadata.remark}`);
+      return parts.length ? parts.join('\n') : null;
+    }
+    case 'status_changed': {
+      const parts = [];
+      if (metadata.oldValue != null && metadata.newValue != null) {
+        parts.push(`${metadata.oldValue} → ${metadata.newValue}`);
+      }
+      if (metadata.remark) parts.push(`Remark: ${metadata.remark}`);
+      return parts.length ? parts.join('\n') : (metadata.description || null);
+    }
     case 'enquiry_added':
     case 'enquiry_edited':
       // Show product name, quantity, and remark in same row
@@ -141,11 +206,66 @@ const getActivitySubtitle = (activity) => {
     case 'payment_added':
       return metadata.mode ? `via ${metadata.mode}${metadata.reference ? ` • ${metadata.reference}` : ''}` : null;
     case 'remark_added':
-      return metadata.remark ? metadata.remark.substring(0, 60) + (metadata.remark.length > 60 ? '...' : '') : null;
+      return metadata.remark != null && String(metadata.remark).trim() !== ''
+        ? String(metadata.remark)
+        : null;
     case 'document_uploaded':
       return metadata.type ? `Type: ${metadata.type}` : null;
-    default:
-      return metadata.description || null;
+    case 'followup_history_entry': {
+      const m = parseActivityMetadata(activity);
+      const fu = m.followUpStatus ?? m.follow_up_status;
+      const sales = m.salesStatus ?? m.sales_status;
+      const remark = m.followUpRemark ?? m.follow_up_remark;
+      const salesRemark =
+        m.salesStatusRemark ?? m.salesRemark ?? m.sales_status_remark;
+      const parts = [];
+      if (fu) parts.push(`Follow-up status: ${fu}`);
+      if (sales) parts.push(`Sales status: ${sales}`);
+      if (remark != null && String(remark).trim() !== '') {
+        parts.push(`Follow-up remark: ${remark}`);
+      }
+      if (salesRemark != null && String(salesRemark).trim() !== '') {
+        parts.push(`Sales remark: ${salesRemark}`);
+      }
+      return parts.length ? parts.join('\n') : null;
+    }
+    case 'note_added':
+      return (
+        metadata.note ||
+        metadata.body ||
+        metadata.text ||
+        metadata.remark ||
+        null
+      );
+    default: {
+      const m = metadata;
+      if (
+        m.followUpStatus ||
+        m.follow_up_status ||
+        m.salesStatus ||
+        m.sales_status ||
+        m.followUpRemark ||
+        m.follow_up_remark ||
+        m.salesStatusRemark ||
+        m.sales_status_remark
+      ) {
+        const parts = [];
+        if (m.followUpStatus || m.follow_up_status) {
+          parts.push(`Follow-up: ${m.followUpStatus || m.follow_up_status}`);
+        }
+        if (m.salesStatus || m.sales_status) {
+          parts.push(`Sales: ${m.salesStatus || m.sales_status}`);
+        }
+        if (m.followUpRemark || m.follow_up_remark) {
+          parts.push(`Follow-up remark: ${m.followUpRemark || m.follow_up_remark}`);
+        }
+        if (m.salesStatusRemark || m.sales_status_remark) {
+          parts.push(`Sales remark: ${m.salesStatusRemark || m.sales_status_remark}`);
+        }
+        if (parts.length) return parts.join('\n');
+      }
+      return metadata.description || metadata.summary || null;
+    }
   }
 };
 
@@ -280,7 +400,11 @@ const ActivityTimelineSimple = ({ leadId, onViewActivity, onDeleteActivity, onEd
                           {title}
                         </p>
                         {subtitle && (
-                          <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">
+                          <p
+                            className={`text-xs text-gray-600 mt-0.5 ${
+                              String(subtitle).includes('\n') ? 'whitespace-pre-line' : 'line-clamp-3'
+                            }`}
+                          >
                             {subtitle}
                           </p>
                         )}

@@ -18,8 +18,9 @@ export const activityTimelineApi = baseApi.injectEndpoints({
         return [{ type: 'ActivityTimeline', id: `history-${leadId}` }];
       },
       transformResponse: (res) => {
-        const body = res?.data ?? res;
-        return { data: body?.data ?? [], pagination: body?.pagination ?? {} };
+        if (!res) return { data: [], pagination: {} };
+        const rows = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []);
+        return { data: rows, pagination: res.pagination ?? {} };
       },
     }),
     getOrderCancelsByCustomer: build.query({

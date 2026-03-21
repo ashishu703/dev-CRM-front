@@ -4,6 +4,7 @@ import quotationService from '../api/admin_api/quotationService';
 import proformaInvoiceService from '../api/admin_api/proformaInvoiceService';
 import DateFormatter from '../utils/DateFormatter';
 import ReportsService from './ReportsService';
+import { normalizeLeadHistoryRows } from '../utils/leadHistoryAsActivities';
 
 /**
  * Service class for fetching and aggregating customer timeline data.
@@ -30,8 +31,8 @@ class CustomerTimelineService {
         ReportsService.getCustomerLedger(leadId)
       ]);
 
-      const history = historyRes.status === 'fulfilled' 
-        ? (historyRes.value?.data?.data || historyRes.value?.data || [])
+      const history = historyRes.status === 'fulfilled'
+        ? normalizeLeadHistoryRows(historyRes.value)
         : [];
 
       const quotations = quotationsRes.status === 'fulfilled'

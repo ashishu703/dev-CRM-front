@@ -12,19 +12,40 @@ const FILTERS = [
 const ActivityFilter = ({ activeFilter, onFilterChange, stats }) => {
   const [isOpen, setIsOpen] = useState(false);
 
+  const countValue = (v) => {
+    if (v == null) return 0;
+    if (typeof v === 'object' && v.count != null) return Number(v.count) || 0;
+    if (typeof v === 'number') return v;
+    return 0;
+  };
+
   const getCount = (filterId) => {
     if (filterId === 'all') {
-      return Object.values(stats).reduce((sum, count) => sum + count, 0);
+      if (typeof stats.total === 'number') return stats.total;
+      return Object.entries(stats)
+        .filter(([k]) => k !== 'total')
+        .reduce((sum, [, v]) => sum + countValue(v), 0);
     }
-    
+
     const typeMap = {
       mails: ['mail_sent', 'mail_opened'],
-      followups: ['followup_scheduled', 'followup_done'],
-      status: ['status_changed', 'lead_assigned', 'lead_transferred'],
+      followups: [
+        'followup_scheduled',
+        'followup_done',
+        'followup_status_changed',
+        'followup_history_entry'
+      ],
+      status: [
+        'status_changed',
+        'lead_assigned',
+        'lead_transferred',
+        'sales_status_changed',
+        'followup_history_entry'
+      ],
       documents: ['document_uploaded', 'quotation_created', 'rfp_raised']
     };
-    
-    return (typeMap[filterId] || []).reduce((sum, type) => sum + (stats[type] || 0), 0);
+
+    return (typeMap[filterId] || []).reduce((sum, type) => sum + countValue(stats[type]), 0);
   };
 
   return (

@@ -131,6 +131,11 @@ const ACTIVITY_CONFIG = {
     icon: ArrowRight,
     color: 'bg-purple-100 text-purple-600',
     label: 'Lead Transferred'
+  },
+  followup_history_entry: {
+    icon: MessageSquare,
+    color: 'bg-sky-100 text-sky-700',
+    label: 'Follow-up & sales snapshot'
   }
 };
 
@@ -180,6 +185,22 @@ const ActivityDetail = ({ activity }) => {
               <p className="text-sm text-gray-600 mt-0.5">
                 Remark: {metadata.remark}
               </p>
+            )}
+          </>
+        );
+
+      case 'followup_history_entry':
+        return (
+          <>
+            <p className="text-sm text-gray-600 mt-0.5">
+              Follow-up:{' '}
+              <span className="font-medium">{metadata.followUpStatus || '—'}</span>
+            </p>
+            <p className="text-sm text-gray-600 mt-0.5">
+              Sales: <span className="font-medium">{metadata.salesStatus || '—'}</span>
+            </p>
+            {metadata.followUpRemark && (
+              <p className="text-sm text-gray-600 mt-0.5">Remark: {metadata.followUpRemark}</p>
             )}
           </>
         );
@@ -433,6 +454,13 @@ const GroupedActivityCard = ({ activities }) => {
               {metadata.description && (
                 <p className="text-sm text-gray-600 mt-1">
                   {metadata.description}
+                </p>
+              )}
+              {firstActivity.activity_type === 'followup_history_entry' && (
+                <p className="text-sm text-gray-600 mt-1">
+                  Follow-up: <span className="font-medium">{metadata.followUpStatus || '—'}</span>
+                  {' · '}
+                  Sales: <span className="font-medium">{metadata.salesStatus || '—'}</span>
                 </p>
               )}
               {metadata.oldValue && metadata.newValue && (
