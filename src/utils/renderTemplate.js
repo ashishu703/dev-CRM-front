@@ -59,33 +59,71 @@ export function renderTemplate(html, context = {}) {
       changed = false;
       const before = rendered;
 
-      // Handle {{#if}} blocks with {{else}} - use findMatchingClose for nested blocks
-      const ifElsePattern = /\{\{#if\s+([^}]+)\}\}/g;
+      // Expand {{#each}} before {{#if}} / {{#unless}} so `this` is set correctly.
+      const eachPattern = /\{\{#each\s+([^}]+)\}\}/g;
       let match;
       let foundMatch = false;
+      while ((match = eachPattern.exec(rendered)) !== null && !foundMatch) {
+        const startPos = match.index;
+        const listPath = match[1].trim();
+
+        // Use findMatchingClose to correctly handle nested {{#each}} blocks
+        const closePos = findMatchingClose(rendered, startPos + match[0].length, '{{#each', '{{/each}}');
+
+        if (closePos !== -1) {
+          const inner = rendered.substring(startPos + match[0].length, closePos);
+          const items = resolvePath(data, listPath);
+
+          if (Array.isArray(items) && items.length > 0) {
+            const replacement = items
+              .map((item, index) => {
+                const loopContext = {
+                  ...data,
+                  this: item,
+                  '@index': index,
+                  '@indexPlus1': index + 1,
+                };
+                return renderBlock(inner, loopContext);
+              })
+              .join('');
+            rendered = rendered.substring(0, startPos) + replacement + rendered.substring(closePos + 9);
+          } else {
+            // Remove the block if items is empty or not an array
+            rendered = rendered.substring(0, startPos) + rendered.substring(closePos + 9);
+          }
+          changed = true;
+          foundMatch = true;
+        }
+      }
+
+      if (foundMatch) continue; // Restart loop after each modification
+
+      // Handle {{#if}} blocks with {{else}} - use findMatchingClose for nested blocks
+      const ifElsePattern = /\{\{#if\s+([^}]+)\}\}/g;
+      foundMatch = false;
       while ((match = ifElsePattern.exec(rendered)) !== null && !foundMatch) {
         const startPos = match.index;
         const conditionPath = match[1].trim();
-        
+
         // Find matching closing tag (handles nested blocks)
         const closePos = findMatchingClose(rendered, startPos + match[0].length, '{{#if', '{{/if}}');
-        
+
         if (closePos !== -1) {
           const blockContent = rendered.substring(startPos + match[0].length, closePos);
-          
+
           // Check for {{else}} within this block
           const elsePos = blockContent.indexOf('{{else}}');
-          
+
           if (elsePos !== -1) {
             // Has else clause
             const ifInner = blockContent.substring(0, elsePos);
             const elseInner = blockContent.substring(elsePos + 8);
             const value = resolvePath(data, conditionPath);
-            
-            const replacement = isTruthy(value) 
-              ? renderBlock(ifInner, data) 
+
+            const replacement = isTruthy(value)
+              ? renderBlock(ifInner, data)
               : renderBlock(elseInner, data);
-            
+
             rendered = rendered.substring(0, startPos) + replacement + rendered.substring(closePos + 7);
             changed = true;
             foundMatch = true;
@@ -108,26 +146,26 @@ export function renderTemplate(html, context = {}) {
       while ((match = unlessPattern.exec(rendered)) !== null && !foundMatch) {
         const startPos = match.index;
         const conditionPath = match[1].trim();
-        
+
         // Find matching closing tag (handles nested blocks)
         const closePos = findMatchingClose(rendered, startPos + match[0].length, '{{#unless', '{{/unless}}');
-        
+
         if (closePos !== -1) {
           const blockContent = rendered.substring(startPos + match[0].length, closePos);
-          
+
           // Check for {{else}} within this block
           const elsePos = blockContent.indexOf('{{else}}');
-          
+
           if (elsePos !== -1) {
             // Has else clause
             const unlessInner = blockContent.substring(0, elsePos);
             const elseInner = blockContent.substring(elsePos + 8);
             const value = resolvePath(data, conditionPath);
-            
-            const replacement = !isTruthy(value) 
-              ? renderBlock(unlessInner, data) 
+
+            const replacement = !isTruthy(value)
+              ? renderBlock(unlessInner, data)
               : renderBlock(elseInner, data);
-            
+
             rendered = rendered.substring(0, startPos) + replacement + rendered.substring(closePos + 11);
             changed = true;
             foundMatch = true;
@@ -139,44 +177,6 @@ export function renderTemplate(html, context = {}) {
             changed = true;
             foundMatch = true;
           }
-        }
-      }
-
-      if (foundMatch) continue; // Restart loop after modification
-
-      // Handle {{#each}} blocks
-      const eachPattern = /\{\{#each\s+([^}]+)\}\}/g;
-      foundMatch = false;
-      while ((match = eachPattern.exec(rendered)) !== null && !foundMatch) {
-        const startPos = match.index;
-        const listPath = match[1].trim();
-        
-        // Use findMatchingClose to correctly handle nested {{#each}} blocks
-        const closePos = findMatchingClose(rendered, startPos + match[0].length, '{{#each', '{{/each}}');
-        
-        if (closePos !== -1) {
-          const inner = rendered.substring(startPos + match[0].length, closePos);
-          const items = resolvePath(data, listPath);
-          
-          if (Array.isArray(items) && items.length > 0) {
-            const replacement = items
-              .map((item, index) => {
-                const loopContext = {
-                  ...data,
-                  this: item,
-                  '@index': index,
-                  '@indexPlus1': index + 1,
-                };
-                return renderBlock(inner, loopContext);
-              })
-              .join('');
-            rendered = rendered.substring(0, startPos) + replacement + rendered.substring(closePos + 9);
-          } else {
-            // Remove the block if items is empty or not an array
-            rendered = rendered.substring(0, startPos) + rendered.substring(closePos + 9);
-          }
-          changed = true;
-          foundMatch = true;
         }
       }
 

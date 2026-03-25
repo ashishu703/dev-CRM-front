@@ -834,7 +834,10 @@ const LeadsSimplified = () => {
         total: i.total_amount || i.total,
         hsn: i.hsn_code || i.hsn,
         hsnCode: i.hsn_code || i.hsn,
-        gstRate: i.gst_rate || i.gstRate || 18
+        gstRate: i.gst_rate || i.gstRate || 18,
+        // Per-product optional remark (used by some quotation templates)
+        remark: i.remark || '',
+        product_remark: i.remark || ''
       })),
 
       // Financial summary

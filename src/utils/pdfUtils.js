@@ -17,6 +17,24 @@ export const generateQuotationPDF = async (quotationData) => {
   tempDiv.style.zIndex = '9999';
   tempDiv.style.visibility = 'visible';
   tempDiv.style.opacity = '1';
+
+  // Read bank details from quotation (DB JSON can be string or object).
+  const rawBankDetails = quotationData?.bank_details || quotationData?.bankDetails || null;
+  let bankDetails = null;
+  try {
+    bankDetails = typeof rawBankDetails === 'string' ? JSON.parse(rawBankDetails) : rawBankDetails;
+  } catch (e) {
+    bankDetails = null;
+  }
+
+  // Fallback keeps PDF generation working even for legacy quotations.
+  bankDetails = bankDetails || {
+    accountHolderName: 'ANODE ELECTRIC PVT. LTD.',
+    bankName: 'ICICI Bank',
+    branchName: 'WRIGHT TOWN JABALPUR',
+    accountNumber: '657605601783',
+    ifscCode: 'ICIC0006576'
+  };
   
   tempDiv.innerHTML = `
     <!DOCTYPE html>
@@ -168,10 +186,10 @@ export const generateQuotationPDF = async (quotationData) => {
         <div class="bank-details">
           <h3 style="font-weight: bold; font-size: 12px; margin-bottom: 10px;">Bank Details</h3>
           <div style="font-size: 10px;">
-            <div><strong>Bank Name:</strong> ICICI Bank</div>
-            <div><strong>Branch Name:</strong> WRIGHT TOWN JABALPUR</div>
-            <div><strong>Bank Account Number:</strong> 657605601783</div>
-            <div><strong>Bank Branch IFSC:</strong> ICIC0006576</div>
+            <div><strong>Bank Name:</strong> ${bankDetails.bankName || 'ICICI Bank'}</div>
+            <div><strong>Branch Name:</strong> ${bankDetails.branchName || 'WRIGHT TOWN JABALPUR'}</div>
+            <div><strong>Bank Account Number:</strong> ${bankDetails.accountNumber || '657605601783'}</div>
+            <div><strong>Bank Branch IFSC:</strong> ${bankDetails.ifscCode || 'ICIC0006576'}</div>
           </div>
         </div>
         <div class="totals">

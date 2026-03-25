@@ -6,7 +6,7 @@ import { useGetDepartmentUsersByHeadIdQuery, useListDepartmentUsersQuery } from 
 import {
   TodayWorkSummary,
   FollowUpPipeline,
-  SalesPipelineSection,
+  FollowupPipelineSection,
   GeoDistributionCompact,
   TargetRevenueSection,
   TodayPriorityExecution,
@@ -200,9 +200,8 @@ const SalesIntelligenceDashboard = memo(function SalesIntelligenceDashboard({
           </div>
         </div>
 
-        {/* 2. Sales Pipeline (full width) */}
-        <SalesPipelineSection
-          salesPipelineCRM={summary?.salesPipelineCRM}
+        {/* 2. Followup Pipeline (full width) */}
+        <FollowupPipelineSection
           salesPipelineStrip={summary?.salesPipelineStrip}
           onStageClick={(stageKey) => onCardClick(null, stageKey)}
         />
@@ -225,7 +224,7 @@ const SalesIntelligenceDashboard = memo(function SalesIntelligenceDashboard({
 
         {/* 6. Map | Lead Source */}
         <div className={`grid grid-cols-1 lg:grid-cols-2 ${CARD_GAP}`}>
-          <GeoDistributionCompact indiaGeo={summary?.indiaGeo} onNavigate={onNavigate} />
+          <GeoDistributionCompact indiaGeo={summary?.indiaGeo} onNavigate={onNavigate} dashboardDate={date} />
           <LeadSourceCard leadSourceBreakdown={summary?.leadSourceBreakdown} />
         </div>
       </div>

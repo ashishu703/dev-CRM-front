@@ -9,6 +9,7 @@ import templateService from '../../services/TemplateService';
 import companyBranchService from '../../services/CompanyBranchService';
 import { QuotationDataMapper } from '../../utils/QuotationDataMapper';
 import { getProducts, addProduct, UNITS } from '../../constants/products';
+ 
 
 function findProductForHsn(productName, productsList) {
   if (!productName || !Array.isArray(productsList) || productsList.length === 0) return null;
@@ -46,15 +47,11 @@ function fixQuotationTemplateHtml(html) {
 
 /** Single source for quotation live preview: context + template fix + render. */
 function QuotationPreviewContent({ previewData, companyBranches, user, selectedTemplate, availableTemplates }) {
-  const list = Array.isArray(availableTemplates) ? availableTemplates : [];
-  const activeTemplate =
-    list.find((t) => t.template_key === selectedTemplate && t?.html_content) ||
-    list.find((t) => t?.html_content) ||
-    null;
+  const activeTemplate = availableTemplates?.find((t) => t.template_key === selectedTemplate);
   if (!activeTemplate?.html_content) return null;
-  const templateKeyForContext = activeTemplate.template_key || selectedTemplate || null;
-  const context = QuotationDataMapper.prepareContext(previewData, companyBranches, user, templateKeyForContext);
+  const context = QuotationDataMapper.prepareContext(previewData, companyBranches, user, selectedTemplate);
   const html = fixQuotationTemplateHtml(activeTemplate.html_content);
+
   return <DynamicTemplateRenderer html={html} data={context} containerId="quotation-content" />;
 }
 
@@ -136,6 +133,34 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
   const [companyBranches, setCompanyBranches] = useState({});
   const [organizations, setOrganizations] = useState([]);
 
+  const DEFAULT_BANK_DETAILS = {
+    accountHolderName: "ANODE ELECTRIC PVT. LTD.",
+    bankName: "ICICI Bank",
+    branchName: "WRIGHT TOWN JABALPUR",
+    accountNumber: "657605601783",
+    ifscCode: "ICIC0006576"
+  };
+
+  const SAMRIDDHI_CABLE_BANK_DETAILS = {
+    accountHolderName: "SAMRIDDHI CABLE INDUSTRIES PRIVATE LIMITED",
+    bankName: "ICICI Bank",
+    branchName: "Niwarganj Branch",
+    accountNumber: "777705336601",
+    ifscCode: "ICIC0007345"
+  };
+
+  const [hasEditedBankDetails, setHasEditedBankDetails] = useState(false);
+
+  const getBankDetailsForOrgName = (orgName) => {
+    const name = String(orgName || "").toUpperCase();
+    // Match the organization name tokens only; org wording might vary (PVT./INDUSTRIES etc).
+    const isSamriddhiCable =
+      name.includes("SAMRIDDHI") &&
+      name.includes("CABLE");
+
+    return isSamriddhiCable ? SAMRIDDHI_CABLE_BANK_DETAILS : DEFAULT_BANK_DETAILS;
+  };
+
   const [quotationData, setQuotationData] = useState({
     quotationNumber: `ANQ${Date.now().toString().slice(-6)}`,
     quotationDate: new Date().toISOString().split('T')[0],
@@ -182,11 +207,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
       vehicleNumber: ""
     },
     bankDetails: {
-      accountHolderName: "ANODE ELECTRIC PVT. LTD.",
-      bankName: "ICICI Bank",
-      branchName: "WRIGHT TOWN JABALPUR",
-      accountNumber: "657605601783",
-      ifscCode: "ICIC0006576"
+      ...DEFAULT_BANK_DETAILS
     }
   });
 
@@ -368,6 +389,25 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
 
     loadBranches();
   }, []);
+
+  useEffect(() => {
+    if (existingQuotation?.id) return;
+    if (!quotationData.selectedBranch) return;
+    if (hasEditedBankDetails) return;
+    if (!companyBranches || Object.keys(companyBranches).length === 0) return;
+
+    const branch = companyBranches[quotationData.selectedBranch];
+    if (!branch) return;
+
+    const nextBankDetails = getBankDetailsForOrgName(
+      branch.name || branch.legalName || branch.description
+    );
+
+    setQuotationData(prev => ({
+      ...prev,
+      bankDetails: { ...nextBankDetails }
+    }));
+  }, [quotationData.selectedBranch, companyBranches, existingQuotation?.id, hasEditedBankDetails]);
 
   useEffect(() => {
     const storedRfpId = sessionStorage.getItem('pricingRfpDecisionId');
@@ -768,6 +808,7 @@ export default function CreateQuotationForm({ customer, user, onClose, onSave, s
   };
 
   const handleBankDetailsChange = (field, value) => {
+    setHasEditedBankDetails(true);
     setQuotationData(prev => ({
       ...prev,
       bankDetails: {

@@ -59,13 +59,13 @@ const TargetRevenueSection = memo(function TargetRevenueSection({ revenueTarget,
           </div>
         </div>
         <div className="card-inner-padding">
-          <div className="py-6 flex flex-col items-center justify-center text-[var(--text-primary)] rounded-lg bg-slate-50 border border-slate-200 mb-4">
+          <div className="py-6 flex flex-col items-center justify-center text-[var(--text-primary)] rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] mb-4">
             <p className="text-sm font-semibold">No target set</p>
             <p className="text-xs mt-1 opacity-80">Set target in Department Management to see progress here</p>
           </div>
-          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
+          <div className="rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] p-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-semibold text-slate-600">Last 7 days</span>
+              <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Last 7 days</span>
               <TrendIcon />
             </div>
             {trendData.length > 0 ? (
@@ -112,9 +112,9 @@ const TargetRevenueSection = memo(function TargetRevenueSection({ revenueTarget,
             <p className="text-sm font-semibold text-amber-800">Target period expired</p>
             <p className="text-xs mt-1 text-amber-700">Set a new target period in Department Management. Last period achieved: {formatCurrency(achieved)}</p>
           </div>
-          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
+          <div className="rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] p-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-semibold text-slate-600">Last 7 days</span>
+              <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Last 7 days</span>
               <TrendIcon />
             </div>
             {trendData.length > 0 ? (
@@ -159,27 +159,27 @@ const TargetRevenueSection = memo(function TargetRevenueSection({ revenueTarget,
       <div className="card-inner-padding">
         {/* Row 1: [ Total Target ] [ Achieved ] [ Remaining ] [ % Complete ] */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
-            <div className="text-[10px] text-slate-500 font-semibold">Total Target</div>
-            <div className="text-base font-bold text-slate-800">{formatCurrency(target)}</div>
+          <div className="rounded-xl bg-[var(--bg-muted)] border border-[var(--border)] p-3">
+            <div className="text-[10px] text-[var(--text-secondary)] font-semibold">Total Target</div>
+            <div className="text-base font-bold text-[var(--text-primary)]">{formatCurrency(target)}</div>
           </div>
-          <div className="rounded-lg bg-slate-50 border border-slate-200 border-l-4 border-l-emerald-500 p-3">
+          <div className="rounded-xl bg-[var(--bg-muted)] border border-[var(--border)] border-l-4 border-l-emerald-500 p-3">
             <div className="text-[10px] text-emerald-600 font-semibold">Achieved</div>
-            <div className="text-base font-bold text-slate-800">{formatCurrency(achieved)}</div>
+            <div className="text-base font-bold text-[var(--text-primary)]">{formatCurrency(achieved)}</div>
           </div>
-          <div className="rounded-lg bg-slate-50 border border-slate-200 border-l-4 border-l-amber-500 p-3">
-            <div className="text-[10px] text-amber-600 font-semibold">Remaining</div>
-            <div className="text-base font-bold text-slate-800">{formatCurrency(remaining)}</div>
+          <div className="rounded-xl bg-[var(--bg-muted)] border border-[var(--border)] border-l-4 border-l-amber-500 p-3">
+            <div className="text-[10px] text-amber-700 font-semibold">Remaining</div>
+            <div className="text-base font-bold text-[var(--text-primary)]">{formatCurrency(remaining)}</div>
           </div>
-          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
-            <div className="text-[10px] text-slate-500 font-semibold">% Complete</div>
-            <div className="text-base font-bold text-slate-800">{Number(achievedPct).toFixed(1)}%</div>
+          <div className="rounded-xl bg-[var(--bg-muted)] border border-[var(--border)] p-3">
+            <div className="text-[10px] text-[var(--text-secondary)] font-semibold">% Complete</div>
+            <div className="text-base font-bold text-[var(--text-primary)]">{Number(achievedPct).toFixed(1)}%</div>
           </div>
         </div>
 
         {/* Progress Bar */}
         <div className="mb-4">
-          <div className="h-3 rounded-full bg-slate-200 overflow-hidden">
+          <div className="h-3 rounded-full bg-[rgba(148,163,184,0.35)] overflow-hidden">
             <div
               className="h-full rounded-full bg-teal-500 transition-all duration-500"
               style={{ width: `${Math.min(100, progressPct)}%` }}
@@ -189,24 +189,24 @@ const TargetRevenueSection = memo(function TargetRevenueSection({ revenueTarget,
 
         {/* Row 2: [ Required per day ] [ Current daily avg ] [ Days left ] [ Projected if same pace ] */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
-            <div className="text-[10px] text-slate-500 font-semibold">Required per day</div>
-            <div className="text-base font-bold text-slate-800">{formatCurrency(requiredPerDay)}</div>
+          <div className="rounded-xl bg-[var(--bg-muted)] border border-[var(--border)] p-3">
+            <div className="text-[10px] text-[var(--text-secondary)] font-semibold">Required per day</div>
+            <div className="text-base font-bold text-[var(--text-primary)]">{formatCurrency(requiredPerDay)}</div>
           </div>
-          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
-            <div className="text-[10px] text-slate-500 font-semibold">Current daily avg</div>
-            <div className="text-base font-bold text-slate-800">{formatCurrency(currentDailyAvg)}</div>
+          <div className="rounded-xl bg-[var(--bg-muted)] border border-[var(--border)] p-3">
+            <div className="text-[10px] text-[var(--text-secondary)] font-semibold">Current daily avg</div>
+            <div className="text-base font-bold text-[var(--text-primary)]">{formatCurrency(currentDailyAvg)}</div>
           </div>
-          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
-            <div className="text-[10px] text-slate-500 font-semibold">Days left</div>
-            <div className="text-base font-bold text-slate-800">{daysLeftInPeriod ?? 0}</div>
+          <div className="rounded-xl bg-[var(--bg-muted)] border border-[var(--border)] p-3">
+            <div className="text-[10px] text-[var(--text-secondary)] font-semibold">Days left</div>
+            <div className="text-base font-bold text-[var(--text-primary)]">{daysLeftInPeriod ?? 0}</div>
           </div>
           <div
-            className={`rounded-lg border border-slate-200 p-3 ${
+            className={`rounded-lg border border-[var(--border)] p-3 ${
               projectedNum >= targetNum ? 'bg-emerald-50 border-l-4 border-l-emerald-500' : 'bg-rose-50 border-l-4 border-l-rose-500'
             }`}
           >
-            <div className="text-[10px] text-slate-600 font-semibold">Projected if same pace</div>
+            <div className="text-[10px] text-[var(--text-secondary)] font-semibold">Projected if same pace</div>
             <div
               className={`text-base font-bold ${projectedNum >= targetNum ? 'text-emerald-700' : 'text-rose-700'}`}
             >
@@ -216,9 +216,9 @@ const TargetRevenueSection = memo(function TargetRevenueSection({ revenueTarget,
         </div>
 
         {/* Graph (Last 7 days) */}
-        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
+        <div className="rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] p-3">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold text-slate-600">Last 7 days</span>
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Last 7 days</span>
             <TrendIcon />
           </div>
           {trendData.length > 0 ? (

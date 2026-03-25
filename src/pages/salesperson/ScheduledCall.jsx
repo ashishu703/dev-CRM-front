@@ -15,6 +15,9 @@ import { useQuotationFlow } from '../../hooks/useQuotationFlow';
 import { usePIFlow } from '../../hooks/usePIFlow';
 import LeadFilters from '../../components/salesperson/LeadFilters';
 import { EditLeadStatusModal } from './LeadStatus';
+import InlineStatusDropdown from '../../components/InlineStatusDropdown';
+import InlineFollowUpStatusCell from '../../components/InlineFollowUpStatusCell';
+import StatusRemarkModal from '../../components/StatusRemarkModal';
 
 export default function ScheduledCall() {
   const [leads, setLeads] = useState([]);
@@ -27,6 +30,13 @@ export default function ScheduledCall() {
   const [viewingCustomer, setViewingCustomer] = useState(null);
   const [sidebarUpdateStatusLead, setSidebarUpdateStatusLead] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [statusRemarkModal, setStatusRemarkModal] = useState({
+    open: false,
+    leadId: null,
+    type: null, // 'sales' | 'followup'
+    status: '',
+    initialRemark: '',
+  });
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -232,11 +242,6 @@ export default function ScheduledCall() {
     setCurrentPage(1);
   }, []);
 
-  // Show skeleton loader on initial load (after all hooks)
-  if (initialLoading) {
-    return <DashboardSkeleton />;
-  }
-
   // Handle search - integrate with filter hook
   const handleSearch = (query) => {
     setSearchQuery(query);
@@ -259,11 +264,12 @@ export default function ScheduledCall() {
       const response = await apiClient.putFormData(`/api/leads/assigned/salesperson/lead/${leadId}`, fd);
       
       if (response.success) {
+        const nowIso = new Date().toISOString();
         // Update the leads list
         setLeads(prevLeads => 
           prevLeads.map(lead => 
             lead.id === leadId 
-              ? { ...lead, ...payload, updated_at: new Date().toISOString() }
+              ? { ...lead, ...payload, updated_at: nowIso }
               : lead
           )
         );
@@ -272,10 +278,14 @@ export default function ScheduledCall() {
         setFilteredLeads(prevFiltered => 
           prevFiltered.map(lead => 
             lead.id === leadId 
-              ? { ...lead, ...payload, updated_at: new Date().toISOString() }
+              ? { ...lead, ...payload, updated_at: nowIso }
               : lead
           )
         );
+
+        // Keep sidebar data in sync for inline updates
+        setViewingCustomer((prev) => (prev && prev.id === leadId ? { ...prev, ...payload, updated_at: nowIso } : prev));
+        setSelectedLead((prev) => (prev && prev.id === leadId ? { ...prev, ...payload, updated_at: nowIso } : prev));
         
         alert('Lead status updated successfully!');
       }
@@ -285,91 +295,87 @@ export default function ScheduledCall() {
     }
   };
 
-  // Get status badge
-  const getStatusBadge = (status) => {
-    const statusLower = status?.toLowerCase() || '';
-    const statusClasses = {
-      'pending': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
-      'running': 'bg-blue-100 text-blue-800 border border-blue-200',
-      'converted': 'bg-green-100 text-green-800 border border-green-200',
-      'interested': 'bg-purple-100 text-purple-800 border border-purple-200',
-      'win/closed': 'bg-emerald-100 text-emerald-800 border border-emerald-200',
-      'win': 'bg-emerald-100 text-emerald-800 border border-emerald-200',
-      'win lead': 'bg-emerald-100 text-emerald-800 border border-emerald-200',
-      'closed': 'bg-gray-100 text-gray-800 border border-gray-200',
-      'lost': 'bg-red-100 text-red-800 border border-red-200',
-      'lost/closed': 'bg-red-100 text-red-800 border border-red-200',
-      'loose': 'bg-red-100 text-red-800 border border-red-200',
-      'follow up': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
-      'not interested': 'bg-gray-100 text-gray-800 border border-gray-200',
-    };
+  const openStatusRemarkModal = React.useCallback((leadId, type, status, initialRemark = '') => {
+    setStatusRemarkModal({
+      open: true,
+      leadId,
+      type,
+      status,
+      initialRemark,
+    });
+  }, []);
 
-    const statusText = {
-      'pending': 'Pending',
-      'running': 'Running',
-      'converted': 'Converted',
-      'interested': 'Interested',
-      'win/closed': 'Win/Closed',
-      'win': 'Win',
-      'win lead': 'Win Lead',
-      'closed': 'Closed',
-      'lost': 'Lost',
-      'lost/closed': 'Lost/Closed',
-      'loose': 'Loose',
-      'follow up': 'Follow Up',
-      'not interested': 'Not Interested',
-    };
+  const handleStatusRemarkCancel = React.useCallback(() => {
+    setStatusRemarkModal({
+      open: false,
+      leadId: null,
+      type: null,
+      status: '',
+      initialRemark: '',
+    });
+  }, []);
 
-    return (
-      <span
-        className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClasses[statusLower] || 'bg-gray-100 text-gray-800 border border-gray-200'}`}
-      >
-        {statusText[statusLower] || status || 'Unknown'}
-      </span>
-    );
-  };
+  const handleStatusRemarkSave = React.useCallback(async (status, remark) => {
+    const { leadId, type } = statusRemarkModal;
+    if (!leadId || !type) return;
 
-  // Get follow up badge
-  const getFollowUpBadge = (status) => {
-    const statusLower = status?.toLowerCase() || '';
-    const followUpClasses = {
-      'appointment scheduled': 'bg-blue-100 text-blue-800 border border-blue-200',
-      'not interested': 'bg-red-100 text-red-800 border border-red-200',
-      'interested': 'bg-green-100 text-green-800 border border-green-200',
-      'quotation sent': 'bg-purple-100 text-purple-800 border border-purple-200',
-      'negotiation': 'bg-orange-100 text-orange-800 border border-orange-200',
-      'close order': 'bg-emerald-100 text-emerald-800 border border-emerald-200',
-      'closed/lost': 'bg-gray-100 text-gray-800 border border-gray-200',
-      'call back request': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
-      'unreachable/call not connected': 'bg-red-100 text-red-800 border border-red-200',
-      'currently not required': 'bg-gray-100 text-gray-800 border border-gray-200',
-      'not relevant': 'bg-gray-100 text-gray-800 border border-gray-200',
-      'pending': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
-    };
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead) {
+      handleStatusRemarkCancel();
+      return;
+    }
 
-    const followUpText = {
-      'appointment scheduled': 'Appointment Scheduled',
-      'not interested': 'Not Interested',
-      'interested': 'Interested',
-      'quotation sent': 'Quotation Sent',
-      'negotiation': 'Negotiation',
-      'close order': 'Close Order',
-      'closed/lost': 'Closed/Lost',
-      'call back request': 'Call Back Request',
-      'unreachable/call not connected': 'Unreachable',
-      'currently not required': 'Not Required',
-      'not relevant': 'Not Relevant',
-      'pending': 'Pending',
-    };
+    try {
+      if (type === 'sales') {
+        await handleUpdateLeadStatus(leadId, {
+          sales_status: status,
+          sales_status_remark: (remark ?? '').toString(),
+          follow_up_status: lead.follow_up_status ?? '',
+          follow_up_remark: lead.follow_up_remark ?? '',
+          follow_up_date: lead.follow_up_date ?? '',
+          follow_up_time: lead.follow_up_time ?? '',
+        });
+      } else {
+        await handleUpdateLeadStatus(leadId, {
+          sales_status: lead.sales_status ?? '',
+          sales_status_remark: lead.sales_status_remark ?? '',
+          follow_up_status: status,
+          follow_up_remark: (remark ?? '').toString(),
+          follow_up_date: lead.follow_up_date ?? '',
+          follow_up_time: lead.follow_up_time ?? '',
+        });
+      }
+      handleStatusRemarkCancel();
+    } catch (e) {
+      // Keep modal open for user retry
+      console.error('Failed to save status remark:', e);
+    }
+  }, [handleStatusRemarkCancel, handleUpdateLeadStatus, leads, statusRemarkModal]);
 
-    return (
-      <span
-        className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${followUpClasses[statusLower] || 'bg-gray-100 text-gray-800 border border-gray-200'}`}
-      >
-        {followUpText[statusLower] || status || 'Pending'}
-      </span>
-    );
-  };
+  const handleAppointmentChange = React.useCallback(async (leadId, { followUpDate, followUpTime }) => {
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead) return;
+
+    try {
+      // Inline component only shows appointment inputs for "appointment scheduled",
+      // so we hard-set follow_up_status accordingly.
+      await handleUpdateLeadStatus(leadId, {
+        sales_status: lead.sales_status ?? '',
+        sales_status_remark: lead.sales_status_remark ?? '',
+        follow_up_status: 'appointment scheduled',
+        follow_up_remark: lead.follow_up_remark ?? '',
+        follow_up_date: followUpDate ?? '',
+        follow_up_time: followUpTime ?? '',
+      });
+    } catch (e) {
+      console.error('Failed to update appointment:', e);
+    }
+  }, [handleUpdateLeadStatus, leads]);
+
+  // Show skeleton loader on initial load (after all hooks)
+  if (initialLoading) {
+    return <DashboardSkeleton />;
+  }
 
   // Format date for display (short format like "28 Oct")
   const formatDateShort = (dateString) => {
@@ -553,20 +559,35 @@ export default function ScheduledCall() {
                           <div className="truncate" title={lead.address || 'N/A'}>{lead.address || 'N/A'}</div>
                         </td>
                         <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm">
-                          <div className="space-y-1">
-                            {getFollowUpBadge(lead.follow_up_status)}
-                            {lead.follow_up_remark && (
-                              <div className="text-xs text-gray-600 italic truncate max-w-[200px]" title={lead.follow_up_remark}>
-                                "{lead.follow_up_remark}"
-                              </div>
-                            )}
+                          <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                            <InlineFollowUpStatusCell
+                              value={lead.follow_up_status}
+                              leadId={lead.id}
+                              followUpDate={lead.follow_up_date}
+                              followUpTime={lead.follow_up_time}
+                              followUpRemark={lead.follow_up_remark}
+                              onStatusSelect={(id, status) =>
+                                openStatusRemarkModal(id, 'followup', status, lead.follow_up_remark ?? '')
+                              }
+                              onAppointmentChange={handleAppointmentChange}
+                              isDarkMode={false}
+                            />
                           </div>
                         </td>
                         <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm">
-                          <div className="space-y-1">
-                            {getStatusBadge(lead.sales_status)}
+                          <div className="space-y-1" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                            <InlineStatusDropdown
+                              value={lead.sales_status}
+                              leadId={lead.id}
+                              onStatusSelect={(id, status) =>
+                                openStatusRemarkModal(id, 'sales', status, lead.sales_status_remark ?? '')
+                              }
+                            />
                             {lead.sales_status_remark && (
-                              <div className="text-xs text-gray-600 italic truncate max-w-[200px]" title={lead.sales_status_remark}>
+                              <div
+                                className="text-xs text-gray-600 italic truncate max-w-[200px]"
+                                title={lead.sales_status_remark}
+                              >
                                 "{lead.sales_status_remark}"
                               </div>
                             )}
@@ -725,6 +746,16 @@ export default function ScheduledCall() {
           embedInSidebar={false}
         />
       )}
+
+      <StatusRemarkModal
+        open={statusRemarkModal.open}
+        onClose={handleStatusRemarkCancel}
+        type={statusRemarkModal.type}
+        status={statusRemarkModal.status}
+        initialRemark={statusRemarkModal.initialRemark}
+        onSave={handleStatusRemarkSave}
+        onCancel={handleStatusRemarkCancel}
+      />
     </div>
   );
 }

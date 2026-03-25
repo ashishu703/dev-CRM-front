@@ -59,21 +59,21 @@ const LeadSourceCard = memo(function LeadSourceCard({ leadSourceBreakdown = [] }
                 </ResponsiveContainer>
               </div>
             )}
-            <div className="overflow-x-auto rounded-lg border border-slate-200 max-h-[200px] overflow-y-auto">
+            <div className="overflow-x-auto rounded-lg border border-[var(--border)] max-h-[200px] overflow-y-auto">
               <table className="w-full text-[11px]">
-                <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
+                <thead className="sticky top-0 bg-[var(--surface-secondary)] border-b border-[var(--border)] z-10">
                   <tr>
-                    <th className="text-left py-2 px-1.5 font-semibold text-slate-600">Source</th>
-                    <th className="text-right py-2 px-1.5 font-semibold text-slate-600">Count</th>
-                    <th className="text-right py-2 px-1.5 font-semibold text-slate-600">Share</th>
+                    <th className="text-left py-2 px-1.5 font-semibold text-[var(--text-secondary)]">Source</th>
+                    <th className="text-right py-2 px-1.5 font-semibold text-[var(--text-secondary)]">Count</th>
+                    <th className="text-right py-2 px-1.5 font-semibold text-[var(--text-secondary)]">Share</th>
                   </tr>
                 </thead>
                 <tbody>
                   {list.map((row, i) => (
-                    <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">
-                      <td className="py-1.5 px-1.5 text-slate-800 font-medium">{row.name || 'Unknown'}</td>
-                      <td className="py-1.5 px-1.5 text-right tabular-nums text-slate-700">{row.count ?? 0}</td>
-                      <td className="py-1.5 px-1.5 text-right tabular-nums text-slate-600">{row.value ?? '0%'}</td>
+                    <tr key={i} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-secondary)]/70">
+                      <td className="py-1.5 px-1.5 text-[var(--text-primary)] font-medium">{row.name || 'Unknown'}</td>
+                      <td className="py-1.5 px-1.5 text-right tabular-nums text-[var(--text-primary)]">{row.count ?? 0}</td>
+                      <td className="py-1.5 px-1.5 text-right tabular-nums text-[var(--text-secondary)]">{row.value ?? '0%'}</td>
                     </tr>
                   ))}
                 </tbody>

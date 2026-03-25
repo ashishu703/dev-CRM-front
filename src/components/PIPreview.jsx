@@ -15,22 +15,65 @@ export default function PIPreview({ piData, companyBranches, user, onClose }) {
   // Inject party-credit adjustment section into PI templates at render-time (no DB template edits).
   const injectPartyCreditIntoPiTemplate = React.useCallback((html) => {
     if (!html || typeof html !== 'string') return html
-    if (html.includes('partyCreditAppliedFormatted') || html.includes('piNetPayableAfterCreditFormatted')) return html
-
-    const block =
-      `{{#if partyCreditAdjustEnabled}}` +
-      `<br>` +
-      `<span style="font-size:12px; line-height:1.4;">` +
-      `<span>Party Credit Adjusted: ₹{{partyCreditAppliedFormatted}}</span><br>` +
-      `<b>Net Payable: ₹{{piNetPayableAfterCreditFormatted}}</b>` +
-      `</span>` +
-      `{{/if}}`
-
-    if (html.includes('{{balanceDue}}')) return html.split('{{balanceDue}}').join(`{{balanceDue}}${block}`)
-    if (html.includes('{{total}}')) return html.split('{{total}}').join(`{{total}}${block}`)
-    if (html.includes('{{totalAmount}}')) return html.split('{{totalAmount}}').join(`{{totalAmount}}${block}`)
-    if (html.includes('{{total_amount}}')) return html.split('{{total_amount}}').join(`{{total_amount}}${block}`)
-    return html
+  
+    const hasPartyCredit = html.toLowerCase().includes('party credit')
+    const hasNetPayable = html.toLowerCase().includes('net payable')
+  
+    if (hasPartyCredit && hasNetPayable) return html
+  
+    // ✅ SAME COLOR BOTH SIDES (IMPORTANT FIX)
+    const rows = `
+      ${!hasPartyCredit ? `
+        <tr>
+          <td style="
+            text-align:right;
+            padding:8px 10px;
+            font-size:13px;
+            background:#f1f5f9;
+            font-weight:500;
+          ">
+            Party Credit Adjustment
+          </td>
+          <td style="
+            text-align:right;
+            padding:8px 10px;
+            font-size:13px;
+            background:#f1f5f9;
+            font-weight:500;
+          ">
+            ₹{{partyCreditAppliedFormatted}}
+          </td>
+        </tr>
+      ` : ''}
+  
+      ${!hasNetPayable ? `
+        <tr>
+          <td style="
+            text-align:right;
+            padding:10px;
+            font-size:14px;
+            font-weight:700;
+            background:#e2e8f0;
+          ">
+            Net Payable
+          </td>
+          <td style="
+            text-align:right;
+            padding:10px;
+            font-size:14px;
+            font-weight:700;
+            background:#e2e8f0;
+          ">
+            ₹{{piNetPayableAfterCreditFormatted}}
+          </td>
+        </tr>
+      ` : ''}
+    `
+  
+    return html.replace(
+      /(TOTAL AMOUNT[\s\S]*?<\/tr>)/,
+      `$1${rows}`
+    )
   }, [])
 
   React.useEffect(() => {
@@ -128,13 +171,15 @@ export default function PIPreview({ piData, companyBranches, user, onClose }) {
       piData?.credit_adjustment ??
       0
     ) || 0
+  const creditAdjustedRounded = Math.round(creditAdjustedRaw * 100) / 100
   const totalRaw = Number(piData?.total_amount ?? piData?.totalAmount ?? piData?.total ?? 0) || 0
-  const netPayableRaw = Math.max(0, totalRaw - creditAdjustedRaw)
+  const netPayableRaw = Math.max(0, totalRaw - creditAdjustedRounded)
   const formatMoney = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const partyCreditContext = {
-    partyCreditAdjustEnabled: creditAdjustedRaw > 0,
-    partyCreditApplied: creditAdjustedRaw,
-    partyCreditAppliedFormatted: formatMoney(creditAdjustedRaw),
+    // Show these lines only if party-credit actually adjusted (after rounding)
+    partyCreditAdjustEnabled: creditAdjustedRounded > 0,
+    partyCreditApplied: creditAdjustedRounded,
+    partyCreditAppliedFormatted: formatMoney(creditAdjustedRounded),
     piTotalBeforeCredit: totalRaw,
     piTotalBeforeCreditFormatted: formatMoney(totalRaw),
     piNetPayableAfterCredit: netPayableRaw,

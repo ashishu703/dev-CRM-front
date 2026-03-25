@@ -105,10 +105,12 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
     const block =
       `{{#if partyCreditAdjustEnabled}}` +
       `<br>` +
-      `<span style="font-size:12px; line-height:1.4;">` +
-      `<span>Party Credit Adjusted: ₹{{partyCreditAppliedFormatted}}</span><br>` +
-      `<b>Net Payable: ₹{{piNetPayableAfterCreditFormatted}}</b>` +
-      `</span>` +
+      `<div style="display:flex; justify-content:space-between; width:100%; font-size:12px; line-height:1.4;">` +
+      `<span>Party Credit Adjusted:</span><span>₹{{partyCreditAppliedFormatted}}</span>` +
+      `</div>` +
+      `<div style="display:flex; justify-content:space-between; width:100%; font-size:12px; line-height:1.4; font-weight:700; margin-top:2px;">` +
+      `<span>Net Payable:</span><span>₹{{piNetPayableAfterCreditFormatted}}</span>` +
+      `</div>` +
       `{{/if}}`
 
     if (html.includes('{{balanceDue}}')) {
@@ -517,10 +519,11 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
       const requestedCredit = creditApplyMode === 'full'
         ? creditAvailable
         : Math.min(Number(customCreditAmount) || 0, creditAvailable)
-      const creditApplied = creditEligible
+      const creditAppliedRaw = creditEligible
         ? Math.max(0, Math.min(requestedCredit, creditAvailable, totalPi))
         : 0
-      const netPayableAfterCredit = Math.max(0, totalPi - creditApplied)
+      const creditAppliedRounded = Math.round(creditAppliedRaw * 100) / 100
+      const netPayableAfterCredit = Math.max(0, totalPi - creditAppliedRounded)
 
       const formatMoney = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -581,10 +584,11 @@ export default function CreatePIForm({ quotation: propQuotation, customer: propC
         // Party credit adjustment data for template + preview (works for both PI templates)
         partyCreditAvailable: creditAvailable,
         partyCreditAvailableFormatted: formatMoney(creditAvailable),
-        partyCreditAdjustEnabled: creditEligible,
-        partyCreditApplyMode: creditEligible ? creditApplyMode : 'none',
-        partyCreditApplied: creditApplied,
-        partyCreditAppliedFormatted: formatMoney(creditApplied),
+        // Show only when credit was actually applied (after rounding)
+        partyCreditAdjustEnabled: creditAppliedRounded > 0,
+        partyCreditApplyMode: creditAppliedRounded > 0 ? creditApplyMode : 'none',
+        partyCreditApplied: creditAppliedRounded,
+        partyCreditAppliedFormatted: formatMoney(creditAppliedRounded),
         piTotalBeforeCredit: totalPi,
         piTotalBeforeCreditFormatted: formatMoney(totalPi),
         piNetPayableAfterCredit: netPayableAfterCredit,

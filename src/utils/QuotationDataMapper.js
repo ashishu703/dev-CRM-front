@@ -14,13 +14,61 @@ export class QuotationDataMapper {
   static prepareContext(quotationData, companyBranches, user, selectedTemplateKey) {
     const rawBranch = this.getBranchData(quotationData.selectedBranch, companyBranches);
     const branch = this.normalizeBranch(rawBranch);
-    const bankDetails = this.normalizeBankDetails(quotationData.bankDetails, branch.name);
+    // Resolve bank details from selected company/branch.
+    
+    const orgNameUpper = String(branch.name || '').toUpperCase();
+    const shouldUseSamriddhiCable =
+      orgNameUpper.includes('CABLE') &&
+      (orgNameUpper.includes('RIDDHI') || orgNameUpper.includes('RIDHI') || orgNameUpper.includes('SAMR') || orgNameUpper.includes('SAMM'));
+
+    const resolvedBankDetailsRaw = shouldUseSamriddhiCable
+      ? {
+          accountHolderName: 'SAMRIDDHI CABLE INDUSTRIES PRIVATE LIMITED',
+          bankName: 'ICICI Bank',
+          branchName: 'Niwarganj Branch',
+          accountNumber: '777705336601',
+          ifscCode: 'ICIC0007345'
+        }
+      : {
+          accountHolderName: 'ANODE ELECTRIC PVT. LTD.',
+          bankName: 'ICICI Bank',
+          branchName: 'WRIGHT TOWN JABALPUR',
+          accountNumber: '657605601783',
+          ifscCode: 'ICIC0006576'
+        };
+
+    const bankDetails = this.normalizeBankDetails(resolvedBankDetailsRaw, branch.name);
     const items = this.normalizeItems(quotationData.items);
     const terms = this.normalizeTerms(quotationData.termsSections);
+    const bank = bankDetails || {};
 
-    // RFP ID (Pricing & RFP Decision) - pull from form data OR sessionStorage fallback.
-    // This is used in HTML templates (e.g. {{rfpId}}) and also supports legacy placeholders
-    // like {{rfp_requests.id}} by exposing a small compatibility object.
+    const normalizedQuotationData = {
+      ...quotationData,
+      items,
+      products: items,
+      productDetails: items,
+      quotationItems: items,
+      quotation_items: items,
+      bankDetails,
+      terms,
+      termsSections: quotationData.termsSections
+    };
+
+    const bankdetails = {
+      bankname: bank.bankName || '',
+      bankName: bank.bankName || '',
+      accountnumber: bank.accountNumber || '',
+      accountNumber: bank.accountNumber || '',
+      ifsccode: bank.ifscCode || '',
+      ifscCode: bank.ifscCode || '',
+      branch: bank.branchName || bank.branch || '',
+      branchName: bank.branchName || bank.branch || '',
+      accountholdername: bank.accountHolderName || '',
+      accountHolderName: bank.accountHolderName || '',
+      account_holder_name: bank.accountHolderName || '',
+      account_holder_name: bank.accountHolderName || ''
+    };
+
     let sessionRfpId = '';
     let sessionDecisionRfpId = '';
     try {
@@ -77,6 +125,12 @@ export class QuotationDataMapper {
     
     return {
       ...quotationData,
+      quotationData: normalizedQuotationData,
+      quotation: normalizedQuotationData,
+      products: items,
+      productDetails: items,
+      quotationItems: items,
+      quotation_items: items,
       // RFP fields for templates
       rfpId: resolvedRfpId,
       masterRfpId: resolvedMasterRfpId,
@@ -106,6 +160,18 @@ export class QuotationDataMapper {
       templateKey: selectedTemplateKey,
       templateType: 'quotation',
       bankDetails,
+      bankdetails,
+      // Compatibility aliases: some templates reference bank fields directly
+      // instead of `bankDetails.<field>`.
+      ifscCode: bank.ifscCode || '',
+      bankName: bank.bankName || '',
+      accountNumber: bank.accountNumber || '',
+      accountHolderName: bank.accountHolderName || '',
+      branchName: bank.branchName || '',
+      // Also expose some lowercase variants.
+      ifsccode: bank.ifscCode || '',
+      bankname: bank.bankName || '',
+      accountnumber: bank.accountNumber || '',
       items,
       terms
     };
@@ -184,6 +250,13 @@ export class QuotationDataMapper {
       const rateValue = item.rate || item.buyerRate || item.unitPrice || '';
       const qtyStr = qtyValue !== '' && qtyValue != null ? String(qtyValue) : '';
       const hsnStr = hsnValue !== '' && hsnValue != null ? String(hsnValue) : '';
+      const remarkValue =
+        item.remark ??
+        item.product_remark ??
+        item.productRemark ??
+        item.requirement_detail ??
+        item.requirementDetail ??
+        '';
       return {
         ...item,
         hsnCode: hsnStr,
@@ -197,7 +270,10 @@ export class QuotationDataMapper {
         productName: item.productName || item.name || '',
         unit: item.unit || item.per || '',
         amount: item.amount || 0,
-        remark: item.remark || ''
+        remark: String(remarkValue || ''),
+        product_remark: String(remarkValue || ''),
+        requirement_detail: String(remarkValue || ''),
+        productRemark: String(remarkValue || '')
       };
     });
   }

@@ -11,6 +11,7 @@ export { default as TargetAchievementBreakdown } from './TargetAchievementBreakd
 export { default as TargetRevenueSection } from './TargetRevenueSection';
 export { default as TodayWorkSummary } from './TodayWorkSummary';
 export { default as FollowUpPipeline } from './FollowUpPipeline';
+export { default as FollowupPipelineSection } from './FollowupPipelineSection';
 export { default as SalesPipelineSection } from './SalesPipelineSection';
 export { default as SalesPipelineStrip } from './SalesPipelineStrip';
 export { default as GeoDistributionCompact } from './GeoDistributionCompact';

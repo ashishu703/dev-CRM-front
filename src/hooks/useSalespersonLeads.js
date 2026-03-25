@@ -165,7 +165,18 @@ export function useSalespersonLeads(initialCustomers = [], filterNewLeadsOnly = 
                 return !trimmed || trimmed === '' || trimmed === 'n/a' || trimmed === 'null';
               });
             } else {
-              filtered = filtered.filter(c => c[fieldMap[key]] === value)
+              filtered = filtered.filter(c => {
+                const fieldVal = c[fieldMap[key]]
+                if (key === 'followUpStatus') {
+                  const norm = (x) => String(x || '').trim().replace(/\s+/g, ' ').toLowerCase()
+                  return norm(fieldVal) === norm(value)
+                }
+                if (key === 'state') {
+                  const norm = (x) => String(x || '').trim().replace(/\s+/g, ' ').toLowerCase()
+                  return norm(fieldVal) === norm(value)
+                }
+                return fieldVal === value
+              })
             }
           }
         }

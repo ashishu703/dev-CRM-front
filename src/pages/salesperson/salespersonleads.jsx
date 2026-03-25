@@ -37,6 +37,7 @@ import { useClickOutside } from '../../hooks/useClickOutside'
 import { getProducts } from '../../constants/products'
 import { getDisplayPriority } from '../../utils/leadPriorityUtils'
 import { mapApiRowToLead } from '../../utils/leadMapping'
+import { DASHBOARD_FILTER_KEY } from './dashboard/utils/dashboardNavigation'
 
 const getUserData = () => {
   try {
@@ -186,6 +187,81 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
     if (leadsHook.setFilterCreatedToday) {
       leadsHook.setFilterCreatedToday(createdToday)
     }
+  }, [])
+
+  React.useEffect(() => {
+    const applyPipelineStageFilter = (stageKey) => {
+      if (!stageKey) return
+      const normalized = String(stageKey).trim()
+      if (!normalized) return
+      if (leadsHook?.handleAdvancedFilterChange) {
+        leadsHook.handleAdvancedFilterChange('followUpStatus', normalized)
+      }
+      if (leadsHook?.setEnabledFilters) {
+        leadsHook.setEnabledFilters((prev) => ({ ...prev, followUpStatus: true }))
+      }
+      if (leadsHook?.setShowFilterPanel) {
+        leadsHook.setShowFilterPanel(false)
+      }
+      setActiveTab('leads')
+    }
+
+    const applyStateFilter = (stateName) => {
+      if (!stateName) return
+      const normalized = String(stateName).trim()
+      if (!normalized) return
+      if (leadsHook?.handleAdvancedFilterChange) {
+        leadsHook.handleAdvancedFilterChange('state', normalized)
+      }
+      if (leadsHook?.setEnabledFilters) {
+        leadsHook.setEnabledFilters((prev) => ({ ...prev, state: true }))
+      }
+      if (leadsHook?.setShowFilterPanel) {
+        leadsHook.setShowFilterPanel(false)
+      }
+      setActiveTab('leads')
+    }
+
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const filter = params.get('filter') || dashboardFilterFromUrl || null
+      const stage = params.get('stage') || null
+      const state = params.get('state') || null
+      const tab = params.get('tab') || null
+
+      // If dashboard stored something in sessionStorage, consume it here too.
+      const raw = sessionStorage.getItem(DASHBOARD_FILTER_KEY)
+      if (raw) {
+        const payload = JSON.parse(raw)
+        sessionStorage.removeItem(DASHBOARD_FILTER_KEY)
+        if (payload?.filter === 'pipeline_stage' && payload?.stageKey) {
+          applyPipelineStageFilter(payload.stageKey)
+          return
+        }
+        if (payload?.filter === 'no_follow_up') {
+          setActiveTab('leads')
+          return
+        }
+        if (payload?.filter === 'enquiries') {
+          setActiveTab('enquiry')
+          return
+        }
+      }
+
+      if (tab === 'enquiry') {
+        setActiveTab('enquiry')
+        return
+      }
+
+      if (filter === 'pipeline_stage' && stage) {
+        applyPipelineStageFilter(stage)
+      } else if (filter === 'state' && state) {
+        applyStateFilter(state)
+      }
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const quotationHook = useQuotationFlow(activeCustomerId, isRefreshing)
   const piHook = usePIFlow(viewingCustomer, viewingCustomerForQuotation, selectedBranch)

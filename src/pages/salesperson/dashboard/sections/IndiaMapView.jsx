@@ -9,7 +9,11 @@ const INDIA_GEOJSON_URL =
   'https://gist.githubusercontent.com/jbrobst/56c13bbbf9d97d187fea01ca62ea5112/raw/e388c4cae20aa53cb5090210a42ebb9b765c0a36/india_states.geojson';
 
 function normalizeStateName(name) {
-  return (name || '').toString().trim().toLowerCase();
+  return (name || '')
+    .toString()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
 }
 
 const HEATMAP_COLORS = [
@@ -43,7 +47,7 @@ function IndiaGeoJSONLayer({ stateCountMap, stateMetaMap, onStateClick }) {
           style: (feature) => {
             const name = feature?.properties?.ST_NM;
             const key = normalizeStateName(name);
-            const count = stateCountMap ? (stateCountMap[key] ?? 0) : 0;
+            const count = stateCountMap ? (Number(stateCountMap[key] ?? 0) || 0) : 0;
             const intensity = maxCount > 0 ? count / maxCount : 0;
             const fill = count > 0 ? getHeatmapColor(intensity) : BASE_FILL;
             return {
@@ -57,7 +61,7 @@ function IndiaGeoJSONLayer({ stateCountMap, stateMetaMap, onStateClick }) {
           onEachFeature: (feature, layerInstance) => {
             const name = feature?.properties?.ST_NM || 'Unknown';
             const key = normalizeStateName(name);
-            const count = stateCountMap ? (stateCountMap[key] ?? 0) : 0;
+            const count = stateCountMap ? (Number(stateCountMap[key] ?? 0) || 0) : 0;
             const meta = stateMetaMap?.[key] || {};
             const orders = meta.orders ?? 0;
             const revenue = meta.revenue ?? 0;
@@ -89,13 +93,13 @@ function IndiaGeoJSONLayer({ stateCountMap, stateMetaMap, onStateClick }) {
 
 const IndiaMapView = memo(function IndiaMapView({ stateCountMap = {}, stateMetaMap = {}, onStateClick }) {
   return (
-    <div className="w-full rounded-lg overflow-hidden bg-white" style={{ height: MAP_HEIGHT }}>
+    <div className="w-full rounded-lg overflow-hidden bg-[var(--bg-card)] border border-[var(--border)]" style={{ height: MAP_HEIGHT }}>
       <MapContainer
         center={[20.5937, 78.9629]}
         zoom={4.2}
         minZoom={3}
         maxZoom={8}
-        style={{ height: '100%', width: '100%', background: '#f8fafc' }}
+        style={{ height: '100%', width: '100%', background: 'var(--surface-secondary)' }}
         zoomControl={false}
         scrollWheelZoom={true}
         dragging={true}

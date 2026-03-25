@@ -64,8 +64,8 @@ export default function PaymentTrackingView({
   return (
     <div className="min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6 overflow-x-hidden min-w-0">
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-between gap-3 mb-4">
-        <h1 className="text-lg sm:text-xl font-semibold text-gray-900">{title}</h1>
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Left side: search (and salesperson filter if enabled) */}
+        <div className="flex items-center gap-2 flex-wrap justify-start w-full sm:w-auto">
           {showSalespersonFilter && salespersonOptions.length > 0 && (
             <select
               value={salespersonFilter}
@@ -74,37 +74,44 @@ export default function PaymentTrackingView({
             >
               <option value="">All Salespersons</option>
               {salespersonOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
               ))}
             </select>
           )}
+
+          <div className="flex shadow-lg rounded-xl overflow-hidden flex-1 sm:flex-initial">
+            <input
+              type="text"
+              placeholder="Search items..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm focus:outline-none w-full sm:w-64 bg-white border-gray-200 text-gray-900 placeholder-gray-500"
+            />
+            <button className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md">
+              <Search className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Right side: refresh */}
+        <div className="flex items-center justify-end w-full sm:w-auto">
           <button
             type="button"
             onClick={onRefresh}
             disabled={data.loading}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+            className="inline-flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-white shadow-md bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 hover:opacity-95 disabled:opacity-60"
+            title="Refresh"
           >
-            <RefreshCw className={`w-4 h-4 ${data.loading ? 'animate-spin' : ''}`} /> Refresh
+            <RefreshCw className={`w-4 h-4 ${data.loading ? 'animate-spin' : ''}`} />
+            Refresh
           </button>
         </div>
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6 shadow-sm">
-        {activeTab !== 'target' && (
-          <div className="mb-4">
-            <div className="relative w-full sm:max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="search"
-                placeholder="Search..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-          </div>
-        )}
-
+        {/* Search moved to the header row */}
         <div className="rounded-xl border border-gray-200 overflow-hidden min-w-0">
           <div className="border-b border-gray-200 flex overflow-x-auto scrollbar-thin">
             {TABS.map(({ id, label, Icon }) => (

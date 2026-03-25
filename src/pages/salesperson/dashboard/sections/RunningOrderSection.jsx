@@ -30,24 +30,24 @@ const RunningOrderSection = memo(function RunningOrderSection({ onNavigate }) {
           type="button"
           onClick={() => refresh()}
           disabled={loading}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-[12px] font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-secondary)] disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
       <div className="card-inner-padding">
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
           <table className="w-full text-[12px] min-w-[500px]">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="text-left py-2.5 px-3 font-semibold text-slate-600">Party</th>
-                <th className="text-left py-2.5 px-3 font-semibold text-slate-600">Product</th>
-                <th className="text-right py-2.5 px-3 font-semibold text-slate-600">Quantity</th>
-                <th className="text-right py-2.5 px-3 font-semibold text-slate-600">Rate</th>
+              <tr className="bg-[var(--surface-secondary)] border-b border-[var(--border)]">
+                <th className="text-left py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Party</th>
+                <th className="text-left py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Product</th>
+                <th className="text-right py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Quantity</th>
+                <th className="text-right py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Rate</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-[var(--border)]">
               {rows.length === 0 && !loading ? (
                 <tr>
                   <td colSpan={4} className="py-10 text-center text-[var(--text-primary)]">
@@ -58,7 +58,7 @@ const RunningOrderSection = memo(function RunningOrderSection({ onNavigate }) {
                 </tr>
               ) : (
                 rows.slice(0, 10).map((r, i) => (
-                  <tr key={`${r.quotationId ?? ''}-${r.partyName ?? ''}-${r.productName ?? ''}-${i}`} className="hover:bg-slate-50/50">
+                  <tr key={`${r.quotationId ?? ''}-${r.partyName ?? ''}-${r.productName ?? ''}-${i}`} className="hover:bg-[var(--surface-secondary)]/80">
                     <td className="py-2.5 px-3 font-medium text-[var(--text-primary)] whitespace-nowrap">{r.partyName || '—'}</td>
                     <td className="py-2.5 px-3 text-[var(--text-primary)] max-w-[220px] truncate" title={r.productName}>{r.productName || '—'}</td>
                     <td className="py-2.5 px-3 text-right tabular-nums text-[var(--text-primary)]">{formatQty(r)}</td>

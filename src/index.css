@@ -19,6 +19,7 @@
   --bg-card: #FFFFFF;
   --surface-primary: #FFFFFF;
   --surface-secondary: #F8FAFC;
+  --bg-muted: var(--surface-secondary);
 
   /* Border */
   --border: #E2E8F0;

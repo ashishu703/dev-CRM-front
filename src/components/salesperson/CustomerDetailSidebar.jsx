@@ -376,7 +376,10 @@ export default function CustomerDetailSidebar({
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0 flex-wrap">
                           <button 
-                            onClick={() => onViewQuotation(quotation)} 
+                            onClick={() => {
+                              onViewQuotation(quotation)
+                              onClose()
+                            }} 
                             className="p-1.5 bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 rounded-lg shadow-sm transition-all duration-200" 
                             title="View Quotation"
                           >
@@ -477,6 +480,7 @@ export default function CustomerDetailSidebar({
                                     onClick={() => {
                                       if (onViewPI && pi.id) {
                                         onViewPI(pi.id, quotation)
+                                        onClose()
                                       }
                                     }}
                                     className="p-1 bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 rounded-lg shadow-sm transition-all duration-200"

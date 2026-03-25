@@ -52,11 +52,11 @@ const TodayPriorityExecution = memo(function TodayPriorityExecution({ todayPrior
   const slice = priorityLeads.slice(0, shown);
   const hasMore = priorityLeads.length > shown;
 
-  const HEADER_GRADIENT = { background: 'linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)' };
+  const HEADER_GRADIENT = { background: 'linear-gradient(135deg, #2563EB 0%, #8B5CF6 100%)' };
 
   if (isLoading) {
     return (
-      <div className="salesperson-dashboard-card p-0 overflow-hidden rounded-xl border-2 transition-all duration-300" style={{ borderColor: 'rgba(167, 139, 250, 0.3)' }}>
+      <div className="salesperson-dashboard-card p-0 overflow-hidden rounded-xl border-2 transition-all duration-300" style={{ borderColor: 'rgba(37, 99, 235, 0.25)' }}>
         <div className="relative overflow-hidden px-4 py-3 text-white" style={HEADER_GRADIENT}>
           <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-full" style={{ background: 'rgba(255,255,255,0.12)' }} />
           <h3 className="relative z-10 text-base font-bold m-0">Lead Priority</h3>
@@ -69,7 +69,7 @@ const TodayPriorityExecution = memo(function TodayPriorityExecution({ todayPrior
   }
 
   return (
-    <div className="salesperson-dashboard-card p-0 overflow-hidden rounded-xl border-2 transition-all duration-300 hover:shadow-lg" style={{ borderColor: 'rgba(167, 139, 250, 0.3)' }}>
+    <div className="salesperson-dashboard-card p-0 overflow-hidden rounded-xl border-2 transition-all duration-300 hover:shadow-lg" style={{ borderColor: 'rgba(37, 99, 235, 0.25)' }}>
       <div className="relative overflow-hidden px-4 py-3 text-white" style={HEADER_GRADIENT}>
         <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-full" style={{ background: 'rgba(255,255,255,0.12)' }} />
         <h3 className="relative z-10 text-base font-bold m-0">Lead Priority</h3>
@@ -89,16 +89,16 @@ const TodayPriorityExecution = memo(function TodayPriorityExecution({ todayPrior
               className="overflow-x-auto overflow-y-auto max-h-[320px] -mx-1 scroll-smooth"
             >
               <table className="w-full text-[11px]">
-                <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-sm z-10 border-b border-slate-200">
+                <thead className="sticky top-0 bg-[var(--surface-secondary)]/95 backdrop-blur-sm z-10 border-b border-[var(--border)]">
                   <tr>
-                    <th className="text-left py-2.5 px-2 font-semibold text-slate-600 text-[11px]">Priority</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-slate-600 text-[11px]">Lead</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-slate-600 text-[11px]">Business</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-slate-600 text-[11px]">Deal</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-slate-600 text-[11px]">Stage</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-slate-600 text-[11px]">Last action</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-slate-600 text-[11px]">Days since F/U</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-slate-600 text-[11px]">Action</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Priority</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Lead</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Business</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Deal</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Stage</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Last action</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Days since F/U</th>
+                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -109,19 +109,19 @@ const TodayPriorityExecution = memo(function TodayPriorityExecution({ todayPrior
                     return (
                       <tr
                         key={item.id}
-                        className={`border-b border-slate-100 transition-colors hover:bg-slate-50 ${borderClass}`}
+                        className={`border-b border-[var(--border)] transition-colors hover:bg-[var(--surface-secondary)] ${borderClass}`}
                       >
                         <td className="py-2 px-2">
-                          <span className="bg-slate-600 text-white rounded-md px-2 py-0.5 text-[10px] font-semibold tabular-nums">
+                          <span className="bg-[var(--primary-600)] text-white rounded-md px-2 py-0.5 text-[10px] font-semibold tabular-nums">
                             {pct}%
                           </span>
                         </td>
-                        <td className="py-2.5 px-2 font-medium text-slate-800">{item.name || '—'}</td>
-                        <td className="py-2.5 px-2 text-slate-600 truncate max-w-[100px]" title={item.business || ''}>{item.business || '—'}</td>
-                        <td className="py-2.5 px-2 text-slate-600 font-medium tabular-nums">{item.valueFormatted || '—'}</td>
-                        <td className="py-2.5 px-2 text-slate-500 text-[10px]">{item.stageLabel || item.stage || '—'}</td>
-                        <td className="py-2.5 px-2 text-slate-500 tabular-nums">{item.lastActionDate || '—'}</td>
-                        <td className="py-2.5 px-2 text-slate-500 tabular-nums">{item.daysSinceFollowUp != null ? `${item.daysSinceFollowUp}d` : '—'}</td>
+                        <td className="py-2.5 px-2 font-medium text-[var(--text-primary)]">{item.name || '—'}</td>
+                        <td className="py-2.5 px-2 text-[var(--text-secondary)] truncate max-w-[100px]" title={item.business || ''}>{item.business || '—'}</td>
+                        <td className="py-2.5 px-2 text-[var(--text-secondary)] font-medium tabular-nums">{item.valueFormatted || '—'}</td>
+                        <td className="py-2.5 px-2 text-[var(--text-muted)] text-[10px]">{item.stageLabel || item.stage || '—'}</td>
+                        <td className="py-2.5 px-2 text-[var(--text-muted)] tabular-nums">{item.lastActionDate || '—'}</td>
+                        <td className="py-2.5 px-2 text-[var(--text-muted)] tabular-nums">{item.daysSinceFollowUp != null ? `${item.daysSinceFollowUp}d` : '—'}</td>
                         <td className="py-2 px-2">
                           <button
                             type="button"
@@ -139,7 +139,7 @@ const TodayPriorityExecution = memo(function TodayPriorityExecution({ todayPrior
               {hasMore && <div ref={sentinelRef} className="h-4 flex-shrink-0" aria-hidden />}
             </div>
             {hasMore && (
-              <p className="text-[10px] text-slate-400 mt-2 text-center">
+              <p className="text-[10px] text-[var(--text-muted)] mt-2 text-center">
                 Scroll down to load more · Showing {slice.length} of {priorityLeads.length}
               </p>
             )}

@@ -22,13 +22,11 @@ export function mapApiRowToLead(r) {
     gstNo: r.gst_no || 'N/A',
     productName: productNameValue,
     product_type: productNameValue,
-    state: r.state || 'N/A',
+    state: r.state || 'Unknown',
     division,
     enquiryBy: r.lead_source || 'N/A',
     customerType: r.customer_type || 'N/A',
     date: r.date ? new Date(r.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-    // Do not default null/empty DB values to 'pending' — that string was being re-sent on save and
-    // made the backend think sales was set while the UI showed "PENDING" as placeholder.
     salesStatus: r.sales_status != null && String(r.sales_status).trim() !== '' ? String(r.sales_status).trim() : '',
     salesStatusRemark: r.sales_status_remark || null,
     salesStatusDate: new Date(r.updated_at || r.created_at || Date.now()).toLocaleString(),
