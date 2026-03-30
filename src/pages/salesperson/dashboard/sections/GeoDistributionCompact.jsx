@@ -89,7 +89,7 @@ const GeoDistributionCompact = memo(function GeoDistributionCompact({ indiaGeo, 
   const HEADER_GRADIENT = { background: 'linear-gradient(135deg, #2563EB 0%, #1ECAD3 100%)' };
 
   return (
-    <div className="salesperson-dashboard-card overflow-hidden w-full rounded-xl border-2 transition-all duration-300 hover:shadow-lg" style={{ borderColor: 'rgba(37, 99, 235, 0.25)' }}>
+    <div className="salesperson-dashboard-card overflow-hidden min-w-0 w-full rounded-xl border-2 transition-all duration-300 hover:shadow-lg" style={{ borderColor: 'rgba(37, 99, 235, 0.25)' }}>
       <div className="relative overflow-hidden px-4 py-3 text-white" style={HEADER_GRADIENT}>
         <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-full" style={{ background: 'rgba(255,255,255,0.15)' }} />
         <h3 className="relative z-10 text-base font-bold m-0">Geographic Performance</h3>
@@ -135,7 +135,7 @@ const GeoDistributionCompact = memo(function GeoDistributionCompact({ indiaGeo, 
           </div>
         </div>
 
-        <div className="border border-[var(--border)] rounded-lg overflow-hidden bg-[var(--bg-card)]">
+        <div className="border border-[var(--border)] rounded-lg overflow-hidden bg-[var(--bg-card)] min-w-0">
           <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-secondary)]">
             <button
               type="button"
@@ -155,15 +155,15 @@ const GeoDistributionCompact = memo(function GeoDistributionCompact({ indiaGeo, 
               </button>
             )}
           </div>
-          <div className="max-h-[220px] overflow-auto">
-            <table className="w-full text-[12px]">
+          <div className="max-h-[220px] overflow-auto relative">
+            <table className="w-full min-w-[560px] text-[12px] border-separate border-spacing-0">
               <thead>
-                <tr className="border-b border-[var(--border)] bg-[var(--surface-secondary)]/80 sticky top-0">
-                  <th className="text-left py-2 px-2 font-semibold text-[var(--text-secondary)]">State</th>
-                  <th className="text-right py-2 px-2 font-semibold text-[var(--text-secondary)]">Leads</th>
-                  <th className="text-right py-2 px-2 font-semibold text-[var(--text-secondary)]">Orders</th>
-                  <th className="text-right py-2 px-2 font-semibold text-[var(--text-secondary)]">Revenue</th>
-                  <th className="text-right py-2 px-2 font-semibold text-[var(--text-secondary)]">Conversion %</th>
+                <tr className="border-b border-[var(--border)]">
+                  <th className="sticky top-0 z-10 text-left py-2 px-2 font-semibold text-[var(--text-secondary)] bg-[var(--surface-secondary)]">State</th>
+                  <th className="sticky top-0 z-10 text-right py-2 px-2 font-semibold text-[var(--text-secondary)] bg-[var(--surface-secondary)]">Leads</th>
+                  <th className="sticky top-0 z-10 text-right py-2 px-2 font-semibold text-[var(--text-secondary)] bg-[var(--surface-secondary)]">Orders</th>
+                  <th className="sticky top-0 z-10 text-right py-2 px-2 font-semibold text-[var(--text-secondary)] bg-[var(--surface-secondary)]">Revenue</th>
+                  <th className="sticky top-0 z-10 text-right py-2 px-2 font-semibold text-[var(--text-secondary)] bg-[var(--surface-secondary)]">Conversion %</th>
                 </tr>
               </thead>
               <tbody>

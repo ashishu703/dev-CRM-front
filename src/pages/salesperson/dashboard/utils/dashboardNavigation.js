@@ -38,10 +38,13 @@ export const CARD_FILTER = {
  * @param {string} [date] - YYYY-MM-DD
  * @param {string} [stageKey] - for pipeline_stage e.g. APPOINTMENT SCHEDULED
  */
-export function setDashboardLeadsFilter(filterType, date, stageKey) {
+export function setDashboardLeadsFilter(filterType, date, stageKey, extra = null) {
   const payload = { filter: filterType };
   if (date) payload.date = date;
   if (stageKey) payload.stageKey = stageKey;
+  if (extra && typeof extra === 'object') {
+    Object.assign(payload, extra);
+  }
   try {
     sessionStorage.setItem(DASHBOARD_FILTER_KEY, JSON.stringify(payload));
   } catch (_) {}

@@ -93,8 +93,12 @@ function IndiaGeoJSONLayer({ stateCountMap, stateMetaMap, onStateClick }) {
 
 const IndiaMapView = memo(function IndiaMapView({ stateCountMap = {}, stateMetaMap = {}, onStateClick }) {
   return (
-    <div className="w-full rounded-lg overflow-hidden bg-[var(--bg-card)] border border-[var(--border)]" style={{ height: MAP_HEIGHT }}>
+    <div
+      className="w-full min-w-0 relative isolate rounded-lg overflow-hidden bg-[var(--bg-card)] border border-[var(--border)]"
+      style={{ height: MAP_HEIGHT }}
+    >
       <MapContainer
+        className="h-full w-full"
         center={[20.5937, 78.9629]}
         zoom={4.2}
         minZoom={3}

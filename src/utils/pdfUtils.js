@@ -18,7 +18,6 @@ export const generateQuotationPDF = async (quotationData) => {
   tempDiv.style.visibility = 'visible';
   tempDiv.style.opacity = '1';
 
-  // Read bank details from quotation (DB JSON can be string or object).
   const rawBankDetails = quotationData?.bank_details || quotationData?.bankDetails || null;
   let bankDetails = null;
   try {

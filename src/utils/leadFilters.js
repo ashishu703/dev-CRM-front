@@ -1,5 +1,4 @@
 import { IDMatcher } from '../services/LeadsFilterService';
-import { processInChunks } from './debounce';
 
 export const calculateAssignedCounts = (leads, isLeadAssigned) => {
   let assignedCount = 0;
@@ -91,12 +90,7 @@ const filterChunk = (chunk, searchLower, assignmentFilter, statusFilter, filtere
     }
     
     if (hasCustomerIdFilter) {
-      const matches = IDMatcher.matchesLead(lead, filteredCustomerIds);
-      if (filtered.length < 3 && filteredCustomerIds.size > 0 && filteredCustomerIds.size < 10) {
-        const leadIds = [lead.id, lead.customerId, lead.customer_id].filter(id => id != null);
-        console.log(`[Filter Match] Lead ID: ${lead.id}, Lead IDs: [${leadIds.join(', ')}], Customer ID Set: [${Array.from(filteredCustomerIds).join(', ')}], Match: ${matches}`);
-      }
-      if (!matches) {
+      if (!IDMatcher.matchesLead(lead, filteredCustomerIds)) {
         continue;
       }
     }

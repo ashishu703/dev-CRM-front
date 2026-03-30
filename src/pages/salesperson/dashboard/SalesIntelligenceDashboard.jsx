@@ -1,4 +1,4 @@
-import React, { memo, useState, useMemo } from 'react';
+import React, { memo, useState, useMemo, useCallback } from 'react';
 import { Calendar } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useGetDashboardSummaryQuery } from '../../../features/dashboard/dashboardApi';
@@ -14,13 +14,13 @@ import {
   RunningOrderSection,
 } from './sections';
 import SalesIntelligenceSkeleton from './SalesIntelligenceSkeleton';
-import { createDashboardCardHandler } from './utils/dashboardNavigation';
+import { createDashboardCardHandler, setDashboardLeadsFilter } from './utils/dashboardNavigation';
 
 const CARD_GAP = 'gap-6';
 const SALES_DEPARTMENT_TYPES = ['office_sales', 'telesales', 'marketing_sales'];
 
 const SalesIntelligenceDashboard = memo(function SalesIntelligenceDashboard({
-  isDarkMode,
+  isDarkMoe,
   onNavigate,
   mode = 'salesperson',
 }) {
@@ -99,6 +99,15 @@ const SalesIntelligenceDashboard = memo(function SalesIntelligenceDashboard({
     () => createDashboardCardHandler(mode, navigate, date),
     [mode, navigate, date]
   );
+  const handlePriorityLeadCall = useCallback((leadItem) => {
+    if (!leadItem?.id) return;
+    if (mode === 'salesperson') {
+      navigate('customers', leadItem.id);
+      return;
+    }
+    setDashboardLeadsFilter('lead_priority', date, null, { leadId: String(leadItem.id) });
+    navigate('leads');
+  }, [mode, navigate, date]);
 
   if (isLoading) {
     return <SalesIntelligenceSkeleton />;
@@ -216,6 +225,7 @@ const SalesIntelligenceDashboard = memo(function SalesIntelligenceDashboard({
         <TodayPriorityExecution
           todayPriority={summary?.todayPriority}
           onNavigate={onNavigate}
+          onLeadCall={handlePriorityLeadCall}
           isLoading={false}
         />
 

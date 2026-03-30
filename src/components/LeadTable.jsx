@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Hash, User, Building, Shield, Tag, Clock, Settings,
   Calendar, CheckCircle, XCircle, Edit, Eye, Phone, RefreshCw
@@ -67,6 +67,8 @@ const LeadTable = ({
   onSalesStatusChange,
   onAppointmentChange
 }) => {
+  const selectedLeadIdsSet = useMemo(() => new Set(selectedLeadIds), [selectedLeadIds]);
+
   return (
     <div
       className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-gray-200/50 overflow-hidden w-full max-w-full"
@@ -285,7 +287,7 @@ const LeadTable = ({
               </tr>
             ) : (
               filteredLeads.map((lead, index) => {
-                const uniqueKey = lead.id != null ? `lead-${lead.id}-${index}${lead._renderIndex != null ? `-${lead._renderIndex}` : ''}` : `lead-no-id-${index}`;
+                const uniqueKey = lead.id != null ? `lead-${lead.id}` : `lead-no-id-${index}`;
                 return (
                   <tr 
                     key={uniqueKey} 
@@ -295,7 +297,7 @@ const LeadTable = ({
                     <td className={TD_CLASS}>
                       <input
                         type="checkbox"
-                        checked={selectedLeadIds.includes(lead.id)}
+                        checked={selectedLeadIdsSet.has(lead.id)}
                         onChange={() => toggleSelectOne(lead.id)}
                         title={isLeadAssigned(lead) ? 'Click to reassign' : 'Select for assignment'}
                         className="rounded-full w-3.5 h-3.5 cursor-pointer"
@@ -376,5 +378,5 @@ const LeadTable = ({
   );
 };
 
-export default LeadTable;
+export default React.memo(LeadTable);
 

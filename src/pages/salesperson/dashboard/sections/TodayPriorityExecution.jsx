@@ -17,7 +17,7 @@ const ROW_BORDER = {
   Other: 'border-l-4 border-l-slate-500',
 };
 
-const TodayPriorityExecution = memo(function TodayPriorityExecution({ todayPriority, onNavigate, isLoading }) {
+const TodayPriorityExecution = memo(function TodayPriorityExecution({ todayPriority, onNavigate, onLeadCall, isLoading }) {
   const { priorityLeads = [] } = todayPriority || {};
   const [shown, setShown] = useState(PAGE_SIZE);
   const scrollContainerRef = useRef(null);
@@ -46,6 +46,10 @@ const TodayPriorityExecution = memo(function TodayPriorityExecution({ todayPrior
   }, [loadMore, priorityLeads.length]);
 
   const handleCall = (item) => {
+    if (onLeadCall && typeof onLeadCall === 'function') {
+      onLeadCall(item);
+      return;
+    }
     if (onNavigate && item?.id) onNavigate('customers', item.id);
   };
 
@@ -86,19 +90,19 @@ const TodayPriorityExecution = memo(function TodayPriorityExecution({ todayPrior
           <>
             <div
               ref={scrollContainerRef}
-              className="overflow-x-auto overflow-y-auto max-h-[320px] -mx-1 scroll-smooth"
+              className="overflow-x-auto overflow-y-auto max-h-[320px] -mx-1 scroll-smooth relative"
             >
-              <table className="w-full text-[11px]">
-                <thead className="sticky top-0 bg-[var(--surface-secondary)]/95 backdrop-blur-sm z-10 border-b border-[var(--border)]">
+              <table className="w-full text-[11px] border-separate border-spacing-0">
+                <thead className="border-b border-[var(--border)]">
                   <tr>
-                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Priority</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Lead</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Business</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Deal</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Stage</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Last action</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Days since F/U</th>
-                    <th className="text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Action</th>
+                    <th className="sticky top-0 z-10 bg-[var(--surface-secondary)] text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Priority</th>
+                    <th className="sticky top-0 z-10 bg-[var(--surface-secondary)] text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Lead</th>
+                    <th className="sticky top-0 z-10 bg-[var(--surface-secondary)] text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Business</th>
+                    <th className="sticky top-0 z-10 bg-[var(--surface-secondary)] text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Deal</th>
+                    <th className="sticky top-0 z-10 bg-[var(--surface-secondary)] text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Stage</th>
+                    <th className="sticky top-0 z-10 bg-[var(--surface-secondary)] text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Last action</th>
+                    <th className="sticky top-0 z-10 bg-[var(--surface-secondary)] text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Days since F/U</th>
+                    <th className="sticky top-0 z-10 bg-[var(--surface-secondary)] text-left py-2.5 px-2 font-semibold text-[var(--text-secondary)] text-[11px]">Action</th>
                   </tr>
                 </thead>
                 <tbody>

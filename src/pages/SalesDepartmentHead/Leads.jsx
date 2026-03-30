@@ -39,8 +39,91 @@ import departmentHeadService from '../../api/admin_api/departmentHeadService';
 import proformaInvoiceService from '../../api/admin_api/proformaInvoiceService';
 import { DASHBOARD_FILTER_KEY } from '../salesperson/dashboard/utils/dashboardNavigation';
 
+const DEFAULT_COLUMN_FILTERS = {
+  customerId: '',
+  customer: '',
+  business: '',
+  address: '',
+  state: '',
+  division: '',
+  phone: '',
+  email: '',
+  gstNo: '',
+  leadSource: '',
+  productNames: '',
+  category: '',
+  followUpStatus: '',
+  salesStatus: '',
+  telecallerStatus: '',
+  paymentStatus: '',
+  createdAt: '',
+  updatedAt: ''
+};
+
+const DEFAULT_ENQUIRY_FILTERS = {
+  salesperson: '',
+  telecaller: '',
+  state: '',
+  division: '',
+  follow_up_status: '',
+  sales_status: '',
+  enquiry_date: ''
+};
+
+const DEFAULT_ENQUIRY_VISIBLE_COLUMNS = {
+  customer_name: true,
+  business: true,
+  state: true,
+  division: true,
+  generated_by: true,
+  address: true,
+  enquired_product: true,
+  product_quantity: true,
+  product_remark: true,
+  follow_up_status: false,
+  follow_up_remark: false,
+  sales_status: false,
+  sales_status_remark: false,
+  salesperson: false,
+  telecaller: false,
+  enquiry_date: false
+};
+
+const ALL_ENQUIRY_VISIBLE_COLUMNS = {
+  ...DEFAULT_ENQUIRY_VISIBLE_COLUMNS,
+  follow_up_status: true,
+  follow_up_remark: true,
+  sales_status: true,
+  sales_status_remark: true,
+  salesperson: true,
+  telecaller: true,
+  enquiry_date: true
+};
+
+const DEFAULT_VISIBLE_COLUMNS = {
+  customerId: false,
+  customer: true,
+  business: true,
+  address: true,
+  state: true,
+  division: false,
+  followUpStatus: true,
+  salesStatus: true,
+  assignedSalesperson: true,
+  assignedTelecaller: true,
+  gstNo: false,
+  leadSource: false,
+  productNames: false,
+  category: false,
+  createdAt: false,
+  telecallerStatus: false,
+  paymentStatus: false,
+  updatedAt: false
+};
+
 const LeadsSimplified = () => {
   const [activeTab, setActiveTab] = useState('leads');
+  const [dashboardFilterPayload, setDashboardFilterPayload] = useState(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -49,15 +132,16 @@ const LeadsSimplified = () => {
       if (!raw) return;
       const payload = JSON.parse(raw);
       sessionStorage.removeItem(DASHBOARD_FILTER_KEY);
+      setDashboardFilterPayload(payload || null);
       if (payload?.filter === 'last_call') setActiveTab('lastCall');
       else if (payload?.filter === 'enquiries') setActiveTab('enquiry');
+      else setActiveTab('leads');
     } catch (_) {}
   }, []);
   const [leadsData, setLeadsData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
   
-  // Enquiry state with pagination
   const [enquiries, setEnquiries] = useState([]);
   const [enquiriesGroupedByDate, setEnquiriesGroupedByDate] = useState({});
   const [enquiriesLoading, setEnquiriesLoading] = useState(false);
@@ -65,36 +149,10 @@ const LeadsSimplified = () => {
   const [enquiryLimit, setEnquiryLimit] = useState(50);
   const [enquiryTotal, setEnquiryTotal] = useState(0);
   
-  // Enquiry filters
-  const [enquiryFilters, setEnquiryFilters] = useState({
-    salesperson: '',
-    telecaller: '',
-    state: '',
-    division: '',
-    follow_up_status: '',
-    sales_status: '',
-    enquiry_date: ''
-  });
+  const [enquiryFilters, setEnquiryFilters] = useState(DEFAULT_ENQUIRY_FILTERS);
   const [showEnquiryFilters, setShowEnquiryFilters] = useState(false);
   
-  const [enquiryVisibleColumns, setEnquiryVisibleColumns] = useState({
-    customer_name: true,
-    business: true,
-    state: true,
-    division: true,
-    generated_by: true,
-    address: true,
-    enquired_product: true,
-    product_quantity: true,
-    product_remark: true,
-    follow_up_status: false,
-    follow_up_remark: false,
-    sales_status: false,
-    sales_status_remark: false,
-    salesperson: false,
-    telecaller: false,
-    enquiry_date: false
-  });
+  const [enquiryVisibleColumns, setEnquiryVisibleColumns] = useState(DEFAULT_ENQUIRY_VISIBLE_COLUMNS);
   const [showEnquiryColumnModal, setShowEnquiryColumnModal] = useState(false);
   const [showEnquiryEditModal, setShowEnquiryEditModal] = useState(false);
   const [editingEnquiry, setEditingEnquiry] = useState(null);
@@ -116,7 +174,6 @@ const LeadsSimplified = () => {
   });
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-  const [showAll, setShowAll] = useState(false);
   const [total, setTotal] = useState(0);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -139,26 +196,7 @@ const LeadsSimplified = () => {
   const [statusFilter, setStatusFilter] = useState({ type: null, status: null });
   const [assignmentFilter, setAssignmentFilter] = useState(null);
   const [filteredCustomerIds, setFilteredCustomerIds] = useState(new Set());
-  const [columnFilters, setColumnFilters] = useState({
-    customerId: '',
-    customer: '',
-    business: '',
-    address: '',
-    state: '',
-    division: '',
-    phone: '',
-    email: '',
-    gstNo: '',
-    leadSource: '',
-    productNames: '',
-    category: '',
-    followUpStatus: '',
-    salesStatus: '',
-    telecallerStatus: '',
-    paymentStatus: '',
-    createdAt: '',
-    updatedAt: ''
-  });
+  const [columnFilters, setColumnFilters] = useState(DEFAULT_COLUMN_FILTERS);
   const [showColumnFilterRow, setShowColumnFilterRow] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingLead, setEditingLead] = useState(null);
@@ -169,7 +207,6 @@ const LeadsSimplified = () => {
   const [isAllSelected, setIsAllSelected] = useState(false);
   const [showColumnFilter, setShowColumnFilter] = useState(false);
   
-  // Global Filter Panel States
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState({
     tag: '', followUpStatus: '', salesStatus: '', state: '', leadSource: '', productType: '', dateFrom: '', dateTo: ''
@@ -180,26 +217,7 @@ const LeadsSimplified = () => {
   const [sortBy, setSortBy] = useState('none');
   const [sortOrder, setSortOrder] = useState('asc');
   
-  const [visibleColumns, setVisibleColumns] = useState({
-    customerId: false,
-    customer: true,
-    business: true,
-    address: true,
-    state: true,
-    division: false,
-    followUpStatus: true,
-    salesStatus: true,
-    assignedSalesperson: true,
-    assignedTelecaller: true,
-    gstNo: false,
-    leadSource: false,
-    productNames: false,
-    category: false,
-    createdAt: false,
-    telecallerStatus: false,
-    paymentStatus: false,
-    updatedAt: false
-  });
+  const [visibleColumns, setVisibleColumns] = useState(DEFAULT_VISIBLE_COLUMNS);
   const [editFormData, setEditFormData] = useState({
     customer: '',
     email: '',
@@ -270,46 +288,6 @@ const LeadsSimplified = () => {
   const piService = useMemo(() => new PIService(), []);
   const quotationServiceInstance = useMemo(() => new QuotationService(), []);
   const leadsFilterService = useMemo(() => new LeadsFilterService(apiClient), []);
-
-  // Helper function to transform leads (DRY principle) - with proper field mapping
-  const transformLeads = useCallback((leads) => {
-    return leads.map(lead => {
-      // Transform using leadService first to get standard fields
-      const transformed = leadService.transformApiData([lead])[0] || {};
-      
-      // Get all possible field name variations
-      const followUpStatus = lead.follow_up_status || lead.followUpStatus || transformed.follow_up_status || transformed.followUpStatus || null;
-      const followUpRemark = lead.follow_up_remark || lead.followUpRemark || transformed.follow_up_remark || transformed.followUpRemark || null;
-      const salesStatus = lead.sales_status || lead.salesStatus || transformed.sales_status || transformed.salesStatus || null;
-      const salesStatusRemark = lead.sales_status_remark || lead.salesStatusRemark || transformed.sales_status_remark || transformed.salesStatusRemark || null;
-      
-      return {
-        ...lead,
-        ...transformed,
-        productNames: lead.productNamesText || lead.product_names || transformed.productNames || '',
-        updatedAt: lead.updated_at || lead.created_at || transformed.updatedAt || '',
-        assignedSalesperson: lead.assignedSalesperson || lead.assigned_salesperson || transformed.assignedSalesperson || 'Unassigned',
-        assignedTelecaller: lead.assignedTelecaller || lead.assigned_telecaller || transformed.assignedTelecaller || 'Unassigned',
-        follow_up_date: lead.follow_up_date || lead.followUpDate || transformed.follow_up_date || null,
-        follow_up_time: lead.follow_up_time || lead.followUpTime || transformed.follow_up_time || null,
-        follow_up_remark: followUpRemark,
-        follow_up_status: followUpStatus,
-        next_meeting_date: lead.next_meeting_date || lead.nextMeetingDate || transformed.next_meeting_date || null,
-        next_meeting_time: lead.next_meeting_time || lead.nextMeetingTime || transformed.next_meeting_time || null,
-        meeting_date: lead.meeting_date || lead.meetingDate || transformed.meeting_date || null,
-        meeting_time: lead.meeting_time || lead.meetingTime || transformed.meeting_time || null,
-        scheduled_date: lead.scheduled_date || lead.scheduledDate || transformed.scheduled_date || null,
-        scheduled_time: lead.scheduled_time || lead.scheduledTime || transformed.scheduled_time || null,
-        sales_status: salesStatus,
-        sales_status_remark: salesStatusRemark,
-        updated_at: lead.updated_at || lead.updatedAt || transformed.updated_at || null,
-        followUpStatus: followUpStatus,
-        followUpRemark: followUpRemark,
-        salesStatus: salesStatus,
-        salesStatusRemark: salesStatusRemark
-      };
-    });
-  }, [leadService]);
 
   const fetchEnquiries = useCallback(async (forceRefresh = false, page = enquiryPage, limit = enquiryLimit) => {
     if (activeTab !== 'enquiry') return;
@@ -452,7 +430,6 @@ const LeadsSimplified = () => {
     }
   }, [activeTab, lastCallPage, lastCallLimit, fetchLastCallSummary]);
 
-  // Extract unique values from enquiries for filter dropdowns
   const enquiryFilterOptions = useMemo(() => {
     const allEnquiries = Object.values(enquiriesGroupedByDate).flat();
     if (allEnquiries.length === 0 && enquiries.length > 0) {
@@ -494,7 +471,6 @@ const LeadsSimplified = () => {
       }));
   }, [lastCallSummaryData]);
 
-  // Filter enquiries based on selected filters - OPTIMIZED (client-side filtering on paginated data)
   const filteredEnquiries = useMemo(() => {
     // Use paginated enquiries directly (server-side pagination)
     if (!enquiries.length) return [];
@@ -709,7 +685,6 @@ const LeadsSimplified = () => {
     }
   };
 
-  // Handle enquiry delete
   const handleDeleteEnquiry = async (enquiryId) => {
     try {
       setEnquiriesLoading(true);
@@ -728,7 +703,6 @@ const LeadsSimplified = () => {
     }
   };
 
-  // Handle enquiry column visibility
   const toggleEnquiryColumn = (columnKey) => {
     setEnquiryVisibleColumns(prev => ({
       ...prev,
@@ -737,45 +711,11 @@ const LeadsSimplified = () => {
   };
 
   const resetEnquiryColumns = () => {
-    setEnquiryVisibleColumns({
-      customer_name: true,
-      business: true,
-      state: true,
-      division: true,
-      generated_by: true,
-      address: true,
-      enquired_product: true,
-      product_quantity: true,
-      product_remark: true,
-      follow_up_status: false,
-      follow_up_remark: false,
-      sales_status: false,
-      sales_status_remark: false,
-      salesperson: false,
-      telecaller: false,
-      enquiry_date: false
-    });
+    setEnquiryVisibleColumns(DEFAULT_ENQUIRY_VISIBLE_COLUMNS);
   };
 
   const showAllEnquiryColumns = () => {
-    setEnquiryVisibleColumns({
-      customer_name: true,
-      business: true,
-      state: true,
-      division: true,
-      generated_by: true,
-      address: true,
-      enquired_product: true,
-      product_quantity: true,
-      product_remark: true,
-      follow_up_status: true,
-      follow_up_remark: true,
-      sales_status: true,
-      sales_status_remark: true,
-      salesperson: true,
-      telecaller: true,
-      enquiry_date: true
-    });
+    setEnquiryVisibleColumns(ALL_ENQUIRY_VISIBLE_COLUMNS);
   };
 
   const fetchQuotations = async (leadId) => {
@@ -835,7 +775,6 @@ const LeadsSimplified = () => {
         hsn: i.hsn_code || i.hsn,
         hsnCode: i.hsn_code || i.hsn,
         gstRate: i.gst_rate || i.gstRate || 18,
-        // Per-product optional remark (used by some quotation templates)
         remark: i.remark || '',
         product_remark: i.remark || ''
       })),
@@ -986,11 +925,7 @@ const LeadsSimplified = () => {
         if (response.pagination) {
           setTotal(Number(response.pagination.total) || 0);
         }
-        // Only refresh all leads if filters are active
-        const hasActiveFilters = statusFilter.type || assignmentFilter || 
-          Object.values(columnFilters).some(v => v) || 
-          Object.values(enabledFilters).some(Boolean);
-        if (hasActiveFilters) {
+        if (hasActiveLeadFilters()) {
           requestAllLeadsRefresh();
         }
       }
@@ -1028,43 +963,46 @@ const LeadsSimplified = () => {
   };
 
 
-  const requestAllLeadsRefresh = () => {
+  const requestAllLeadsRefresh = useCallback(() => {
     setAllLeadsRefreshKey((prev) => prev + 1);
-  };
+  }, []);
 
-  const buildLeadFetchParams = () => {
+  const hasActiveLeadFilters = useCallback(() => (
+    Boolean(statusFilter.type || assignmentFilter) ||
+    Object.values(columnFilters).some(Boolean) ||
+    Object.values(enabledFilters).some(Boolean)
+  ), [statusFilter.type, assignmentFilter, columnFilters, enabledFilters]);
+
+  const buildLeadFetchParams = useCallback(() => {
     const params = { page };
-    if (limit && limit !== 'all' && limit < 50000) {
-      params.limit = limit;
-    } else {
-      params.limit = 50000;
-    }
-    const trimmedSearch = searchTerm.trim();
+    params.limit = Math.max(1, Number(limit) || 20);
+    const trimmedSearch = debouncedSearchTerm.trim();
     if (trimmedSearch) {
       params.search = trimmedSearch;
     }
     return params;
-  };
+  }, [page, limit, debouncedSearchTerm]);
 
-  const applyLeadResponse = (response, { refreshAll = false } = {}) => {
+  const normalizeLeadDateFields = useCallback((lead) => ({
+    ...lead,
+    follow_up_date: lead.follow_up_date || lead.followUpDate || null,
+    follow_up_time: lead.follow_up_time || lead.followUpTime || null,
+    follow_up_remark: lead.follow_up_remark || lead.followUpRemark || null,
+    follow_up_status: lead.follow_up_status || lead.followUpStatus || null,
+    next_meeting_date: lead.next_meeting_date || lead.nextMeetingDate || null,
+    next_meeting_time: lead.next_meeting_time || lead.nextMeetingTime || null,
+    meeting_date: lead.meeting_date || lead.meetingDate || null,
+    meeting_time: lead.meeting_time || lead.meetingTime || null,
+    scheduled_date: lead.scheduled_date || lead.scheduledDate || null,
+    scheduled_time: lead.scheduled_time || lead.scheduledTime || null,
+    sales_status: lead.sales_status || lead.salesStatus || null,
+    sales_status_remark: lead.sales_status_remark || lead.salesStatusRemark || null,
+    updated_at: lead.updated_at || lead.updatedAt || null
+  }), []);
+
+  const applyLeadResponse = useCallback((response, { refreshAll = false } = {}) => {
     if (!response?.data) return;
-    // Ensure date and time fields are preserved for Last Call filtering - Enhanced for real-time salesperson data
-    const leadsWithDates = response.data.map(lead => ({
-      ...lead,
-      follow_up_date: lead.follow_up_date || lead.followUpDate || null,
-      follow_up_time: lead.follow_up_time || lead.followUpTime || null,
-      follow_up_remark: lead.follow_up_remark || lead.followUpRemark || null,
-      follow_up_status: lead.follow_up_status || lead.followUpStatus || null,
-      next_meeting_date: lead.next_meeting_date || lead.nextMeetingDate || null,
-      next_meeting_time: lead.next_meeting_time || lead.nextMeetingTime || null,
-      meeting_date: lead.meeting_date || lead.meetingDate || null,
-      meeting_time: lead.meeting_time || lead.meetingTime || null,
-      scheduled_date: lead.scheduled_date || lead.scheduledDate || null,
-      scheduled_time: lead.scheduled_time || lead.scheduledTime || null,
-      sales_status: lead.sales_status || lead.salesStatus || null,
-      sales_status_remark: lead.sales_status_remark || lead.salesStatusRemark || null,
-      updated_at: lead.updated_at || lead.updatedAt || null
-    }));
+    const leadsWithDates = response.data.map(normalizeLeadDateFields);
     setLeadsData(leadsWithDates);
     if (response.pagination) {
       setTotal(Number(response.pagination.total) || 0);
@@ -1072,20 +1010,19 @@ const LeadsSimplified = () => {
     if (refreshAll) {
       requestAllLeadsRefresh();
     }
-  };
+  }, [normalizeLeadDateFields, requestAllLeadsRefresh]);
 
-  const loadAllLeadsForFilters = async (force = false) => {
+  const loadAllLeadsForFilters = useCallback(async (force = false) => {
     if (!force) {
       if (allLeadsFetchPromiseRef.current) {
         await allLeadsFetchPromiseRef.current;
-        return allLeadsData;
+        return allLeadsDataRef.current;
       }
-      if (allLeadsData.length > 0) {
-        return allLeadsData;
+      if (allLeadsDataRef.current.length > 0) {
+        return allLeadsDataRef.current;
       }
     }
 
-    // If already loading, wait for existing promise
     if (allLeadsFetchPromiseRef.current) {
       return allLeadsFetchPromiseRef.current;
     }
@@ -1093,26 +1030,9 @@ const LeadsSimplified = () => {
     const fetchPromise = (async () => {
       setLoadingAllLeads(true);
       try {
-        // Use setTimeout to yield to UI thread and prevent blocking
         await new Promise(resolve => setTimeout(resolve, 0));
         const transformed = await leadService.fetchAllLeads();
-        // Ensure date and time fields are preserved for Last Call filtering - Enhanced for real-time salesperson data
-        const leadsWithDates = transformed.map(lead => ({
-          ...lead,
-          follow_up_date: lead.follow_up_date || lead.followUpDate || null,
-          follow_up_time: lead.follow_up_time || lead.followUpTime || null,
-          follow_up_remark: lead.follow_up_remark || lead.followUpRemark || null,
-          follow_up_status: lead.follow_up_status || lead.followUpStatus || null,
-          next_meeting_date: lead.next_meeting_date || lead.nextMeetingDate || null,
-          next_meeting_time: lead.next_meeting_time || lead.nextMeetingTime || null,
-          meeting_date: lead.meeting_date || lead.meetingDate || null,
-          meeting_time: lead.meeting_time || lead.meetingTime || null,
-          scheduled_date: lead.scheduled_date || lead.scheduledDate || null,
-          scheduled_time: lead.scheduled_time || lead.scheduledTime || null,
-          sales_status: lead.sales_status || lead.salesStatus || null,
-          sales_status_remark: lead.sales_status_remark || lead.salesStatusRemark || null,
-          updated_at: lead.updated_at || lead.updatedAt || null
-        }));
+        const leadsWithDates = transformed.map(normalizeLeadDateFields);
         setAllLeadsData(leadsWithDates);
         allLeadsDataRef.current = leadsWithDates;
         return leadsWithDates;
@@ -1126,15 +1046,13 @@ const LeadsSimplified = () => {
 
     allLeadsFetchPromiseRef.current = fetchPromise;
     return fetchPromise;
-  };
+  }, [leadService, normalizeLeadDateFields]);
 
-  // Set ref for fetchLastCallLeads to access (after function is defined)
   useEffect(() => {
     loadAllLeadsForFiltersRef.current = loadAllLeadsForFilters;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Ref assignment - no deps needed
+  }, [loadAllLeadsForFilters]);
 
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     try {
       setLoading(true);
       const response = await leadService.fetchLeads(buildLeadFetchParams());
@@ -1145,16 +1063,11 @@ const LeadsSimplified = () => {
       setLoading(false);
       setInitialLoading(false);
     }
-  };
+  }, [buildLeadFetchParams, leadService, applyLeadResponse]);
 
-  // OPTIMIZED: Only refresh all leads if filters are active
   const handleManualRefresh = () => {
     fetchLeads();
-    // Only refresh all leads if filters are active
-    const hasActiveFilters = statusFilter.type || assignmentFilter || 
-      Object.values(columnFilters).some(v => v) || 
-      Object.values(enabledFilters).some(Boolean);
-    if (hasActiveFilters) {
+    if (hasActiveLeadFilters()) {
       requestAllLeadsRefresh();
     }
   };
@@ -1181,10 +1094,7 @@ const LeadsSimplified = () => {
         setSelectedLeadIds([]);
         setIsAllSelected(false);
         await fetchLeads();
-        const hasActiveFilters = statusFilter.type || assignmentFilter || 
-          Object.values(columnFilters).some(v => v) || 
-          Object.values(enabledFilters).some(Boolean);
-        if (hasActiveFilters) {
+        if (hasActiveLeadFilters()) {
           requestAllLeadsRefresh();
         }
       } else {
@@ -1208,12 +1118,10 @@ const LeadsSimplified = () => {
     exportToExcel(leadsToExport, 'leads_export');
   };
 
-  const fetchQuotationAndPICounts = async () => {
+  const fetchQuotationAndPICounts = useCallback(async () => {
     try {
       setLoadingCounts(true);
-      // Quotation approval is no longer required (pricing decided upstream),
-      // so don't fetch "pending/verification/sent_for_approval" quotation buckets here.
-      const result = await leadsFilterService.fetchQuotationAndPICounts({ includeQuotationPending: false });
+      const result = await leadsFilterService.fetchQuotationAndPICounts();
       setQuotationCounts(result.quotationCounts);
       setPiCounts(result.piCounts);
       return result;
@@ -1222,10 +1130,10 @@ const LeadsSimplified = () => {
     } finally {
       setLoadingCounts(false);
     }
-  };
+  }, [leadsFilterService]);
 
   /** DH: Fetch pending order cancel and PI amendment counts for notification pills */
-  const fetchApprovalCounts = async () => {
+  const fetchApprovalCounts = useCallback(async () => {
     try {
       setLoadingApprovalCounts(true);
       const [cancelRes, revisedRes] = await Promise.all([
@@ -1242,18 +1150,12 @@ const LeadsSimplified = () => {
     } finally {
       setLoadingApprovalCounts(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    // Sync showAll state with limit value
-    if (limit >= 50000) {
-      setShowAll(true);
-    } else {
-      setShowAll(false);
-    }
+    setPage(1);
   }, [limit]);
 
-  // OPTIMIZED: Debounce search term to prevent excessive filtering
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
@@ -1261,55 +1163,21 @@ const LeadsSimplified = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Quotation approval is not used by Department Head – clear quotation filter if it was active
   useEffect(() => {
-    if (statusFilter.type === 'quotation') {
-      setStatusFilter({ type: null, status: null });
-      setFilteredCustomerIds(new Set());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    fetchQuotationAndPICounts().catch(() => {});
+    fetchApprovalCounts().catch(() => {});
+  }, [fetchQuotationAndPICounts, fetchApprovalCounts]);
 
-  // OPTIMIZED: Load counts on initial mount, but don't load all leads until filters are used
   useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        // Kick off counts in background so it doesn't block first paint
-        fetchQuotationAndPICounts().catch(() => {});
-        fetchApprovalCounts().catch(() => {});
-        // Fetch paginated leads for display (only 10 initially)
-        await fetchLeads();
-      } catch (error) {
-        console.error('Error loading initial data:', error);
-      }
-    };
-    
-    loadInitialData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only on mount
+    if (statusFilter.type || assignmentFilter) return;
+    fetchLeads();
+  }, [page, limit, debouncedSearchTerm, statusFilter.type, assignmentFilter, fetchLeads]);
 
-  // Separate effect for pagination/search changes (only when no filters active)
   useEffect(() => {
-    // Only fetch paginated leads if no filters are active
-    // When filters are active, we use allLeadsData and filter client-side
-    if (!statusFilter.type && !assignmentFilter) {
-      fetchLeads();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, searchTerm]);
-
-  // OPTIMIZED: Only load all leads when filters are actually active
-  useEffect(() => {
-    const hasActiveFilters = statusFilter.type || assignmentFilter || 
-      Object.values(columnFilters).some(v => v) || 
-      Object.values(enabledFilters).some(Boolean);
-    
-    // Only fetch all leads if filters are active or explicitly requested
-    if (hasActiveFilters || allLeadsRefreshKey > 0) {
+    if (hasActiveLeadFilters() || allLeadsRefreshKey > 0) {
       loadAllLeadsForFilters(true).catch(() => {});
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allLeadsRefreshKey, statusFilter.type, assignmentFilter, enabledFilters]);
+  }, [allLeadsRefreshKey, hasActiveLeadFilters, loadAllLeadsForFilters]);
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
@@ -1332,7 +1200,6 @@ const LeadsSimplified = () => {
     }
   }, [showPreviewModal, previewLead]);
 
-  // Fetch quotations when CustomerDetailSidebar opens
   useEffect(() => {
     if (showCustomerTimeline && timelineLead && timelineLead.id) {
       fetchQuotations(timelineLead.id);
@@ -1402,36 +1269,20 @@ const LeadsSimplified = () => {
     }));
   };
 
-  const isValueAssigned = (val) => {
+  const isValueAssigned = useCallback((val) => {
     if (!val) return false;
     const s = String(val).trim().toLowerCase();
     return s !== 'unassigned' && s !== 'n/a' && s !== 'na' && s !== '-';
-  };
+  }, []);
 
-  const isLeadAssigned = (lead) =>
-    isValueAssigned(lead.assignedSalesperson) || isValueAssigned(lead.assignedTelecaller);
+  const isLeadAssigned = useCallback(
+    (lead) =>
+      isValueAssigned(lead.assignedSalesperson) || isValueAssigned(lead.assignedTelecaller),
+    [isValueAssigned]
+  );
 
   const resetColumns = () => {
-    setVisibleColumns({
-      customerId: false,
-      customer: true,
-      business: true,
-      address: true,
-      state: true,
-      division: false,
-      followUpStatus: true,
-      salesStatus: true,
-      assignedSalesperson: true,
-      assignedTelecaller: true,
-      gstNo: false,
-      leadSource: false,
-      productNames: false,
-      category: false,
-      createdAt: false,
-      telecallerStatus: false,
-      paymentStatus: false,
-      updatedAt: false
-    });
+    setVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
   };
 
   const showAllColumns = () => {
@@ -1448,13 +1299,10 @@ const LeadsSimplified = () => {
 
   const hasStatusFilter = Boolean(statusFilter.type && statusFilter.status);
   const hasAssignmentFilter = Boolean(assignmentFilter);
-  // OPTIMIZED: Use all leads when filters are active (quotation, PI, or assignment)
-  // Use statusFilterLeadsRef when available (avoids timing issue - leads loaded in same click as filter)
   const activeLeadPool = (hasStatusFilter || hasAssignmentFilter)
     ? (statusFilterLeadsRef.current?.length > 0 ? statusFilterLeadsRef.current : allLeadsDataRef.current?.length > 0 ? allLeadsDataRef.current : allLeadsData?.length > 0 ? allLeadsData : []) 
     : leadsData;
 
-  // Get unique filter options for global filter panel
   const getUniqueFilterOptions = useMemo(() => {
     const cleanValue = (value) => {
       if (!value) return null;
@@ -1489,7 +1337,6 @@ const LeadsSimplified = () => {
     };
   }, [allLeadsData, leadsData]);
 
-  // Global filter handlers
   const handleAdvancedFilterChange = useCallback((filterKey, value) => {
     setAdvancedFilters(prev => ({ ...prev, [filterKey]: value }));
   }, []);
@@ -1528,10 +1375,23 @@ const LeadsSimplified = () => {
     setSortOrder(newSortOrder);
   }, []);
 
-  // OPTIMIZED: useMemo with async chunk processing for large arrays
+  const normalizeText = useCallback((value) => String(value || '').trim().toLowerCase(), []);
+  const toDateKey = useCallback((value) => {
+    if (!value) return null;
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return null;
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, []);
+  const isSameLeadDate = useCallback((lead, date) => {
+    if (!date) return true;
+    const leadDate = toDateKey(lead?.createdAt || lead?.created_at || lead?.date || lead?.enquiryDate);
+    return leadDate === date;
+  }, [toDateKey]);
+
   const filteredLeads = useMemo(() => {
-    // For large arrays, use chunk processing (handled inside filterLeads)
-    // For now, return synchronous result (filterLeads will handle chunking internally)
     let result = filterLeads(
       activeLeadPool,
       debouncedSearchTerm, // Use debounced search instead of immediate
@@ -1638,8 +1498,40 @@ const LeadsSimplified = () => {
       });
     }
 
+    if (dashboardFilterPayload?.filter) {
+      const filterType = dashboardFilterPayload.filter;
+      const filterDate = dashboardFilterPayload.date || null;
+      const stageKey = normalizeText(dashboardFilterPayload.stageKey);
+      const focusLeadId = dashboardFilterPayload.leadId != null ? String(dashboardFilterPayload.leadId) : null;
+
+      result = result.filter((lead) => {
+        const leadId = lead?.id != null ? String(lead.id) : '';
+        const followUpStatus = normalizeText(lead?.followUpStatus || lead?.connectedStatus || lead?.telecallerStatus);
+        const hasFollowUp = Boolean(followUpStatus && !['pending', 'none', 'new'].includes(followUpStatus));
+        const hasQuotation = Number(lead?.quotationCount || lead?.quotation_count || lead?.totalQuotation || 0) > 0;
+        const hasPi = Number(lead?.piCount || lead?.pi_count || lead?.totalPI || 0) > 0;
+
+        switch (filterType) {
+          case 'new_leads_added':
+            return isSameLeadDate(lead, filterDate);
+          case 'no_follow_up':
+            return isSameLeadDate(lead, filterDate) && !hasFollowUp;
+          case 'pipeline_stage':
+            return (!filterDate || isSameLeadDate(lead, filterDate)) && (!stageKey || followUpStatus === stageKey);
+          case 'quotation_created':
+            return (!filterDate || isSameLeadDate(lead, filterDate)) && hasQuotation;
+          case 'pi_created':
+            return (!filterDate || isSameLeadDate(lead, filterDate)) && hasPi;
+          case 'lead_priority':
+            return focusLeadId ? leadId === focusLeadId : true;
+          default:
+            return true;
+        }
+      });
+    }
+
     return result;
-  }, [activeLeadPool, debouncedSearchTerm, assignmentFilter, statusFilter, filteredCustomerIds, isLeadAssigned, columnFilters, enabledFilters, advancedFilters, sortBy, sortOrder]);
+  }, [activeLeadPool, debouncedSearchTerm, assignmentFilter, statusFilter, filteredCustomerIds, isLeadAssigned, columnFilters, enabledFilters, advancedFilters, sortBy, sortOrder, dashboardFilterPayload, isSameLeadDate, normalizeText]);
 
   const uniqueFilteredLeads = useMemo(() => {
     const seen = new Set();
@@ -1662,14 +1554,12 @@ const LeadsSimplified = () => {
     [uniqueFilteredLeads, isLeadAssigned]
   );
 
-  // OPTIMIZED: useCallback to prevent unnecessary re-renders
   const toggleSelectAll = useCallback(() => {
     if (isAllSelected) {
       setSelectedLeadIds([]);
       setIsAllSelected(false);
       return;
     }
-    // Select all visible leads (including assigned ones for reassignment)
     const allVisibleLeadIds = uniqueFilteredLeads.map(l => l.id).filter(id => id != null);
     setSelectedLeadIds([...allVisibleLeadIds]);
     setIsAllSelected(allVisibleLeadIds.length > 0);
@@ -1684,27 +1574,30 @@ const LeadsSimplified = () => {
         prevSet.add(id);
       }
       const next = Array.from(prevSet);
-      // Check if all visible leads are selected (including assigned ones)
       setIsAllSelected(next.length > 0 && next.length === uniqueFilteredLeads.length);
       return next;
     });
   }, [uniqueFilteredLeads]);
 
   const tableLoading = loading || ((hasStatusFilter || hasAssignmentFilter) && loadingAllLeads && allLeadsData.length === 0);
-  const paginationDisabled = hasStatusFilter || hasAssignmentFilter;
-  const effectiveLimit = (limit === 'all' || limit >= 50000) ? total : limit;
-  const totalPages = showAll ? 1 : Math.max(1, Math.ceil(total / effectiveLimit) || 1);
-  const pageStart = total === 0 ? 0 : showAll ? 1 : (page - 1) * effectiveLimit + 1;
-  const pageEnd = total === 0 ? 0 : showAll ? total : Math.min(page * effectiveLimit, total);
-  const paginationSummary = paginationDisabled
-    ? `${uniqueFilteredLeads.length} matching lead${uniqueFilteredLeads.length === 1 ? '' : 's'}`
-    : showAll 
-      ? `Showing all ${total} leads`
-      : `${pageStart} - ${pageEnd} of ${total}`;
+  const paginationDisabled = false;
+  const hasClientSideFilteredPagination = hasStatusFilter || hasAssignmentFilter;
+  const displayTotal = hasClientSideFilteredPagination ? uniqueFilteredLeads.length : total;
+  const effectiveLimit = Math.max(1, Number(limit) || 20);
+  const totalPages = Math.max(1, Math.ceil(displayTotal / effectiveLimit) || 1);
+  const safePage = Math.min(page, totalPages);
+  const pageStart = displayTotal === 0 ? 0 : (safePage - 1) * effectiveLimit + 1;
+  const pageEnd = displayTotal === 0 ? 0 : Math.min(safePage * effectiveLimit, displayTotal);
+  const leadsForTable = useMemo(() => {
+    if (!hasClientSideFilteredPagination) {
+      return uniqueFilteredLeads;
+    }
+    const start = (safePage - 1) * effectiveLimit;
+    return uniqueFilteredLeads.slice(start, start + effectiveLimit);
+  }, [hasClientSideFilteredPagination, safePage, effectiveLimit, uniqueFilteredLeads]);
+  const paginationSummary = `${pageStart} - ${pageEnd} of ${displayTotal}`;
   
-  // OPTIMIZED: Calculate assigned counts from ALL leads, not just current page
   const { assignedCount, unassignedCount } = useMemo(() => {
-    // Use all leads data if available, otherwise use current page data
     const leadsToCount = allLeadsData.length > 0 ? allLeadsData : leadsData;
     return calculateAssignedCounts(leadsToCount, isLeadAssigned);
   }, [allLeadsData, leadsData, isLeadAssigned]);
@@ -1787,6 +1680,43 @@ const LeadsSimplified = () => {
       setLoadingAllLeads(false);
     }
   };
+
+  const handleAssignmentFilterChange = useCallback(async (filter) => {
+    if (filter && allLeadsDataRef.current.length === 0) {
+      setLoadingAllLeads(true);
+      try {
+        await loadAllLeadsForFilters(true);
+      } catch (err) {
+        console.error('Error loading all leads for assignment filter:', err);
+        toastManager.error('Failed to load leads for filtering');
+      } finally {
+        setLoadingAllLeads(false);
+      }
+    }
+    setAssignmentFilter(filter);
+    setPage(1);
+  }, [loadAllLeadsForFilters]);
+
+  const handleClearAllFilters = useCallback(() => {
+    setStatusFilter({ type: null, status: null });
+    setAssignmentFilter(null);
+    setFilteredCustomerIds(new Set());
+    statusFilterLeadsRef.current = [];
+    setColumnFilters(DEFAULT_COLUMN_FILTERS);
+  }, []);
+
+  const handleViewTimeline = useCallback((lead) => {
+    setTimelineLead(lead);
+    setShowCustomerTimeline(true);
+  }, []);
+
+  const handleColumnFilterChange = useCallback((key, value) => {
+    setColumnFilters(prev => ({ ...prev, [key]: value }));
+  }, []);
+
+  const handleToggleColumnFilterRow = useCallback(() => {
+    setShowColumnFilterRow(prev => !prev);
+  }, []);
 
   const handleCustomerSave = async (customerData) => {
     try {
@@ -2024,7 +1954,6 @@ const LeadsSimplified = () => {
       const selectedBranch = completeQuotation.branch || DEFAULT_BRANCH;
 
       const formattedPiData = {
-        // Header & identity
         quotationNumber,
         quotationDate: piDate,
         invoiceNumber: pi.pi_number || pi.piNumber || quotationNumber,
@@ -2121,7 +2050,6 @@ const LeadsSimplified = () => {
     }
   };
 
-  // Handle edit
   const handleEdit = (lead) => {
     setEditingLead(lead);
     setEditFormData({
@@ -2167,7 +2095,6 @@ const LeadsSimplified = () => {
     }
   };
 
-  // Handle activity view
   const handleViewActivity = (activity) => {
     const activityType = activity.activity_type;
     const metadata = activity.metadata || {};
@@ -2223,7 +2150,6 @@ const LeadsSimplified = () => {
     }
   };
 
-  // Handle activity delete
   const handleDeleteActivity = async (activity) => {
     const activityType = activity.activity_type;
     const metadata = activity.metadata || {};
@@ -2233,13 +2159,11 @@ const LeadsSimplified = () => {
         case 'document_uploaded':
           // Delete document
           toastManager.info('Document deletion will be implemented');
-          // TODO: Implement document deletion API call
           break;
         
         case 'mail_sent':
           // Delete email
           toastManager.info('Email deletion will be implemented');
-          // TODO: Implement email deletion API call
           break;
         
         default:
@@ -2250,11 +2174,9 @@ const LeadsSimplified = () => {
     }
   };
 
-  // Handle enquiry edit from activity timeline
   const handleEditEnquiryFromActivity = (activity) => {
     const metadata = activity.metadata || {};
     toastManager.info('Enquiry editing will be implemented');
-    // TODO: Open enquiry edit modal with metadata
     setViewingActivity(activity);
     setShowActivityModal(true);
   };
@@ -2265,12 +2187,21 @@ const LeadsSimplified = () => {
       setLeadsData(prev =>
         prev.map((l) => (l.id === leadId ? { ...l, [field]: newStatus } : l))
       );
-      requestAllLeadsRefresh?.();
+      requestAllLeadsRefresh();
       toastManager.success(`${field === 'followUpStatus' ? 'Follow up' : 'Sales'} status updated`);
     } catch (err) {
       apiErrorHandler.handleError(err, `update ${field}`);
     }
-  }, [requestAllLeadsRefresh]);
+  }, [requestAllLeadsRefresh, leadService]);
+
+  const handleFollowUpStatusChange = useCallback(
+    (id, status) => handleStatusChange(id, 'followUpStatus', status),
+    [handleStatusChange]
+  );
+  const handleSalesStatusChangeTable = useCallback(
+    (id, status) => handleStatusChange(id, 'salesStatus', status),
+    [handleStatusChange]
+  );
 
   const handleAppointmentChange = useCallback(async (leadId, { followUpDate, followUpTime }) => {
     try {
@@ -2286,12 +2217,12 @@ const LeadsSimplified = () => {
             : l
         )
       );
-      requestAllLeadsRefresh?.();
+      requestAllLeadsRefresh();
       toastManager.success('Appointment updated');
     } catch (err) {
       apiErrorHandler.handleError(err, 'update appointment');
     }
-  }, [requestAllLeadsRefresh]);
+  }, [requestAllLeadsRefresh, leadService]);
 
   if (initialLoading) {
     return <DashboardSkeleton />;
@@ -2420,58 +2351,16 @@ const LeadsSimplified = () => {
         assignmentFilter={assignmentFilter}
         assignedCount={assignedCount}
         unassignedCount={unassignedCount}
-        showQuotationPending={false}
-        showQuotationSection={false}
         orderCancelPendingCount={orderCancelPendingCount}
         piAmendmentPendingCount={piAmendmentPendingCount}
         loadingApprovalCounts={loadingApprovalCounts}
         onBadgeClick={handleBadgeClick}
-        onAssignmentFilter={async (filter) => {
-          // OPTIMIZED: Load all leads before applying assignment filter
-          if (filter && allLeadsData.length === 0) {
-            setLoadingAllLeads(true);
-            try {
-              await loadAllLeadsForFilters(true);
-            } catch (err) {
-              console.error('Error loading all leads for assignment filter:', err);
-              toastManager.error('Failed to load leads for filtering');
-            } finally {
-              setLoadingAllLeads(false);
-            }
-          }
-          setAssignmentFilter(filter);
-          setPage(1); // Reset to first page
-        }}
-        onClearFilter={() => {
-          setStatusFilter({ type: null, status: null });
-          setAssignmentFilter(null);
-          setFilteredCustomerIds(new Set());
-          statusFilterLeadsRef.current = [];
-          setColumnFilters({
-            customerId: '',
-            customer: '',
-            business: '',
-            address: '',
-            state: '',
-            division: '',
-            phone: '',
-            email: '',
-            gstNo: '',
-            leadSource: '',
-            productNames: '',
-            category: '',
-            followUpStatus: '',
-            salesStatus: '',
-            telecallerStatus: '',
-            paymentStatus: '',
-            createdAt: '',
-            updatedAt: ''
-          });
-        }}
+        onAssignmentFilter={handleAssignmentFilterChange}
+        onClearFilter={handleClearAllFilters}
       />
 
       <LeadTable
-        filteredLeads={uniqueFilteredLeads}
+        filteredLeads={leadsForTable}
         tableLoading={tableLoading}
         hasStatusFilter={hasStatusFilter}
         visibleColumns={visibleColumns}
@@ -2483,20 +2372,17 @@ const LeadsSimplified = () => {
         toggleSelectAll={toggleSelectAll}
         toggleSelectOne={toggleSelectOne}
         onEdit={handleEdit}
-        onViewTimeline={(lead) => {
-          setTimelineLead(lead);
-          setShowCustomerTimeline(true);
-        }}
+        onViewTimeline={handleViewTimeline}
         onAssign={openAssignModal}
         setShowColumnFilter={setShowColumnFilter}
         allLeadsData={allLeadsData}
         usernames={usernames}
         columnFilters={columnFilters}
-        onColumnFilterChange={(key, value) => setColumnFilters(prev => ({ ...prev, [key]: value }))}
+        onColumnFilterChange={handleColumnFilterChange}
         showColumnFilterRow={showColumnFilterRow}
-        onToggleColumnFilterRow={() => setShowColumnFilterRow(prev => !prev)}
-        onFollowUpStatusChange={(id, status) => handleStatusChange(id, 'followUpStatus', status)}
-        onSalesStatusChange={(id, status) => handleStatusChange(id, 'salesStatus', status)}
+        onToggleColumnFilterRow={handleToggleColumnFilterRow}
+        onFollowUpStatusChange={handleFollowUpStatusChange}
+        onSalesStatusChange={handleSalesStatusChangeTable}
         onAppointmentChange={handleAppointmentChange}
       />
 
@@ -2504,17 +2390,9 @@ const LeadsSimplified = () => {
         <div className="flex items-center space-x-2 text-xs text-gray-600">
           <span>Rows per page:</span>
           <select
-            value={showAll ? 'all' : limit}
+            value={limit}
             onChange={(e) => {
-              setPage(1);
-              const value = e.target.value;
-              if (value === 'all') {
-                setShowAll(true);
-                setLimit(50000); // Use max allowed by backend validation
-              } else {
-                setShowAll(false);
-                setLimit(Number(value));
-              }
+              setLimit(Number(e.target.value));
             }}
             disabled={paginationDisabled}
             className={`border border-gray-300 rounded px-1.5 py-0.5 text-xs ${paginationDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
@@ -2524,16 +2402,15 @@ const LeadsSimplified = () => {
             <option value={50}>50</option>
             <option value={100}>100</option>
             <option value={200}>200</option>
-            <option value="all">All</option>
           </select>
           <span>{paginationSummary}</span>
         </div>
         <div className="flex items-center space-x-2">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={paginationDisabled || page === 1 || showAll}
+            disabled={paginationDisabled || page === 1}
             className={`px-3 py-1 border rounded ${
-              paginationDisabled || page === 1 || showAll
+              paginationDisabled || page === 1
                 ? 'text-gray-300 border-gray-200 cursor-not-allowed'
                 : 'text-gray-700 border-gray-300 hover:bg-gray-50'
             }`}
@@ -2541,13 +2418,13 @@ const LeadsSimplified = () => {
             Prev
           </button>
           <span className="text-sm text-gray-600">
-            {paginationDisabled ? 'Filtered view' : showAll ? 'Showing all' : `Page ${page} of ${totalPages}`}
+            {`Page ${safePage} of ${totalPages}`}
           </span>
           <button
             onClick={() => setPage((p) => (p < totalPages ? p + 1 : p))}
-            disabled={paginationDisabled || page >= totalPages || total === 0 || showAll}
+            disabled={paginationDisabled || safePage >= totalPages || displayTotal === 0}
             className={`px-3 py-1 border rounded ${
-              paginationDisabled || page >= totalPages || total === 0 || showAll
+              paginationDisabled || safePage >= totalPages || displayTotal === 0
                 ? 'text-gray-300 border-gray-200 cursor-not-allowed'
                 : 'text-gray-700 border-gray-300 hover:bg-gray-50'
             }`}
@@ -2799,15 +2676,7 @@ const LeadsSimplified = () => {
                 <div className="flex items-end">
                   <button
                     onClick={() => {
-                      setEnquiryFilters({
-                        salesperson: '',
-                        telecaller: '',
-                        state: '',
-                        division: '',
-                        follow_up_status: '',
-                        sales_status: '',
-                        enquiry_date: ''
-                      });
+                      setEnquiryFilters(DEFAULT_ENQUIRY_FILTERS);
                     }}
                     className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors"
                   >
