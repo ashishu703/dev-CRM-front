@@ -3,8 +3,9 @@ import { getActionRules, isDelivered } from '../constants/actionRules';
 import StatusBadge from './StatusBadge';
 import ActionMenu from './ActionMenu';
 
-const th = 'px-3 sm:px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 tracking-wider';
-const thSticky = th + ' max-md:static md:sticky md:left-0 md:z-10 bg-gray-50 min-w-[120px]';
+const th = 'px-3 sm:px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 tracking-wider whitespace-nowrap';
+// Sticky first column can visually overlap adjacent columns unless it keeps its background + separator.
+const thSticky = th + ' max-md:static md:sticky md:left-0 md:z-10 bg-gray-50 min-w-[120px] border-r border-gray-200';
 
 function formatDate(v) {
   if (!v) return '';
@@ -60,7 +61,8 @@ export default function ActiveOrdersTable({
 
   const colSpan = (showSalespersonColumn ? 9 : 8) + 1;
   return (
-    <div className="overflow-x-auto -mx-1 px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+    // Avoid negative horizontal margins: sticky `left: 0` alignment is affected and can look like overlap.
+    <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
       <table className="min-w-[900px] w-full">
         <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
@@ -102,7 +104,7 @@ export default function ActiveOrdersTable({
               return (
                 <tr key={rowKey} className={rowClass}>
                   {showSalespersonColumn && <td className="px-3 sm:px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{r.salespersonName || '—'}</td>}
-                  <td className="max-md:static md:sticky md:left-0 md:z-[1] bg-white md:bg-inherit px-3 sm:px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap min-w-[120px] border-r border-gray-100 md:border-r-0">{r.partyName}</td>
+                  <td className="max-md:static md:sticky md:left-0 md:z-10 bg-white px-3 sm:px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap min-w-[120px] border-r border-gray-100">{r.partyName}</td>
                   <td className="px-3 sm:px-4 py-3 text-sm font-mono text-gray-700 whitespace-nowrap">{r.quotationNumber || '—'}</td>
                   <td className="px-3 sm:px-4 py-3 text-gray-800 min-w-0">
                     <ProductCell productName={r.productName} />
