@@ -225,7 +225,7 @@ const ToolboxInterface = ({ isDarkMode = false }) => {
   const [isBisFolderOpen, setIsBisFolderOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredTools, setFilteredTools] = useState([]);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(true);
   // AB Cable - Costing calculator editable inputs (sheet row 30) - shared state
   const [abPhaseInputs, setAbPhaseInputs] = useSharedToolboxState("abPhaseInputs", { cores: 3, strands: 7, strandSize: 2.12 });
   // CALCUS helper function
@@ -3514,17 +3514,19 @@ const ToolboxInterface = ({ isDarkMode = false }) => {
       isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
     }`}>
       {/* Mobile Sidebar Toggle Button */}
-      <button
-        onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-        className={`lg:hidden fixed bottom-4 right-4 z-40 p-3 rounded-full shadow-lg ${
-          isDarkMode 
-            ? 'bg-gray-800 text-white border border-gray-700' 
-            : 'bg-white text-gray-700 border border-gray-200'
-        }`}
-        title="Toggle Sidebar"
-      >
-        <Settings className="w-5 h-5" />
-      </button>
+      {!isMobileSidebarOpen && (
+        <button
+          onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+          className={`lg:hidden fixed bottom-4 right-4 z-40 p-3 rounded-full shadow-lg ${
+            isDarkMode 
+              ? 'bg-gray-800 text-white border border-gray-700' 
+              : 'bg-white text-gray-700 border border-gray-200'
+          }`}
+          title="Toggle Sidebar"
+        >
+          <Settings className="w-5 h-5" />
+        </button>
+      )}
 
       {/* Mobile Sidebar Overlay */}
       {isMobileSidebarOpen && (

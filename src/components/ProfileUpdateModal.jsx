@@ -236,30 +236,30 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
     : undefined;
 
   const modalContent = (
-    <div className={`fixed inset-0 bg-black/50 flex items-start justify-center z-[99999] overflow-y-auto p-4 ${!anchorRect ? 'pt-24 sm:pt-28' : ''}`}>
+    <div className={`fixed inset-0 bg-black/50 flex items-start justify-center z-[99999] overflow-y-auto p-3 ${!anchorRect ? 'pt-20 sm:pt-24' : ''}`}>
       <div
-        className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col"
+        className="bg-white rounded-xl shadow-2xl w-full max-w-[26rem] max-h-[82vh] overflow-hidden flex flex-col"
         style={modalPositionStyle}
       >
-        <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 p-3 flex justify-between items-center">
+        <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 p-2.5 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-              <User className="h-4 w-4 text-white" />
+            <div className="w-7 h-7 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
+              <User className="h-3.5 w-3.5 text-white" />
             </div>
-            <h3 className="text-base font-bold text-white">Update Profile</h3>
+            <h3 className="text-sm font-bold text-white">Update Profile</h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-white/20 rounded-lg transition-colors text-white"
+            className="p-1 hover:bg-white/20 rounded-md transition-colors text-white"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
 
         <div className="flex border-b border-gray-200">
           <button
             onClick={() => setActiveTab('profile')}
-            className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${
+            className={`flex-1 px-2.5 py-2 text-[11px] font-semibold transition-colors ${
               activeTab === 'profile'
                 ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-purple-700 border-b-2 border-purple-600'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -269,7 +269,7 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
           </button>
           <button
             onClick={() => setActiveTab('password')}
-            className={`flex-1 px-3 py-2 text-xs font-semibold transition-colors ${
+            className={`flex-1 px-2.5 py-2 text-[11px] font-semibold transition-colors ${
               activeTab === 'password'
                 ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-purple-700 border-b-2 border-purple-600'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -279,20 +279,20 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
           </button>
         </div>
 
-        <div className="p-4 overflow-y-auto flex-1">
+        <div className="p-3 overflow-y-auto flex-1">
           {activeTab === 'profile' ? (
-            <div className="space-y-4">
-              <div className="flex flex-col items-center mb-4">
+            <div className="space-y-3">
+              <div className="flex flex-col items-center mb-3">
                 <div className="relative">
-                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center overflow-hidden border-2 border-purple-200 shadow">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center overflow-hidden border-2 border-purple-200 shadow">
                     {previewUrl ? (
                       <img src={previewUrl} alt="Profile" className="w-full h-full object-cover" />
                     ) : (
-                      <User className="h-10 w-10 text-purple-500" />
+                      <User className="h-8 w-8 text-purple-500" />
                     )}
                   </div>
-                  <label className="absolute bottom-0 right-0 bg-gradient-to-r from-blue-600 to-purple-600 text-white p-1.5 rounded-full cursor-pointer hover:from-blue-700 hover:to-purple-700 shadow transition-all">
-                    <Camera className="h-3 w-3" />
+                  <label className="absolute bottom-0 right-0 bg-gradient-to-r from-blue-600 to-purple-600 text-white p-1 rounded-full cursor-pointer hover:from-blue-700 hover:to-purple-700 shadow transition-all">
+                    <Camera className="h-2.5 w-2.5" />
                     <input
                       type="file"
                       accept="image/*"
@@ -316,7 +316,7 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
                   name="username"
                   value={formData.username}
                   onChange={handleInputChange}
-                  className={`w-full px-3 py-2 text-sm border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white text-gray-900 ${
+                  className={`w-full px-2.5 py-1.5 text-xs border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white text-gray-900 ${
                     errors.username ? 'border-red-300' : 'border-gray-300'
                   }`}
                   placeholder="Enter your username"
@@ -336,7 +336,7 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className={`w-full px-3 py-2 text-sm border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 ${
+                  className={`w-full px-2.5 py-1.5 text-xs border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 ${
                     errors.email ? 'border-red-300' : 'border-gray-300'
                   }`}
                   placeholder="Enter your email"
@@ -356,7 +356,7 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
                   name="phone"
                   value={formData.phone}
                   onChange={handleInputChange}
-                  className={`w-full px-3 py-2 text-sm border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 ${
+                  className={`w-full px-2.5 py-1.5 text-xs border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 ${
                     errors.phone ? 'border-red-300' : 'border-gray-300'
                   }`}
                   placeholder="Enter your phone number"
@@ -373,7 +373,7 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
               )}
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
                   <Lock className="h-3 w-3 text-blue-600" />
@@ -385,7 +385,7 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
                     name="currentPassword"
                     value={passwordData.currentPassword}
                     onChange={handlePasswordChange}
-                    className={`w-full px-3 py-2 text-sm border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 pr-9 ${
+                    className={`w-full px-2.5 py-1.5 text-xs border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 pr-8 ${
                       errors.currentPassword ? 'border-red-300' : 'border-gray-300'
                     }`}
                     placeholder="Enter current password"
@@ -393,9 +393,9 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
                   <button
                     type="button"
                     onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   >
-                    {showCurrentPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
                 {errors.currentPassword && (
@@ -414,7 +414,7 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
                     name="newPassword"
                     value={passwordData.newPassword}
                     onChange={handlePasswordChange}
-                    className={`w-full px-3 py-2 text-sm border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 pr-9 ${
+                    className={`w-full px-2.5 py-1.5 text-xs border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 pr-8 ${
                       errors.newPassword ? 'border-red-300' : 'border-gray-300'
                     }`}
                     placeholder="Enter new password"
@@ -422,9 +422,9 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
                 {errors.newPassword && (
@@ -443,7 +443,7 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
                     name="confirmPassword"
                     value={passwordData.confirmPassword}
                     onChange={handlePasswordChange}
-                    className={`w-full px-3 py-2 text-sm border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 pr-9 ${
+                    className={`w-full px-2.5 py-1.5 text-xs border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-gray-900 pr-8 ${
                       errors.confirmPassword ? 'border-red-300' : 'border-gray-300'
                     }`}
                     placeholder="Confirm new password"
@@ -451,9 +451,9 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
                 {errors.confirmPassword && (
@@ -470,10 +470,10 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
           )}
         </div>
 
-        <div className="p-3 border-t border-gray-200 bg-gray-50 flex flex-wrap justify-between gap-2">
+        <div className="p-2.5 border-t border-gray-200 bg-gray-50 flex flex-wrap justify-between gap-2">
           <button
             onClick={handleLogout}
-            className="px-3 py-2 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg flex items-center gap-1.5"
+            className="px-2.5 py-1.5 text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg flex items-center gap-1.5"
           >
             <LogOut className="h-3.5 w-3.5" />
             Logout
@@ -481,14 +481,14 @@ const ProfileUpdateModal = ({ isOpen, onClose, user, onUpdate, anchorRect }) => 
           <div className="flex gap-2">
             <button
               onClick={onClose}
-              className="px-3 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg"
+              className="px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg"
             >
               Cancel
             </button>
             <button
               onClick={activeTab === 'profile' ? handleProfileUpdate : handlePasswordUpdate}
               disabled={loading}
-              className="px-3 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+              className="px-2.5 py-1.5 text-[11px] font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
             >
               {loading ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               {activeTab === 'profile' ? 'Update' : 'Change Password'}

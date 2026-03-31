@@ -61,7 +61,11 @@ export const useFirebasePush = () => {
           console.log('[useFirebasePush] VAPID key fetched successfully');
           return json.vapid_key;
         } else {
-          console.warn('[useFirebasePush] Push notifications not enabled or VAPID key not available');
+          console.warn('[useFirebasePush] Push notifications not enabled or VAPID key not available', {
+            success: json?.success,
+            enabled: json?.enabled,
+            hasVapidKey: Boolean(json?.vapid_key)
+          });
           return null;
         }
       } else {
@@ -99,6 +103,8 @@ export const useFirebasePush = () => {
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         console.warn('Failed to save FCM token:', res.status, text);
+      } else {
+        console.log('[useFirebasePush] FCM token saved to backend successfully');
       }
     } catch (error) {
       console.error('Error saving FCM token:', error);
@@ -113,16 +119,19 @@ export const useFirebasePush = () => {
 
     if (Notification.permission === 'granted') {
       setPermission('granted');
+      console.log('[useFirebasePush] Notification permission already granted');
       return true;
     }
 
     if (Notification.permission === 'denied') {
       setPermission('denied');
+      console.warn('[useFirebasePush] Notification permission denied by user/browser');
       return false;
     }
 
     const permission = await Notification.requestPermission();
     setPermission(permission);
+    console.log('[useFirebasePush] Notification permission result:', permission);
     return permission === 'granted';
   }, []);
 
@@ -136,6 +145,7 @@ export const useFirebasePush = () => {
 
     const vapidKey = await getVapidKey();
     if (!vapidKey) {
+      console.warn('[useFirebasePush] Firebase init stopped: VAPID key unavailable');
       return;
     }
 
@@ -170,6 +180,8 @@ export const useFirebasePush = () => {
               vapidKey: vapidKey
             });
             console.log('✅ Firebase config sent to service worker');
+          } else {
+            console.warn('[useFirebasePush] Service worker has no active controller yet');
           }
         } catch (error) {
           console.error('Service worker error:', error);
@@ -186,12 +198,15 @@ export const useFirebasePush = () => {
       });
 
       if (token) {
+        console.log('[useFirebasePush] FCM token generated:', `${token.slice(0, 20)}...`);
         setFcmToken(token);
         await saveTokenToBackend(token);
 
         onMessage(messaging, (payload) => {
           console.log('Foreground message received:', payload);
         });
+      } else {
+        console.warn('[useFirebasePush] getToken returned empty token');
       }
     } catch (error) {
       console.error('Firebase initialization error:', error);

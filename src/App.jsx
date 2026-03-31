@@ -17,9 +17,11 @@ import ItLayout from './pages/it/ItLayout.jsx'
 import ItDashboard from './pages/it/itdashboard.jsx'
 import { getUserTypeForRole } from './constants/auth'
 import NotificationPrompt from './components/NotificationPrompt'
+import { useFirebasePush } from './hooks/useFirebasePush'
 
 function AppContent() {
   const { isAuthenticated, user, logout } = useAuth()
+  useFirebasePush()
   const [activeView, setActiveView] = useState('dashboard')
   const [currentPath, setCurrentPath] = useState(window.location.pathname)
   

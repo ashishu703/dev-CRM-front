@@ -62,7 +62,7 @@ export default function PaymentTrackingView({
   const showPagination = activeTab !== 'target' && totalItems > 0;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6 overflow-x-hidden min-w-0">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100/70 p-3 sm:p-4 md:p-6 overflow-x-hidden min-w-0">
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-between gap-3 mb-4">
         {/* Left side: search (and salesperson filter if enabled) */}
         <div className="flex items-center gap-2 flex-wrap justify-start w-full sm:w-auto">
@@ -70,7 +70,7 @@ export default function PaymentTrackingView({
             <select
               value={salespersonFilter}
               onChange={(e) => setSalespersonFilter(e.target.value)}
-              className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
             >
               <option value="">All Salespersons</option>
               {salespersonOptions.map((opt) => (
@@ -81,15 +81,15 @@ export default function PaymentTrackingView({
             </select>
           )}
 
-          <div className="flex shadow-lg rounded-xl overflow-hidden flex-1 sm:flex-initial">
+          <div className="flex shadow-sm rounded-xl overflow-hidden flex-1 sm:flex-initial border border-slate-200 bg-white">
             <input
               type="text"
               placeholder="Search items..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm focus:outline-none w-full sm:w-64 bg-white border-gray-200 text-gray-900 placeholder-gray-500"
+              className="px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm focus:outline-none w-full sm:w-64 bg-white text-slate-900 placeholder-slate-400"
             />
-            <button className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md">
+            <button className="px-4 py-2.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white hover:brightness-110 transition-all duration-200">
               <Search className="h-4 w-4" />
             </button>
           </div>
@@ -101,7 +101,7 @@ export default function PaymentTrackingView({
             type="button"
             onClick={onRefresh}
             disabled={data.loading}
-            className="inline-flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-white shadow-md bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 hover:opacity-95 disabled:opacity-60"
+            className="inline-flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-white shadow-sm bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:brightness-110 disabled:opacity-60"
             title="Refresh"
           >
             <RefreshCw className={`w-4 h-4 ${data.loading ? 'animate-spin' : ''}`} />
@@ -110,19 +110,19 @@ export default function PaymentTrackingView({
         </div>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6 shadow-sm">
+      <div className="bg-white/95 backdrop-blur rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm">
         {/* Search moved to the header row */}
-        <div className="rounded-xl border border-gray-200 overflow-hidden min-w-0">
-          <div className="border-b border-gray-200 flex overflow-x-auto scrollbar-thin">
+        <div className="rounded-xl border border-slate-200 overflow-hidden min-w-0">
+          <div className="border-b border-slate-200 flex overflow-x-auto scrollbar-thin bg-slate-50/70">
             {TABS.map(({ id, label, Icon }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => setActiveTab(id)}
-                className={`flex-shrink-0 min-w-[100px] sm:min-w-[120px] px-3 sm:px-4 py-3 text-sm font-semibold border-b-2 ${
+                className={`flex-shrink-0 min-w-[100px] sm:min-w-[120px] px-3 sm:px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
                   activeTab === id
-                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50/40'
-                    : 'border-transparent text-gray-700 hover:bg-gray-50'
+                    ? 'border-blue-600 text-blue-700 bg-white'
+                    : 'border-transparent text-slate-600 hover:bg-white/70'
                 }`}
               >
                 <span className="inline-flex items-center gap-2 justify-center">

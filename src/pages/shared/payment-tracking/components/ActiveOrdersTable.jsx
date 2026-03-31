@@ -3,8 +3,8 @@ import { getActionRules, isDelivered } from '../constants/actionRules';
 import StatusBadge from './StatusBadge';
 import ActionMenu from './ActionMenu';
 
-const th = 'px-3 sm:px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 tracking-wider whitespace-nowrap';
-const thSticky = th + ' max-md:static md:sticky md:left-0 md:z-10 bg-gray-50 min-w-[120px] border-r border-gray-200';
+const th = 'px-3 sm:px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600 tracking-wider whitespace-nowrap';
+const thSticky = th + ' max-md:static md:sticky md:left-0 md:z-10 bg-slate-50 min-w-[120px] border-r border-slate-200';
 
 function formatDate(v) {
   if (!v) return '';
@@ -63,7 +63,7 @@ export default function ActiveOrdersTable({
     // Avoid negative horizontal margins: sticky `left: 0` alignment is affected and can look like overlap.
     <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
       <table className="min-w-[900px] w-full">
-        <thead className="bg-gray-50 border-b border-gray-200">
+        <thead className="bg-slate-50 border-b border-slate-200">
           <tr>
             {showSalespersonColumn && <th className={th + ' min-w-[100px]'}>Salesperson</th>}
             <th className={thSticky}>Party</th>
@@ -74,10 +74,10 @@ export default function ActiveOrdersTable({
             <th className={th + ' min-w-[120px]'}>Confirmation</th>
             <th className={th + ' min-w-[110px]'}>Status</th>
             <th className={th + ' min-w-[120px]'}>Delivery Date</th>
-            <th className="px-2 sm:px-4 py-3 text-center text-xs font-semibold uppercase text-gray-600 tracking-wider w-14 min-w-[80px]">Actions</th>
+            <th className="px-2 sm:px-4 py-3 text-center text-xs font-semibold uppercase text-slate-600 tracking-wider w-14 min-w-[80px]">Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200 bg-white">
+        <tbody className="divide-y divide-slate-200 bg-white">
           {rows.length === 0 ? (
             <tr>
               <td className="px-4 py-8 text-sm text-gray-500 text-center" colSpan={colSpan}>No active orders</td>
@@ -98,12 +98,12 @@ export default function ActiveOrdersTable({
                 ? 'bg-red-50/50 hover:bg-red-50/70 border-l-4 border-l-red-500'
                 : delivered
                   ? 'bg-emerald-50/30 hover:bg-emerald-50/50 border-l-4 border-l-emerald-500'
-                  : 'hover:bg-gray-50/50';
+                  : 'hover:bg-slate-50/60';
 
               return (
                 <tr key={rowKey} className={rowClass}>
                   {showSalespersonColumn && <td className="px-3 sm:px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{r.salespersonName || '—'}</td>}
-                  <td className="max-md:static md:sticky md:left-0 md:z-10 bg-white px-3 sm:px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap min-w-[120px] border-r border-gray-100">{r.partyName}</td>
+                  <td className="max-md:static md:sticky md:left-0 md:z-10 bg-white px-3 sm:px-4 py-3 text-sm font-medium text-slate-900 whitespace-nowrap min-w-[120px] border-r border-slate-100">{r.partyName}</td>
                   <td className="px-3 sm:px-4 py-3 text-sm font-mono text-gray-700 whitespace-nowrap">{r.quotationNumber || '—'}</td>
                   <td className="px-3 sm:px-4 py-3 text-gray-800 min-w-0">
                     <ProductCell productName={r.productName} />

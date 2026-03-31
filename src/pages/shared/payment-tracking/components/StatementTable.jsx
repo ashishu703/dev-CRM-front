@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const th = 'px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 tracking-wider';
+const th = 'px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600 tracking-wider';
 
 function formatDate(v) {
   if (!v) return '\u2014';
@@ -25,7 +25,7 @@ export default function StatementTable({ rows }) {
     <>
       <div className="overflow-x-auto">
         <table className="min-w-[800px] w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
               <th className={th}>Payment Date</th>
               <th className={th}>Party</th>
@@ -36,12 +36,12 @@ export default function StatementTable({ rows }) {
               <th className={th}>Screenshot</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200 bg-white">
+          <tbody className="divide-y divide-slate-200 bg-white">
             {rows.length === 0 ? (
               <tr><td className="px-4 py-8 text-sm text-gray-500 text-center" colSpan={7}>No statement entries</td></tr>
             ) : (
               rows.map((r) => (
-                <tr key={r.id} className="hover:bg-gray-50/50">
+                <tr key={r.id} className="hover:bg-slate-50/60">
                   <td className="px-4 py-3 text-sm text-gray-700">{formatDate(r.paymentDate)}</td>
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{r.partyName}</td>
                   <td className="px-4 py-3 text-sm font-semibold text-right text-gray-900">{formatCurrency(r.amount)}</td>
@@ -50,7 +50,7 @@ export default function StatementTable({ rows }) {
                   <td className="px-4 py-3"><ApprovalBadge status={r.approvalStatus} /></td>
                   <td className="px-4 py-3">
                     {r.receiptUrl ? (
-                      <button type="button" onClick={() => setEnlargeUrl(r.receiptUrl)} className="block w-12 h-12 rounded border border-gray-200 overflow-hidden bg-gray-50 hover:ring-2 hover:ring-indigo-400 focus:outline-none">
+                      <button type="button" onClick={() => setEnlargeUrl(r.receiptUrl)} className="block w-12 h-12 rounded border border-slate-200 overflow-hidden bg-slate-50 hover:ring-2 hover:ring-blue-400 focus:outline-none">
                         <img src={r.receiptUrl} alt="Receipt" className="w-full h-full object-cover" />
                       </button>
                     ) : (

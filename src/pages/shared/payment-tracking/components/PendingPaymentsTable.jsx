@@ -1,7 +1,7 @@
 import React from 'react';
 import { PlusCircle } from 'lucide-react';
 
-const th = 'px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 tracking-wider';
+const th = 'px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600 tracking-wider';
 
 function formatCurrency(n) {
   return `₹${Number(n).toLocaleString('en-IN')}`;
@@ -12,15 +12,15 @@ export default function PendingPaymentsTable({ rows, onAddPayment, getPaymentFor
   return (
     <div className="overflow-x-auto">
       <table className="min-w-[500px] w-full">
-        <thead className="bg-gray-50 border-b border-gray-200">
+        <thead className="bg-slate-50 border-b border-slate-200">
           <tr>
             <th className={th}>Party</th>
             <th className={th}>Quotation Number</th>
             <th className={th + ' text-right'}>Pending Amount</th>
-            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-600 tracking-wider">Action</th>
+            <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-slate-600 tracking-wider">Action</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200 bg-white">
+        <tbody className="divide-y divide-slate-200 bg-white">
           {rows.length === 0 ? (
             <tr>
               <td className="px-4 py-8 text-sm text-gray-500 text-center" colSpan={4}>
@@ -33,7 +33,7 @@ export default function PendingPaymentsTable({ rows, onAddPayment, getPaymentFor
               const isPartiallyCancelled = r.quotationStatus === 'partially_cancelled';
               const rowClass = isPartiallyCancelled
                 ? 'bg-red-50/50 hover:bg-red-50/70 border-l-4 border-l-red-500'
-                : 'hover:bg-gray-50/50';
+                : 'hover:bg-slate-50/60';
               return (
                 <tr key={r.quotationId || r.orderId} className={rowClass}>
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{r.partyName}</td>
@@ -55,7 +55,7 @@ export default function PendingPaymentsTable({ rows, onAddPayment, getPaymentFor
                       type="button"
                       onClick={() => payment && onAddPayment(payment)}
                       disabled={!payment}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <PlusCircle className="w-4 h-4" /> Add Payment
                     </button>
