@@ -12,8 +12,6 @@ const EditLeadModal = ({
   loadingUsers,
   usersError
 }) => {
-  if (!isOpen) return null;
-
   const indiaStates = useMemo(() => getIndiaStates(), []);
   const selectedStateIso = useMemo(() => {
     const found = findIndiaStateByName(editFormData?.state);
@@ -27,18 +25,26 @@ const EditLeadModal = ({
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    // Ensure hook order stays consistent even when the modal is closed.
+    // Only run animation when opening.
+    if (!isOpen) {
+      setIsVisible(false);
+      return;
+    }
     const animationFrame = requestAnimationFrame(() => setIsVisible(true));
     return () => cancelAnimationFrame(animationFrame);
-  }, []);
+  }, [isOpen]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
+    if (!isOpen) return;
+
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = originalOverflow;
     };
-  }, []);
+  }, [isOpen]);
 
   const handleStateSelect = (isoCode) => {
     const st = indiaStates.find((s) => s.isoCode === isoCode);
@@ -48,6 +54,8 @@ const EditLeadModal = ({
       division: ''
     });
   };
+
+  if (!isOpen) return null;
 
   return (
     <>

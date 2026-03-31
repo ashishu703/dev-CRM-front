@@ -2,7 +2,16 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 import Toast from '../utils/Toast';
 
-const NOTIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+/** Align with backend NOTIFICATION_RETENTION_DAYS (default 30) */
+const RETENTION_DAYS = Math.max(
+  7,
+  Math.min(365, parseInt(import.meta.env.VITE_NOTIFICATION_RETENTION_DAYS || '30', 10) || 30)
+);
+const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+/** Recent-only list in header (enterprise-style cap) */
+const BELL_MAX_ITEMS = 15;
+const UNREAD_REFRESH_MS = 5 * 60 * 1000;
 
 const getBaseURL = () => {
   if (import.meta.env.VITE_API_BASE_URL) {
@@ -42,31 +51,58 @@ const getSocketURL = () => {
 };
 
 let sharedSocket = null;
+let sharedSocketToken = null;
+
+function normalizeBellList(list) {
+  const now = Date.now();
+  const byId = new Map();
+  for (const n of list) {
+    if (!n || n.id == null) continue;
+    const t = n.time ? new Date(n.time).getTime() : now;
+    if (Number.isNaN(t) || now - t > RETENTION_MS) continue;
+    byId.set(n.id, { ...n, unread: n.unread !== false });
+  }
+  const sorted = Array.from(byId.values()).sort(
+    (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()
+  );
+  return sorted.slice(0, BELL_MAX_ITEMS);
+}
 
 export const useNotifications = () => {
   const [notifications, setNotifications] = useState([]);
-  const unreadCount = notifications.filter(n => n.unread !== false).length;
+  const [serverUnreadCount, setServerUnreadCount] = useState(0);
+  // Header badge should match the same capped list that auto-expires.
+  const unreadCount = notifications.filter((n) => n.unread !== false).length;
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef(null);
   const notificationIdsRef = useRef(new Set());
-  const expiryTimersRef = useRef(new Map());
+
+  const authToken = (() => {
+    try {
+      if (typeof window === 'undefined') return null;
+      return sessionStorage.getItem('authToken') || localStorage.getItem('authToken');
+    } catch {
+      return null;
+    }
+  })();
+
+  const syncIdSetFromList = useCallback((list) => {
+    notificationIdsRef.current = new Set(list.map((n) => n.id));
+  }, []);
 
   const removeExpired = useCallback(() => {
-    const now = Date.now();
-    setNotifications(prev => {
-      const filtered = prev.filter(n => {
-        const time = n.time ? (new Date(n.time)).getTime() : 0;
-        return (now - time) < NOTIFICATION_TTL_MS;
-      });
-      return filtered;
+    setNotifications((prev) => {
+      const next = normalizeBellList(prev);
+      syncIdSetFromList(next);
+      return next;
     });
-  }, []);
+  }, [syncIdSetFromList]);
 
   const playNotificationSound = useCallback(() => {
     try {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       if (!AudioContext) return;
-      
+
       const ctx = new AudioContext();
       const oscillator = ctx.createOscillator();
       const gainNode = ctx.createGain();
@@ -90,70 +126,185 @@ export const useNotifications = () => {
     }
   }, []);
 
-  const markAsRead = useCallback(async (notificationId) => {
-    try {
-      const token = localStorage.getItem('authToken');
-      if (!token) return;
+  const markAsRead = useCallback(
+    async (notificationId) => {
+      try {
+        const token = authToken;
+        if (!token) return;
 
-      const apiPath = BASE_URL.includes('/api') ? `${BASE_URL}/notifications/${notificationId}/read` : `${BASE_URL}/api/notifications/${notificationId}/read`;
-      const res = await fetch(apiPath, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+        let wasUnread = false;
+        setNotifications((prev) => {
+          wasUnread = prev.some((n) => n.id === notificationId && n.unread !== false);
+          const next = normalizeBellList(
+            prev.map((n) => (n.id === notificationId ? { ...n, unread: false } : n))
+          );
+          syncIdSetFromList(next);
+          return next;
+        });
+        if (wasUnread) {
+          setServerUnreadCount((c) => Math.max(0, c - 1));
+        }
 
-      if (res.ok) {
-        setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, unread: false } : n));
+        const apiPath = BASE_URL.includes('/api')
+          ? `${BASE_URL}/notifications/${notificationId}/read`
+          : `${BASE_URL}/api/notifications/${notificationId}/read`;
+        const res = await fetch(apiPath, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+          let rollbackUnread = false;
+          setNotifications((prev) => {
+            rollbackUnread = prev.some((n) => n.id === notificationId && n.unread === false);
+            const next = normalizeBellList(
+              prev.map((n) => (n.id === notificationId ? { ...n, unread: true } : n))
+            );
+            syncIdSetFromList(next);
+            return next;
+          });
+          if (rollbackUnread) setServerUnreadCount((c) => c + 1);
+        }
+      } catch (error) {
+        console.error('Failed to mark as read:', error);
       }
-    } catch (error) {
-      console.error('Failed to mark as read:', error);
-    }
-  }, []);
+    },
+    [authToken, syncIdSetFromList]
+  );
 
-  const markAsUnread = useCallback(async (notificationId) => {
-    try {
-      const token = localStorage.getItem('authToken');
-      if (!token) return;
+  const markAsUnread = useCallback(
+    async (notificationId) => {
+      try {
+        const token = authToken;
+        if (!token) return;
 
-      const apiPath = BASE_URL.includes('/api') ? `${BASE_URL}/notifications/${notificationId}/unread` : `${BASE_URL}/api/notifications/${notificationId}/unread`;
-      const res = await fetch(apiPath, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+        const apiPath = BASE_URL.includes('/api')
+          ? `${BASE_URL}/notifications/${notificationId}/unread`
+          : `${BASE_URL}/api/notifications/${notificationId}/unread`;
+        const res = await fetch(apiPath, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}` }
+        });
 
-      if (res.ok) {
-        setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, unread: true } : n));
+        if (res.ok) {
+          let wasRead = false;
+          setNotifications((prev) => {
+            wasRead = prev.some((n) => n.id === notificationId && n.unread === false);
+            const next = normalizeBellList(
+              prev.map((n) => (n.id === notificationId ? { ...n, unread: true } : n))
+            );
+            syncIdSetFromList(next);
+            return next;
+          });
+          if (wasRead) setServerUnreadCount((c) => c + 1);
+        }
+      } catch (error) {
+        console.error('Failed to mark as unread:', error);
       }
-    } catch (error) {
-      console.error('Failed to mark as unread:', error);
-    }
-  }, []);
+    },
+    [authToken, syncIdSetFromList]
+  );
 
   const markAllAsRead = useCallback(async () => {
     try {
-      const token = localStorage.getItem('authToken');
+      const token = authToken;
       if (!token) return;
 
-      const apiPath = BASE_URL.includes('/api') ? `${BASE_URL}/notifications/mark-all-read` : `${BASE_URL}/api/notifications/mark-all-read`;
+      const apiPath = BASE_URL.includes('/api')
+        ? `${BASE_URL}/notifications/mark-all-read`
+        : `${BASE_URL}/api/notifications/mark-all-read`;
       const res = await fetch(apiPath, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       if (res.ok) {
-        setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+        setNotifications((prev) => {
+          const next = normalizeBellList(prev.map((n) => ({ ...n, unread: false })));
+          syncIdSetFromList(next);
+          return next;
+        });
+        setServerUnreadCount(0);
       }
     } catch (error) {
       console.error('Failed to mark all as read:', error);
     }
-  }, []);
+  }, [authToken, syncIdSetFromList]);
 
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    if (!token) return;
+    if (!authToken) {
+      if (sharedSocket) {
+        sharedSocket.disconnect();
+        sharedSocket = null;
+        sharedSocketToken = null;
+      }
+      setServerUnreadCount(0);
+      setNotifications([]);
+      syncIdSetFromList([]);
+      return;
+    }
 
-    const cleanupInterval = setInterval(removeExpired, 60 * 60 * 1000);
+    const apiPathForUnreadCount = () =>
+      BASE_URL.includes('/api')
+        ? `${BASE_URL}/notifications/unread-count`
+        : `${BASE_URL}/api/notifications/unread-count`;
+
+    const refreshUnreadCount = async () => {
+      try {
+        const res = await fetch(apiPathForUnreadCount(), {
+          headers: { Authorization: `Bearer ${authToken}` }
+        });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.success) {
+          // API returns: { success: true, count }.
+          if (json?.count != null) setServerUnreadCount(Number(json.count) || 0);
+          return;
+        }
+        setServerUnreadCount(Number(json.count) || 0);
+      } catch {
+        // keep silent (bell UI should never break the app)
+      }
+    };
+
+    // Keep bell list and badge aligned as items expire in the backend.
+    const cleanupInterval = setInterval(removeExpired, 5 * 60 * 1000);
+    const unreadRefreshInterval = setInterval(refreshUnreadCount, UNREAD_REFRESH_MS);
+
+    const fetchInitialNotifications = async () => {
+      try {
+        const apiBase = BASE_URL.includes('/api') ? BASE_URL : `${BASE_URL}/api`;
+        const apiPath = `${apiBase}/notifications?limit=${BELL_MAX_ITEMS}&offset=0`;
+        const res = await fetch(apiPath, {
+          headers: { Authorization: `Bearer ${authToken}` }
+        });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.success) return;
+        const initial = Array.isArray(json.data) ? json.data : [];
+        const normalized = normalizeBellList(
+          initial.map((n) => ({ ...n, unread: n.unread !== false }))
+        );
+        syncIdSetFromList(normalized);
+        setNotifications(normalized);
+        if (typeof json.unreadCount === 'number') {
+          setServerUnreadCount(json.unreadCount);
+        } else {
+          setServerUnreadCount(normalized.filter((n) => n.unread !== false).length);
+        }
+      } catch (e) {
+        // notifications UI should never break the app
+      }
+    };
+
+    fetchInitialNotifications();
+    refreshUnreadCount();
 
     let socket = sharedSocket;
+    if (socket && sharedSocketToken !== authToken) {
+      socket.disconnect();
+      sharedSocket = null;
+      sharedSocketToken = null;
+      socket = null;
+    }
     const isDisconnected = socket && !socket.connected && !socket.connecting;
     const shouldCreateSocket = !socket;
 
@@ -163,16 +314,17 @@ export const useNotifications = () => {
         socketURL = (socketURL || '').replace(/\/$/, '');
       }
       socket = io(socketURL, {
-        auth: { token },
+        auth: { token: authToken },
         transports: ['websocket', 'polling'],
         path: '/socket.io',
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         reconnectionAttempts: Infinity,
-        timeout: 20000,
+        timeout: 20000
       });
       sharedSocket = socket;
+      sharedSocketToken = authToken;
       socket.on('connect_error', (error) => {
         console.error('Socket.IO connection error:', error.message);
       });
@@ -195,22 +347,23 @@ export const useNotifications = () => {
         console.warn('Invalid notification received:', notification);
         return;
       }
-      if (!notificationIdsRef.current.has(notification.id)) {
-        notificationIdsRef.current.add(notification.id);
-        const nWithUnread = { ...notification, unread: notification.unread !== false };
-        setNotifications(prev => [nWithUnread, ...prev]);
-        playNotificationSound();
-        const timer = setTimeout(() => {
-          setNotifications(prev => prev.filter(n => n.id !== notification.id));
-          notificationIdsRef.current.delete(notification.id);
-          expiryTimersRef.current.delete(notification.id);
-        }, NOTIFICATION_TTL_MS);
-        expiryTimersRef.current.set(notification.id, timer);
-        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          new Notification(notification.title, { body: notification.message, icon: '/logo.png' });
-        }
-      } else {
+      if (notificationIdsRef.current.has(notification.id)) {
         console.log('⚠️ Duplicate notification ignored:', notification.id);
+        return;
+      }
+      notificationIdsRef.current.add(notification.id);
+      const nWithUnread = { ...notification, unread: notification.unread !== false };
+      setNotifications((prev) => {
+        const next = normalizeBellList([nWithUnread, ...prev]);
+        syncIdSetFromList(next);
+        return next;
+      });
+      if (nWithUnread.unread) {
+        setServerUnreadCount((c) => c + 1);
+      }
+      playNotificationSound();
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification(notification.title, { body: notification.message, icon: '/logo.png' });
       }
     };
 
@@ -233,11 +386,10 @@ export const useNotifications = () => {
       socket.off('notification', onNotification);
       socket.off('reminder-due', onReminderDue);
       clearInterval(cleanupInterval);
-      expiryTimersRef.current.forEach(t => clearTimeout(t));
-      expiryTimersRef.current.clear();
+      clearInterval(unreadRefreshInterval);
       socketRef.current = null;
     };
-  }, [removeExpired, playNotificationSound]);
+  }, [removeExpired, playNotificationSound, authToken, syncIdSetFromList]);
 
   return {
     notifications,
@@ -245,7 +397,8 @@ export const useNotifications = () => {
     isConnected,
     markAsRead,
     markAsUnread,
-    markAllAsRead
+    markAllAsRead,
+    notificationRetentionDays: RETENTION_DAYS,
+    bellMaxItems: BELL_MAX_ITEMS
   };
 };
-

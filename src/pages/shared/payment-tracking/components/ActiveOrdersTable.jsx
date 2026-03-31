@@ -4,7 +4,6 @@ import StatusBadge from './StatusBadge';
 import ActionMenu from './ActionMenu';
 
 const th = 'px-3 sm:px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 tracking-wider whitespace-nowrap';
-// Sticky first column can visually overlap adjacent columns unless it keeps its background + separator.
 const thSticky = th + ' max-md:static md:sticky md:left-0 md:z-10 bg-gray-50 min-w-[120px] border-r border-gray-200';
 
 function formatDate(v) {

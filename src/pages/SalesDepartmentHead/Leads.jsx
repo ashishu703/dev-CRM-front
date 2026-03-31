@@ -2051,6 +2051,7 @@ const LeadsSimplified = () => {
   };
 
   const handleEdit = (lead) => {
+    if (!lead) return;
     setEditingLead(lead);
     setEditFormData({
       customer: lead.customer && lead.customer !== 'N/A' ? lead.customer : '',
@@ -3257,9 +3258,7 @@ const LeadsSimplified = () => {
             setTimelineLead(null);
           }}
           onEdit={(lead) => {
-            setEditingLead(lead);
-            setShowEditModal(true);
-            setShowCustomerTimeline(false);
+            if (lead) handleEdit(lead);
           }}
           onQuotation={(customer) => {
             setShowCustomerTimeline(false);

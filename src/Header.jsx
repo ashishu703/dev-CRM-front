@@ -7,7 +7,16 @@ import ProfileUpdateModal from './components/ProfileUpdateModal';
 
 const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMobileView = false, isDarkMode = false, onToggleDarkMode, onProfileClick, onToggleSidebar, sidebarOpen, onToggleView, onChatClick }) => {
   const { user, refreshUser } = useAuth();
-  const { notifications, unreadCount, isConnected, markAsRead, markAsUnread } = useNotifications();
+  const {
+    notifications,
+    unreadCount,
+    isConnected,
+    markAsRead,
+    markAsUnread,
+    markAllAsRead,
+    notificationRetentionDays,
+    bellMaxItems
+  } = useNotifications();
   const chatUnreadCount = useSelector((state) => state.chat?.unreadCount ?? 0);
   
   const [showNotifications, setShowNotifications] = useState(false);
@@ -31,18 +40,21 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
     };
   }, []);
 
-  const getNotificationIcon = (type) => {
+  const getNotificationIcon = (type, { muted = false } = {}) => {
+    const active = muted
+      ? `w-3.5 h-3.5 ${isDarkMode ? 'text-zinc-300' : 'text-slate-600'}`
+      : 'w-3 h-3 text-white';
     const iconMap = {
-      lead_assigned: <Users className="w-3 h-3 text-white" />,
-      lead_transferred: <Users className="w-3 h-3 text-white" />,
-      lead_activity: <Activity className="w-3 h-3 text-white" />,
-      payment_activity: <DollarSign className="w-3 h-3 text-white" />,
-      quotation_activity: <FileText className="w-3 h-3 text-white" />,
-      meeting_activity: <Calendar className="w-3 h-3 text-white" />,
-      followup_activity: <Clock className="w-3 h-3 text-white" />,
-      activity: <Activity className="w-3 h-3 text-white" />
+      lead_assigned: <Users className={active} />,
+      lead_transferred: <Users className={active} />,
+      lead_activity: <Activity className={active} />,
+      payment_activity: <DollarSign className={active} />,
+      quotation_activity: <FileText className={active} />,
+      meeting_activity: <Calendar className={active} />,
+      followup_activity: <Clock className={active} />,
+      activity: <Activity className={active} />
     };
-    return iconMap[type] || <Bell className="w-3 h-3 text-white" />;
+    return iconMap[type] || <Bell className={active} />;
   };
 
   // Format time for display (handles timezone correctly)
@@ -643,7 +655,10 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
                 </div>
               )}
               {isConnected && (
-                <div className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full border border-white"></div>
+                <div
+                  className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-emerald-500 rounded-full border border-white shadow-sm"
+                  title="Real-time updates on"
+                />
               )}
             </button>
 
@@ -654,100 +669,139 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
                   className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[999] sm:hidden"
                   onClick={() => setShowNotifications(false)}
                 />
-                <div className={`fixed sm:absolute right-2 sm:right-0 top-14 sm:top-full mt-0 sm:mt-2 w-[calc(100vw-1rem)] sm:w-[380px] max-w-lg rounded-xl shadow-2xl border z-[1000] max-h-[70vh] sm:max-h-[420px] overflow-hidden flex flex-col ${
+                <div className={`fixed sm:absolute right-2 sm:right-0 top-14 sm:top-full mt-0 sm:mt-2 w-[calc(100vw-1rem)] sm:w-[400px] max-w-lg rounded-xl shadow-2xl border z-[1000] max-h-[min(70vh,520px)] sm:max-h-[480px] overflow-hidden flex flex-col ${
                   isDarkMode 
-                    ? 'bg-gray-800 border-gray-700' 
-                    : 'bg-white border-gray-200'
+                    ? 'bg-zinc-900 border-zinc-700' 
+                    : 'bg-white border-slate-200/80'
                 }`} style={{
-                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05)'
+                  boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(15, 23, 42, 0.06)'
                 }}>
-                {/* Header - Live style (second screenshot) */}
-                <div className={`p-3 flex items-center justify-between flex-shrink-0 ${isDarkMode ? 'bg-gray-700/50' : 'bg-sky-50'}`}>
-                  <div className="flex items-center gap-2">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isDarkMode ? 'bg-blue-600' : 'bg-blue-500'}`}>
-                      <Bell className="w-4 h-4 text-white" />
+                <div className={`px-4 py-3 flex items-start justify-between gap-3 flex-shrink-0 border-b ${
+                  isDarkMode ? 'border-zinc-800 bg-zinc-900/95' : 'border-slate-100 bg-slate-50/80'
+                }`}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className={`text-sm font-semibold tracking-tight ${isDarkMode ? 'text-zinc-100' : 'text-slate-900'}`}>
+                        Notifications
+                      </h3>
+                      {isConnected && (
+                        <span
+                          className={`text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                            isDarkMode ? 'bg-emerald-950/50 text-emerald-400' : 'bg-emerald-50 text-emerald-700'
+                          }`}
+                          title="Connected for instant updates"
+                        >
+                          Live
+                        </span>
+                      )}
                     </div>
-                    <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Notifications</h3>
-                    {isConnected && (
-                      <span className="flex items-center gap-1 text-xs font-medium text-green-600">
-                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                        Live
-                      </span>
-                    )}
+                    <p className={`text-[11px] mt-0.5 ${isDarkMode ? 'text-zinc-500' : 'text-slate-500'}`}>
+                      Showing recent {bellMaxItems} · older than {notificationRetentionDays} days are removed automatically
+                    </p>
                   </div>
-                  <button 
-                    onClick={() => setShowNotifications(false)}
-                    className={`p-1.5 rounded-lg flex-shrink-0 transition-colors ${isDarkMode ? 'hover:bg-gray-600 text-gray-300' : 'hover:bg-sky-100 text-gray-500'}`}
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => markAllAsRead()}
+                        className={`text-[11px] font-medium px-2 py-1.5 rounded-lg transition-colors ${
+                          isDarkMode
+                            ? 'text-sky-400 hover:bg-zinc-800'
+                            : 'text-sky-700 hover:bg-sky-50'
+                        }`}
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                    <button 
+                      type="button"
+                      onClick={() => setShowNotifications(false)}
+                      className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-slate-100 text-slate-500'}`}
+                      aria-label="Close notifications"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 
-                {/* Notifications List - Live only */}
                 <div className="overflow-y-auto overflow-x-hidden flex-1 min-h-0">
                   {notifications.length === 0 ? (
-                    <div className="p-8 sm:p-12 text-center">
-                      <div className={`w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                        <Bell className={`w-7 h-7 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                    <div className="p-10 text-center">
+                      <div className={`w-12 h-12 mx-auto mb-3 rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-zinc-800' : 'bg-slate-100'}`}>
+                        <Bell className={`w-6 h-6 ${isDarkMode ? 'text-zinc-500' : 'text-slate-400'}`} />
                       </div>
-                      <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No notifications yet</p>
-                      <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>You'll see updates here</p>
+                      <p className={`text-sm font-medium ${isDarkMode ? 'text-zinc-300' : 'text-slate-700'}`}>You&apos;re all caught up</p>
+                      <p className={`text-xs mt-1 ${isDarkMode ? 'text-zinc-500' : 'text-slate-500'}`}>New activity will appear here</p>
                     </div>
                   ) : (
                     notifications.map((notification) => (
                       <div 
                         key={notification.id}
-                        className={`p-3 border-b transition-all duration-200 ${isDarkMode ? 'border-gray-700' : 'border-gray-100'} ${
-                          isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-sky-50/50'
-                        } ${notification.unread ? (isDarkMode ? 'bg-gray-700/50' : 'bg-sky-50/50') : ''} flex-shrink-0`}
+                        className={`relative pl-3 pr-3 py-3 border-b transition-colors ${
+                          isDarkMode ? 'border-zinc-800 hover:bg-zinc-800/60' : 'border-slate-100 hover:bg-slate-50'
+                        } ${notification.unread ? (isDarkMode ? 'bg-sky-950/20' : 'bg-sky-50/40') : ''} flex-shrink-0`}
                       >
-                        <div className="flex items-start space-x-3 min-w-0">
+                        {notification.unread && (
+                          <div className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${isDarkMode ? 'bg-sky-500' : 'bg-sky-600'}`} aria-hidden />
+                        )}
+                        <div className="flex items-start gap-3 min-w-0">
                           <div className="flex-shrink-0 mt-0.5">
-                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shadow-sm ${
-                              notification.unread ? 'bg-blue-500' : (isDarkMode ? 'bg-gray-700' : 'bg-gray-100')
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                              notification.unread
+                                ? (isDarkMode ? 'bg-sky-600/90 shadow-sm shadow-sky-900/30' : 'bg-sky-600 text-white shadow-sm')
+                                : (isDarkMode ? 'bg-zinc-800' : 'bg-slate-100')
                             }`}>
-                              {getNotificationIcon(notification.type)}
+                              {getNotificationIcon(notification.type, { muted: !notification.unread })}
                             </div>
                           </div>
-                          <div className="flex-1 min-w-0 overflow-hidden">
-                            <div className="flex items-center justify-between gap-2 mb-0.5">
-                              <p className={`text-xs font-semibold truncate min-w-0 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                          <div className="flex-1 min-w-0 overflow-hidden pt-0.5">
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <p className={`text-[13px] font-semibold leading-snug min-w-0 ${isDarkMode ? 'text-zinc-100' : 'text-slate-900'}`}>
                                 {notification.title}
                               </p>
                               <button
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  notification.unread && markAsRead(notification.id);
+                                  if (notification.unread) markAsRead(notification.id);
+                                  else markAsUnread(notification.id);
                                 }}
-                                className={`p-1 rounded flex-shrink-0 transition-colors ${isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-200'}`}
-                                title="Mark as read"
+                                className={`p-1.5 rounded-lg flex-shrink-0 transition-colors ${
+                                  isDarkMode ? 'hover:bg-zinc-700 text-zinc-400' : 'hover:bg-slate-200/80 text-slate-500'
+                                }`}
+                                title={notification.unread ? 'Mark as read' : 'Mark as unread'}
                               >
-                                {notification.unread ? <Circle className="w-2.5 h-2.5 text-blue-500 fill-blue-500" /> : <CheckCheck className="w-2.5 h-2.5 text-gray-400" />}
+                                {notification.unread ? <Circle className="w-3 h-3 text-sky-500 fill-sky-500" /> : <CheckCheck className="w-3 h-3 text-slate-400" />}
                               </button>
                             </div>
-                            <p className={`text-xs break-words line-clamp-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <p className={`text-xs leading-relaxed break-words line-clamp-3 ${isDarkMode ? 'text-zinc-400' : 'text-slate-600'}`}>
                               {notification.message}
                             </p>
                             {notification.details && (
-                              <div className="mt-1.5">
+                              <div className="mt-2">
                                 <button
+                                  type="button"
                                   onClick={() => setExpandedNotificationId(expandedNotificationId === notification.id ? null : notification.id)}
-                                  className="text-[10px] bg-blue-500 text-white px-2 py-0.5 rounded hover:bg-blue-600 font-medium"
+                                  className={`text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
+                                    isDarkMode
+                                      ? 'bg-zinc-800 text-sky-400 hover:bg-zinc-700'
+                                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                  }`}
                                 >
-                                  {expandedNotificationId === notification.id ? 'Hide' : 'Details'}
+                                  {expandedNotificationId === notification.id ? 'Hide details' : 'View details'}
                                 </button>
                                 {expandedNotificationId === notification.id && (
-                                  <div className={`mt-1.5 text-[10px] space-y-0.5 break-words p-2 rounded ${isDarkMode ? 'bg-gray-700/50 text-gray-400' : 'bg-gray-50 text-gray-600'}`}>
-                                    {notification.details.customer && <div><span className="font-semibold">Customer:</span> {notification.details.customer}</div>}
-                                    {notification.details.business && <div><span className="font-semibold">Business:</span> {notification.details.business}</div>}
-                                    {notification.details.phone && <div><span className="font-semibold">Phone:</span> {notification.details.phone}</div>}
-                                    {notification.details.amount && <div><span className="font-semibold">Amount:</span> ₹{Number(notification.details.amount).toLocaleString()}</div>}
+                                  <div className={`mt-2 text-[11px] space-y-1 break-words p-3 rounded-lg ${isDarkMode ? 'bg-zinc-950/50 text-zinc-400 border border-zinc-800' : 'bg-slate-50 text-slate-600 border border-slate-100'}`}>
+                                    {notification.details.customer && <div><span className="font-semibold text-slate-500">Customer</span> · {notification.details.customer}</div>}
+                                    {notification.details.business && <div><span className="font-semibold text-slate-500">Business</span> · {notification.details.business}</div>}
+                                    {notification.details.phone && <div><span className="font-semibold text-slate-500">Phone</span> · {notification.details.phone}</div>}
+                                    {notification.details.amount && <div><span className="font-semibold text-slate-500">Amount</span> · ₹{Number(notification.details.amount).toLocaleString()}</div>}
                                   </div>
                                 )}
                               </div>
                             )}
-                            <p className={`text-[10px] mt-1 flex items-center gap-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-                              <Clock className="w-3 h-3" />
+                            <p className={`text-[11px] mt-2 flex items-center gap-1 tabular-nums ${isDarkMode ? 'text-zinc-500' : 'text-slate-400'}`}>
+                              <Clock className="w-3.5 h-3.5 flex-shrink-0" />
                               {formatTime(notification.time)}
                             </p>
                           </div>
@@ -755,6 +809,9 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
                       </div>
                     ))
                   )}
+                </div>
+                <div className={`px-4 py-2.5 flex-shrink-0 border-t text-[11px] ${isDarkMode ? 'border-zinc-800 text-zinc-500 bg-zinc-900/80' : 'border-slate-100 text-slate-500 bg-slate-50/50'}`}>
+                  Unread count reflects only this recent list.
                 </div>
               </div>
               </>

@@ -563,7 +563,7 @@ export default function CustomerDetailSidebar({
           <button onClick={onClose} className="px-3 sm:px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-semibold transition-colors">
             Close
           </button>
-          <button onClick={() => { onEdit(); onClose(); }} className="px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-semibold transition-colors">
+          <button onClick={() => { onEdit?.(customer); onClose(); }} className="px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-semibold transition-colors">
             Edit Customer
           </button>
         </div>

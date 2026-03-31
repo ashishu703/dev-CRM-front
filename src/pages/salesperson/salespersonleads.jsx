@@ -2849,8 +2849,8 @@ export default function CustomerListContent({ isDarkMode = false, selectedCustom
           hasPending={!!(viewingCustomer && pendingStatusByLeadId[viewingCustomer.id ?? viewingCustomer?._id])}
           onFinalSave={viewingCustomer ? () => handleFinalSave(viewingCustomer.id ?? viewingCustomer._id) : undefined}
           onClose={() => { setViewingCustomer(null); setSidebarUpdateStatusLead(null) }}
-          onEdit={() => {
-            setEditingCustomer(viewingCustomer)
+          onEdit={(customer) => {
+            setEditingCustomer(customer)
             setViewingCustomer(null)
             setShowAddCustomer(true)
           }}
