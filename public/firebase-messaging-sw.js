@@ -6,11 +6,22 @@ let messaging = null;
 let vapidKey = null;
 
 self.addEventListener('push', (event) => {
-  if (!messaging || !firebaseInitialized) {
-    console.warn('[SW] Firebase not initialized yet, ignoring push event');
-    return;
+  // Fallback handler so early push events are not dropped before Firebase init.
+  try {
+    const payload = event.data ? event.data.json() : {};
+    const notificationTitle = payload?.notification?.title || payload?.data?.title || 'New Notification';
+    const notificationOptions = {
+      body: payload?.notification?.body || payload?.data?.body || '',
+      icon: '/logo.png',
+      badge: '/logo.png',
+      data: payload?.data || {},
+      requireInteraction: false,
+      tag: payload?.data?.notificationId || 'notification'
+    };
+    event.waitUntil(self.registration.showNotification(notificationTitle, notificationOptions));
+  } catch (err) {
+    console.warn('[SW] push fallback parse failed:', err);
   }
-  
 });
 
 self.addEventListener('pushsubscriptionchange', (event) => {
@@ -41,6 +52,10 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 self.addEventListener('message', async (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
   if (event.data && event.data.type === 'INIT_FIREBASE') {
     try {
       vapidKey = event.data.vapidKey;

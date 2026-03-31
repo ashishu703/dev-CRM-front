@@ -165,7 +165,7 @@ export const useFirebasePush = () => {
 
       if ('serviceWorker' in navigator) {
         try {
-          let registration = await navigator.serviceWorker.getRegistration();
+          let registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
           
           if (!registration) {
             registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
@@ -173,6 +173,17 @@ export const useFirebasePush = () => {
           }
           
           await navigator.serviceWorker.ready;
+          if (!registration.active && registration.waiting) {
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+          if (!registration.active && registration.installing) {
+            await new Promise((resolve) => {
+              registration.installing.addEventListener('statechange', () => {
+                if (registration.active) resolve();
+              });
+              setTimeout(resolve, 2000);
+            });
+          }
           
           if (registration.active) {
             registration.active.postMessage({
@@ -193,8 +204,10 @@ export const useFirebasePush = () => {
         return;
       }
 
+      const registrationForToken = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
       const token = await getToken(messaging, {
-        vapidKey: vapidKey
+        vapidKey: vapidKey,
+        serviceWorkerRegistration: registrationForToken || undefined
       });
 
       if (token) {
