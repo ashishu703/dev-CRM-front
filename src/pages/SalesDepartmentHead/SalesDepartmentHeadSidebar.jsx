@@ -17,6 +17,7 @@ import {
 
 const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, setSidebarOpen }) => {
   const [isExpanded, setIsExpanded] = useState(sidebarOpen !== undefined ? sidebarOpen : true);
+  const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   
   const updateExpanded = useCallback((newValue) => {
     setIsExpanded(newValue);
@@ -102,12 +103,17 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
         <div className="flex items-center justify-between">
           {isExpanded ? (
             <div className="flex items-center space-x-3 flex-1 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 p-1.5 shadow-lg flex-shrink-0">
-                <img
-                  src="https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png"
-                  alt="ANOCAB Logo"
-                  className="w-full h-full object-contain rounded-lg"
-                />
+              <div className="w-10 h-10 rounded-xl bg-white/95 p-1.5 shadow-lg border border-white/40 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                {!logoLoadFailed ? (
+                  <img
+                    src="https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png"
+                    alt="ANOCAB Logo"
+                    onError={() => setLogoLoadFailed(true)}
+                    className="w-full h-full object-contain rounded-lg"
+                  />
+                ) : (
+                  <span className="text-xs font-bold text-slate-700">A</span>
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <h1 className="font-bold text-white text-lg tracking-tight truncate" style={{ fontFamily: 'Poppins, sans-serif' }}>ANOCAB</h1>
@@ -219,6 +225,11 @@ const SalesDepartmentHeadSidebar = ({ onLogout, activeView, setActiveView, sideb
           <HelpCircle className="w-5 h-5" />
           {isExpanded && <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Support</span>}
         </button>
+        {isExpanded && (
+          <p className="mt-2 text-[11px] text-slate-400 text-center">
+            © {new Date().getFullYear()} ANOCAB. All rights reserved.
+          </p>
+        )}
       </div>
     </div>
     </>

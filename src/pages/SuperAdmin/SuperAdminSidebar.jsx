@@ -230,7 +230,7 @@ const Sidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, onToggleSid
         </button>
         {isExpanded && (
           <p className="mt-3 text-[11px] text-slate-400 text-center">
-            All rights reserved.
+            © {new Date().getFullYear()} ANOCAB. All rights reserved.
           </p>
         )}
       </div>

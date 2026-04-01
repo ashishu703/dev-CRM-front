@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, useState } from "react"
 import { LayoutDashboard, Menu, X, Package, Wrench, HelpCircle, FileText, CreditCard } from "lucide-react"
 import LeadStatusDropdown from './LeadStatusDropdown'
 
@@ -9,6 +9,7 @@ function cx(...classes) {
 }
 
 export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen, setSidebarOpen, isDarkMode = false, isMobileView = false }) {
+  const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const collapseTimerRef = useRef(null);
   const isManuallyToggledRef = useRef(false);
 
@@ -71,9 +72,23 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen
         <div className="p-4 border-b border-slate-700/60 min-h-[64px]">
           <div className="flex items-center justify-between gap-2">
             {sidebarOpen && (
-              <div className="min-w-0">
-                <h1 className="font-semibold text-white text-base truncate">ANOCAB</h1>
-                <p className="text-[11px] text-[var(--sidebar-text-muted)] truncate">Salesperson</p>
+              <div className="min-w-0 flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-white/95 border border-white/40 p-1 shadow-md overflow-hidden flex-shrink-0">
+                  {!logoLoadFailed ? (
+                    <img
+                      src="https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png"
+                      alt="ANOCAB Logo"
+                      onError={() => setLogoLoadFailed(true)}
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <span className="w-full h-full flex items-center justify-center text-[11px] font-bold text-slate-700">A</span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <h1 className="font-semibold text-white text-base truncate">ANOCAB</h1>
+                  <p className="text-[11px] text-[var(--sidebar-text-muted)] truncate">Salesperson</p>
+                </div>
               </div>
             )}
             <button onClick={handleToggle} className="p-2 hover:bg-[var(--sidebar-hover)] rounded-lg transition-colors text-[var(--sidebar-text)] hover:text-white flex-shrink-0" type="button" aria-label="Toggle sidebar">
@@ -204,6 +219,11 @@ export default function Sidebar({ currentPage, onNavigate, onLogout, sidebarOpen
             <HelpCircle className="w-5 h-5" />
             {sidebarOpen && <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Support</span>}
           </button>
+          {sidebarOpen && (
+            <p className="mt-2 text-[11px] text-[var(--sidebar-text-muted)] text-center">
+              © {new Date().getFullYear()} ANOCAB. All rights reserved.
+            </p>
+          )}
         </div>
       </div>
     </>

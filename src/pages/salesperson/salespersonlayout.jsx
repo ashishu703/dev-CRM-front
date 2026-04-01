@@ -188,12 +188,8 @@ export default function SalespersonLayout({ onLogout }) {
     const updateIsMobile = () => {
       const mobile = window.innerWidth <= 768;
       setIsMobileView(mobile);
-      // On desktop, sidebar open by default; on mobile, closed by default
-      if (!mobile) {
-        setSidebarOpen(true);
-      } else {
-        setSidebarOpen(false);
-      }
+      // Keep sidebar closed on load/responsive changes; open only manually.
+      setSidebarOpen(false);
     };
     updateIsMobile();
     window.addEventListener('resize', updateIsMobile);

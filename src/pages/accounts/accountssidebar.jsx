@@ -113,6 +113,9 @@ const AccountsSidebar = ({ activeView, setActiveView, onLogout, userType = 'acco
             <p className="text-xs text-slate-500">Get help & assistance</p>
           </div>
         </button>
+        <p className="mt-2 text-[11px] text-slate-500 text-center">
+          © {new Date().getFullYear()} ANOCAB. All rights reserved.
+        </p>
       </div>
 
     </aside>

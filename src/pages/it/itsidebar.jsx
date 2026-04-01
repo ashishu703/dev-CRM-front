@@ -86,6 +86,11 @@ const ItSidebar = ({ activeView, setActiveView, onLogout }) => {
           <HelpCircle className="w-5 h-5 text-gray-500" />
           {isExpanded && <span className="text-sm font-medium">Support</span>}
         </button>
+        {isExpanded && (
+          <p className="mt-2 text-[11px] text-gray-500 text-center">
+            © {new Date().getFullYear()} ANOCAB. All rights reserved.
+          </p>
+        )}
       </div>
     </aside>
   );

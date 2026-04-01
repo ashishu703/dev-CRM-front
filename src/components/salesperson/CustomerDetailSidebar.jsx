@@ -10,7 +10,7 @@ import EmptyState from '../ui/EmptyState'
 import ActivityTimelineSimple from '../lead/ActivityTimelineSimple'
 
 const TAB = { OVERVIEW: 'overview', QUOTATIONS: 'quotations', NOTES: 'notes', UPDATE_STATUS: 'updateStatus', RFP: 'rfp', SEND_EMAIL: 'sendEmail', DOCS: 'docs' }
-const tabBtn = (isActive) => `flex items-center gap-1.5 py-2.5 px-3 text-sm font-medium border-b-2 transition-colors ${isActive ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50' : 'border-transparent text-slate-600 hover:text-slate-900'}`
+const tabBtn = (isActive) => `flex items-center gap-1.5 py-2.5 px-3 text-sm font-medium border-b-2 transition-all duration-200 ${isActive ? 'border-indigo-600 text-indigo-700 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-t-lg shadow-sm' : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50/70 rounded-t-lg'}`
 
 function ReminderTab({
   leadId,
@@ -183,9 +183,9 @@ export default function CustomerDetailSidebar({
   const initials = (customer?.name || 'U').trim().split(/\s+/).map((n) => n[0]).join('').toUpperCase().slice(0, 2)
 
   const CustomerInfoBlock = () => (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 mb-4">
+    <div className="rounded-xl border border-indigo-100 bg-gradient-to-br from-white via-indigo-50/40 to-purple-50/40 p-4 mb-4 shadow-sm">
       <div className="flex gap-4 flex-wrap">
-        <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-base font-bold flex-shrink-0">
+        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-white flex items-center justify-center text-base font-bold flex-shrink-0 shadow-md">
           {initials}
         </div>
         <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
@@ -209,10 +209,10 @@ export default function CustomerDetailSidebar({
       ></div>
       
       <div
-        className={`fixed inset-y-0 right-0 h-full w-full sm:w-[936px] lg:w-[1092px] bg-white shadow-2xl z-[150] flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`fixed inset-y-0 right-0 h-full w-full sm:w-[936px] lg:w-[1092px] bg-gradient-to-b from-slate-50 to-white shadow-2xl z-[150] flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}
         style={{ top: 0, bottom: 0 }}
       >
-        <div className="bg-white border-b border-slate-200 px-4 py-3 flex-shrink-0 shadow-sm">
+        <div className="bg-gradient-to-r from-white via-indigo-50/40 to-purple-50/40 border-b border-slate-200 px-4 py-3 flex-shrink-0 shadow-sm">
           <div className="flex items-center justify-between gap-2 mb-3">
             <h2 className="text-base font-bold text-slate-900 truncate">Customer Details</h2>
             <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -299,8 +299,8 @@ export default function CustomerDetailSidebar({
                   </div>
                 </div>
               )}
-              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="px-4 py-3 border-b border-slate-200">
+              <div className="rounded-xl border border-indigo-100 bg-white shadow-sm">
+                <div className="px-4 py-3 border-b border-indigo-100 bg-gradient-to-r from-indigo-50/50 to-purple-50/40">
                   <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-indigo-600" /> 
                     Customer Timeline Overview
@@ -559,11 +559,11 @@ export default function CustomerDetailSidebar({
           )}
         </div>
 
-        <div className="p-3 sm:p-4 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-end gap-2 flex-shrink-0">
+        <div className="p-3 sm:p-4 border-t border-slate-200 bg-gradient-to-r from-slate-50 to-indigo-50/30 flex flex-wrap items-center justify-end gap-2 flex-shrink-0">
           <button onClick={onClose} className="px-3 sm:px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-semibold transition-colors">
             Close
           </button>
-          <button onClick={() => { onEdit?.(customer); onClose(); }} className="px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-semibold transition-colors">
+          <button onClick={() => { onEdit?.(customer); onClose(); }} className="px-3 sm:px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 text-sm font-semibold transition-all duration-200 shadow-sm">
             Edit Customer
           </button>
         </div>

@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback, useContext, useMemo } from "r
 import {
   X,
   Send,
-  MessageCircle,
   Loader2,
   LayoutDashboard,
   Users,
@@ -256,10 +255,12 @@ export default function AshvayChat({ showFloatingButton = true }) {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed z-[100] bottom-5 right-5 flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg text-white font-semibold text-sm ring-2 ring-white/80 hover:opacity-95 transition-transform hover:scale-[1.02]"
+          className="fixed z-[100] bottom-5 right-5 flex items-center gap-2 px-3 py-2 rounded-full shadow-lg text-white font-semibold text-sm ring-2 ring-white/80 hover:opacity-95 transition-transform hover:scale-[1.02]"
           style={{ background: GRADIENT }}
         >
-          <MessageCircle className="w-5 h-5 shrink-0" />
+          <span className="w-6 h-6 rounded-full overflow-hidden bg-white/90 ring-1 ring-white/70 shrink-0">
+            <img src={ASHVAY_LOGO} alt="" className="w-full h-full object-cover" />
+          </span>
           Ashvay
         </button>
       )}
@@ -320,7 +321,7 @@ export default function AshvayChat({ showFloatingButton = true }) {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto min-h-0 px-3 py-2 space-y-3 bg-[#f6faf9]">
+          <div className="flex-1 overflow-y-auto min-h-0 px-3 py-2 space-y-3 bg-[#f6faf9]" style={{ WebkitOverflowScrolling: "touch" }}>
             {!hasThread && (
               <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                 <p className="text-[11px] text-slate-500 mb-1 flex items-center gap-1.5">

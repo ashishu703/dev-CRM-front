@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useSelector } from 'react-redux';
-import { Bell, Users, X, TrendingUp, Calendar, CheckCircle, MapPin, Award, Package, DollarSign, Moon, Sun, BarChart3, Clock, User, Factory, Wrench, HelpCircle, Activity, Server, Settings, Shield, Link, CheckCheck, Circle, FileText, Menu, ToggleRight, CheckSquare, Calculator, CreditCard, MessageCircle } from 'lucide-react';
+import { Bell, Users, X, TrendingUp, Calendar, CheckCircle, MapPin, Award, Package, DollarSign, Moon, Sun, BarChart3, Clock, User, Factory, Wrench, HelpCircle, Activity, Server, Settings, Shield, Link, CheckCheck, Circle, FileText, Menu, ToggleRight, CheckSquare, Calculator, CreditCard } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
 import { useNotifications } from './hooks/useNotifications';
 import ProfileUpdateModal from './components/ProfileUpdateModal';
@@ -16,8 +15,6 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
     markAllAsRead,
     clearAllNotifications
   } = useNotifications();
-  const chatUnreadCount = useSelector((state) => state.chat?.unreadCount ?? 0);
-  
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileAnchorRect, setProfileAnchorRect] = useState(null);
@@ -561,7 +558,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
   const headerIsDark = isDarkMode || isSuperAdmin || (isSalesHeadTheme && !isSalespersonLight);
   const showToggleViewButton = onToggleView && userType !== 'salesperson';
   const showDarkModeButton = onToggleDarkMode && userType !== 'salesperson';
-  const showChatButton = typeof onChatClick === 'function' && !isSuperAdmin;
+  const showChatButton = false;
 
   const isSalesperson = userType === 'salesperson';
   const headerStyle = isSalesperson

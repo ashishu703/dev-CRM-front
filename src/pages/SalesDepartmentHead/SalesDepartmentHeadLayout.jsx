@@ -4,13 +4,8 @@ import SalesDepartmentHeadSidebar from './SalesDepartmentHeadSidebar';
 import AshvayChat from '../../components/AshvayChat';
 
 const SalesDepartmentHeadLayout = ({ children, onLogout, activeView, setActiveView }) => {
-  // Start with sidebar closed on mobile, open on desktop
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth >= 768; // md breakpoint
-    }
-    return false;
-  });
+  // Keep sidebar closed initially; open only on manual toggle.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   
   return (
     <div className="min-h-screen relative transition-colors bg-gray-50">
