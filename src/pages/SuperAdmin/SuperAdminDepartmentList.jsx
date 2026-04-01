@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, RefreshCw, Edit, Trash2, LogOut, Calendar, Users, Building, User, Mail, Filter, Eye, EyeOff, X } from 'lucide-react';
+import { Search, Plus, RefreshCw, Edit, Trash2, LogOut, Calendar, Users, Building, User, Filter, Eye, EyeOff, X } from 'lucide-react';
 import departmentHeadService, { uiToApiDepartment, apiToUiDepartment } from '../../api/admin_api/departmentHeadService';
 
 const DEPARTMENT_FILTER_OPTIONS = [
@@ -60,33 +60,6 @@ const DepartmentManagement = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [companies, setCompanies] = useState([]);
   const isSuperAdmin = (user?.role === 'superadmin');
-
-  const getDepartmentTypeColor = (type) => {
-    switch (type) {
-      case 'Sales Department':
-        return 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border border-green-300';
-      case 'Marketing Department':
-        return 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 border border-purple-300';
-      case 'HR Department':
-        return 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 border border-blue-300';
-      case 'Production Department':
-        return 'bg-gradient-to-r from-orange-100 to-amber-100 text-orange-700 border border-orange-300';
-      case 'Telesales Department':
-        return 'bg-gradient-to-r from-gray-100 to-slate-100 text-gray-700 border border-gray-300';
-      case 'Accounts Department':
-        return 'bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700 border border-indigo-300';
-      case 'IT Department':
-        return 'bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-700 border border-cyan-300';
-      default:
-        return 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 border border-blue-300';
-    }
-  };
-
-  const getRoleColor = (role) => {
-    return role === 'Department Head' 
-      ? 'bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 border border-blue-300'
-      : 'bg-gradient-to-r from-gray-100 to-slate-100 text-gray-700 border border-gray-300';
-  };
 
   const mapUserFromApi = (user) => {
     return {
@@ -255,7 +228,11 @@ const DepartmentManagement = () => {
   };
 
   const filteredDepartments = departments.filter((dept) => {
-    return isWithinDateRange(dept.createdAt);
+    if (!isWithinDateRange(dept.createdAt)) return false;
+    const q = (debouncedSearchTerm || '').trim().toLowerCase();
+    if (!q) return true;
+    const blob = `${dept.username || ''} ${dept.email || ''} ${dept.departmentType || ''} ${dept.companyName || ''}`.toLowerCase();
+    return blob.includes(q);
   });
 
   // Show skeleton loader on initial load
@@ -337,16 +314,25 @@ const DepartmentManagement = () => {
           boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
         }}>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-6">
-            <div className="relative w-full sm:w-1/4 min-w-0">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search departments..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-5 h-12 border-2 border-gray-200 rounded-xl bg-white/90 backdrop-blur-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none placeholder:text-gray-400 text-sm font-medium shadow-sm transition-all duration-200"
-                style={{ fontFamily: 'Inter, sans-serif' }}
-              />
+            <div className="w-full sm:w-auto">
+              <div className="flex shadow-lg rounded-xl overflow-hidden w-full sm:w-[340px]">
+                <input
+                  type="text"
+                  placeholder="Search items..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full bg-white border-gray-200 text-gray-900 placeholder-gray-500"
+                  style={{ fontFamily: 'Inter, sans-serif' }}
+                />
+                <button
+                  type="button"
+                  className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md"
+                  aria-label="Search"
+                  title="Search"
+                >
+                  <Search className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -517,23 +503,7 @@ const DepartmentManagement = () => {
                         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
                           <User className="w-4 h-4 text-white" />
                         </div>
-                        <span>Username</span>
-                      </div>
-                    </th>
-                    <th className="text-left py-4 px-6 text-sm font-bold text-gray-800" style={{ fontFamily: 'Poppins, sans-serif' }}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                          <Mail className="w-4 h-4 text-white" />
-                        </div>
-                        <span>Email</span>
-                      </div>
-                    </th>
-                    <th className="text-left py-4 px-6 text-sm font-bold text-gray-800" style={{ fontFamily: 'Poppins, sans-serif' }}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
-                          <Building className="w-4 h-4 text-white" />
-                        </div>
-                        <span>Department Type</span>
+                        <span>User</span>
                       </div>
                     </th>
                     <th className="text-left py-4 px-6 text-sm font-bold text-gray-800" style={{ fontFamily: 'Poppins, sans-serif' }}>
@@ -542,14 +512,6 @@ const DepartmentManagement = () => {
                           <Building className="w-4 h-4 text-white" />
                         </div>
                         <span>Company Name</span>
-                      </div>
-                    </th>
-                    <th className="text-left py-4 px-6 text-sm font-bold text-gray-800" style={{ fontFamily: 'Poppins, sans-serif' }}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
-                          <Users className="w-4 h-4 text-white" />
-                        </div>
-                        <span>Role</span>
                       </div>
                     </th>
                     <th className="text-left py-4 px-6 text-sm font-bold text-gray-800" style={{ fontFamily: 'Poppins, sans-serif' }}>
@@ -570,14 +532,6 @@ const DepartmentManagement = () => {
                     </th>
                     <th className="text-left py-4 px-6 text-sm font-bold text-gray-800" style={{ fontFamily: 'Poppins, sans-serif' }}>
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center">
-                          <Calendar className="w-4 h-4 text-white" />
-                        </div>
-                        <span>Created At</span>
-                      </div>
-                    </th>
-                    <th className="text-left py-4 px-6 text-sm font-bold text-gray-800" style={{ fontFamily: 'Poppins, sans-serif' }}>
-                      <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
                           <Edit className="w-4 h-4 text-white" />
                         </div>
@@ -590,21 +544,15 @@ const DepartmentManagement = () => {
                   {filteredDepartments.map((dept, index) => (
                     <tr key={dept.id} className="border-b border-gray-100 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-purple-50/50 transition-all duration-200">
                       <td className="py-4 px-5 text-xs text-gray-500 align-top font-medium">{index + 1}</td>
-                      <td className="py-4 px-6 text-sm text-gray-900 font-bold" style={{ fontFamily: 'Inter, sans-serif' }}>{dept.username}</td>
-                      <td className="py-4 px-6 text-sm text-gray-700 font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>{dept.email}</td>
                       <td className="py-4 px-6">
-                        <span className={`inline-flex items-center px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-sm ${getDepartmentTypeColor(dept.departmentType)}`} style={{ fontFamily: 'Inter, sans-serif' }}>
-                          {dept.departmentType}
-                        </span>
+                        <div className="flex flex-col">
+                          <span className="text-sm text-gray-900 font-bold" style={{ fontFamily: 'Inter, sans-serif' }}>{dept.username}</span>
+                          <span className="text-xs text-gray-600 font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>{dept.email}</span>
+                        </div>
                       </td>
                       <td className="py-4 px-6">
                         <span className="inline-flex items-center px-3.5 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700 border border-indigo-200 shadow-sm" style={{ fontFamily: 'Inter, sans-serif' }}>
                           {dept.companyName || 'N/A'}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6">
-                        <span className={`inline-flex items-center px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-sm ${getRoleColor(dept.role)}`} style={{ fontFamily: 'Inter, sans-serif' }}>
-                          {dept.role}
                         </span>
                       </td>
                       <td className="py-4 px-6 text-sm text-gray-700 font-semibold" style={{ fontFamily: 'Inter, sans-serif' }}>{String(dept.target ?? '')}</td>
@@ -617,7 +565,6 @@ const DepartmentManagement = () => {
                           <span className="text-gray-400 italic font-medium">Not set</span>
                         )}
                       </td>
-                      <td className="py-4 px-6 text-xs text-gray-600 whitespace-nowrap font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>{dept.createdAt}</td>
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-2">
                           <button 
@@ -709,18 +656,19 @@ const DepartmentManagement = () => {
           )}
         </div>
 
-        {/* Add Department Modal */}
+        {/* Add Department Drawer */}
         {showAddModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-            <div className="bg-white w-full max-w-lg rounded-xl shadow-xl border border-gray-200">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="fixed inset-0 z-50 bg-black/40">
+            <div className="absolute inset-0" onClick={() => setShowAddModal(false)} />
+            <div className="absolute top-0 right-0 h-full w-full max-w-xl bg-white shadow-2xl border-l border-gray-200 overflow-y-auto">
+              <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
                 <h3 className="text-base font-semibold text-gray-900">Add Department User</h3>
                 <button
                   className="p-2 text-gray-500 hover:text-gray-700"
                   onClick={() => setShowAddModal(false)}
                   aria-label="Close"
                 >
-                  ✕
+                  <X className="w-4 h-4" />
                 </button>
               </div>
               <form
@@ -888,7 +836,7 @@ const DepartmentManagement = () => {
                     </div>
                   )}
                 </div>
-                <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
+                <div className="sticky bottom-0 px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3 bg-white">
                   <button
                     type="button"
                     className="px-4 py-2 text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"

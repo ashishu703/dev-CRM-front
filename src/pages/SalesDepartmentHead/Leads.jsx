@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { FileText, Package, RefreshCw, Filter, Phone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Activity, X, Ban } from 'lucide-react';
+import { FileText, Package, RefreshCw, Filter, Phone, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Activity, X, Ban, Search } from 'lucide-react';
 import AddCustomerModal from './AddCustomerModal';
 import QuotationPreview from '../../components/QuotationPreview';
 import PIPreview from '../../components/PIPreview';
@@ -180,6 +180,7 @@ const LeadsSimplified = () => {
   const [showImportPopup, setShowImportPopup] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [enquirySearchTerm, setEnquirySearchTerm] = useState('');
   const [importPreview, setImportPreview] = useState([]);
   const [importing, setImporting] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -474,6 +475,7 @@ const LeadsSimplified = () => {
   const filteredEnquiries = useMemo(() => {
     // Use paginated enquiries directly (server-side pagination)
     if (!enquiries.length) return [];
+    const query = (enquirySearchTerm || '').trim().toLowerCase();
     
     // Apply client-side filters on paginated data
     const hasFilters = enquiryFilters.salesperson || enquiryFilters.telecaller || 
@@ -481,9 +483,19 @@ const LeadsSimplified = () => {
                        enquiryFilters.follow_up_status || enquiryFilters.sales_status ||
                        enquiryFilters.enquiry_date;
     
-    if (!hasFilters) return enquiries;
+    if (!hasFilters && !query) return enquiries;
     
     return enquiries.filter(enquiry => {
+      if (query) {
+        const matchesSearch =
+          String(enquiry.customer_name || '').toLowerCase().includes(query) ||
+          String(enquiry.business || '').toLowerCase().includes(query) ||
+          String(enquiry.salesperson_name || enquiry.salesperson || '').toLowerCase().includes(query) ||
+          String(enquiry.telecaller || '').toLowerCase().includes(query) ||
+          String(enquiry.state || '').toLowerCase().includes(query);
+        if (!matchesSearch) return false;
+      }
+
       // Match by salesperson_name or salesperson field
       if (enquiryFilters.salesperson) {
         const salespersonMatch = (enquiry.salesperson_name || enquiry.salesperson) === enquiryFilters.salesperson;
@@ -507,17 +519,18 @@ const LeadsSimplified = () => {
       
       return true;
     });
-  }, [enquiries, enquiryFilters]);
+  }, [enquiries, enquiryFilters, enquirySearchTerm]);
 
   // Group filtered enquiries by date - apply filters to grouped data
   const filteredEnquiriesGroupedByDate = useMemo(() => {
+    const query = (enquirySearchTerm || '').trim().toLowerCase();
     // Apply filters to grouped data
     const hasFilters = enquiryFilters.salesperson || enquiryFilters.telecaller || 
                        enquiryFilters.state || enquiryFilters.division || 
                        enquiryFilters.follow_up_status || enquiryFilters.sales_status ||
                        enquiryFilters.enquiry_date;
     
-    if (!hasFilters) {
+    if (!hasFilters && !query) {
       return enquiriesGroupedByDate;
     }
     
@@ -526,6 +539,16 @@ const LeadsSimplified = () => {
     Object.keys(enquiriesGroupedByDate).forEach(dateKey => {
       const dateEnquiries = enquiriesGroupedByDate[dateKey];
       const filteredDateEnquiries = dateEnquiries.filter(enquiry => {
+        if (query) {
+          const matchesSearch =
+            String(enquiry.customer_name || '').toLowerCase().includes(query) ||
+            String(enquiry.business || '').toLowerCase().includes(query) ||
+            String(enquiry.salesperson_name || enquiry.salesperson || '').toLowerCase().includes(query) ||
+            String(enquiry.telecaller || '').toLowerCase().includes(query) ||
+            String(enquiry.state || '').toLowerCase().includes(query);
+          if (!matchesSearch) return false;
+        }
+
         // Match by salesperson_name or salesperson field
         if (enquiryFilters.salesperson) {
           const salespersonMatch = (enquiry.salesperson_name || enquiry.salesperson) === enquiryFilters.salesperson;
@@ -556,7 +579,7 @@ const LeadsSimplified = () => {
     });
     
     return filtered;
-  }, [enquiriesGroupedByDate, enquiryFilters]);
+  }, [enquiriesGroupedByDate, enquiryFilters, enquirySearchTerm]);
 
   // Export enquiries to CSV
   const handleExportEnquiries = () => {
@@ -2639,6 +2662,25 @@ const LeadsSimplified = () => {
               >
                 <RefreshCw className={`w-4 h-4 ${enquiriesLoading ? 'animate-spin' : ''}`} />
                 Refresh
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 w-full sm:w-auto">
+            <div className="flex shadow-lg rounded-xl overflow-hidden flex-1 sm:flex-initial">
+              <input
+                type="text"
+                placeholder="Search items..."
+                value={enquirySearchTerm}
+                onChange={(e) => setEnquirySearchTerm(e.target.value)}
+                className="px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64 bg-white border-gray-200 text-gray-900 placeholder-gray-500"
+              />
+              <button
+                type="button"
+                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md"
+                aria-label="Search"
+              >
+                <Search className="h-4 w-4" />
               </button>
             </div>
           </div>

@@ -536,14 +536,14 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
     : isSalespersonLight
       ? { background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #f1f5f9 100%)', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(15, 23, 42, 0.04)' }
       : headerIsDark
-        ? { background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1)' }
+        ? { background: 'linear-gradient(90deg, #1f2a44 0%, #141b2f 60%, #0b1020 100%)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1)' }
         : undefined;
 
   return (
     <header className={`sticky top-0 z-[30] border-b shadow-sm transition-all duration-300 backdrop-blur-md ${
       (headerIsDark || isSalesperson) ? 'border-slate-700/50' : 'border-slate-200'
     }`} style={headerStyle ?? (headerIsDark ? {
-      background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)',
+      background: 'linear-gradient(90deg, #1f2a44 0%, #141b2f 60%, #0b1020 100%)',
       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1)'
     } : {
       background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%)',

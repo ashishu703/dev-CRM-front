@@ -191,19 +191,25 @@ export default function StockUpdate({ isDarkMode = false }) {
       <div className="max-w-7xl mx-auto">
         {/* Search Bar */}
         <div className={`mb-4 sm:mb-6 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-sm border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} p-3 sm:p-4`}>
-          <div className="relative">
-            <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+          <div className="flex shadow-lg rounded-xl overflow-hidden w-full sm:w-fit">
             <input
               type="text"
-              placeholder="Search products by name or description..."
+              placeholder="Search items..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className={`w-full pl-9 pr-4 py-2 rounded-lg border text-sm ${
-                isDarkMode 
-                  ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-blue-500' 
-                  : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-blue-500'
-              } focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors`}
+              className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64 ${
+                isDarkMode
+                  ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
+                  : 'bg-white border-gray-200 text-gray-900 placeholder-gray-500'
+              }`}
             />
+            <button
+              type="button"
+              className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md"
+              aria-label="Search"
+            >
+              <Search className="h-4 w-4" />
+            </button>
           </div>
         </div>
 

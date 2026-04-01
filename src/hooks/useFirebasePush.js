@@ -217,6 +217,28 @@ export const useFirebasePush = () => {
 
         onMessage(messaging, (payload) => {
           console.log('Foreground message received:', payload);
+          try {
+            const title = payload?.notification?.title || payload?.data?.title || 'New Notification';
+            const body = payload?.notification?.body || payload?.data?.body || '';
+            const targetUrl = payload?.data?.url || payload?.data?.click_action || '/';
+
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+              const n = new Notification(title, {
+                body,
+                icon: '/logo.png',
+                badge: '/logo.png',
+                data: { url: targetUrl }
+              });
+              n.onclick = () => {
+                const href = n?.data?.url || '/';
+                window.focus();
+                window.location.href = href;
+                n.close();
+              };
+            }
+          } catch (err) {
+            console.warn('[useFirebasePush] Foreground notification display failed:', err);
+          }
         });
       } else {
         console.warn('[useFirebasePush] getToken returned empty token');

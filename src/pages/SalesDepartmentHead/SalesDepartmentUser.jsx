@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, UserPlus, Edit, LogOut, Trash2, Hash, User, Mail, Shield, Building, Target, Calendar, MoreHorizontal, TrendingUp, AlertTriangle, LogIn, Info } from 'lucide-react';
+import { Search, UserPlus, Edit, Trash2, User, Target, MoreHorizontal, TrendingUp, AlertTriangle, LogIn, Info } from 'lucide-react';
 import departmentUsersApi, { apiToUiDepartment } from '../../api/admin_api/departmentUsersApi';
 import departmentHeadService from '../../api/admin_api/departmentHeadService';
 import { useAuth } from '../../hooks/useAuth';
@@ -357,19 +357,6 @@ const SalesDepartmentUser = ({ setActiveView }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, limit, searchTerm]);
 
-  const getDepartmentBadgeColor = (department) => {
-    switch (department) {
-      case 'SALES DEPARTMENT':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'OFFICE SALES DEPARTMENT':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'MARKETING DEPARTMENT':
-        return 'bg-purple-100 text-purple-800 border-purple-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
   // Show skeleton loader on initial load
   if (initialLoading) {
     return <DashboardSkeleton />;
@@ -381,15 +368,23 @@ const SalesDepartmentUser = ({ setActiveView }) => {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 md:p-6">
         {/* Search and Actions */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search by username, email, department type, target, achieved target, remaining target, or due payment"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700"
-            />
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 w-full sm:w-auto">
+            <div className="flex shadow-lg rounded-xl overflow-hidden flex-1 sm:flex-initial">
+              <input
+                type="text"
+                placeholder="Search items..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64 bg-white border-gray-200 text-gray-900 placeholder-gray-500"
+              />
+              <button
+                type="button"
+                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md"
+                aria-label="Search"
+              >
+                <Search className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           
           <div className="flex items-center gap-3 ml-6">
@@ -411,32 +406,8 @@ const SalesDepartmentUser = ({ setActiveView }) => {
               <tr className="border-b border-gray-200">
                 <th className="text-left py-2 sm:py-3 px-2 sm:px-4">
                   <div className="flex items-center gap-2 text-gray-600 font-medium">
-                    <Hash className="w-4 h-4 text-purple-600" />
-                    <span className="text-purple-700">#</span>
-                  </div>
-                </th>
-                <th className="text-left py-2 sm:py-3 px-2 sm:px-4">
-                  <div className="flex items-center gap-2 text-gray-600 font-medium">
                     <User className="w-4 h-4 text-blue-600" />
                     Username
-                  </div>
-                </th>
-                <th className="text-left py-2 sm:py-3 px-2 sm:px-4">
-                  <div className="flex items-center gap-2 text-gray-600 font-medium">
-                    <Mail className="w-4 h-4 text-emerald-600" />
-                    Email
-                  </div>
-                </th>
-                <th className="text-left py-2 sm:py-3 px-2 sm:px-4">
-                  <div className="flex items-center gap-2 text-gray-600 font-medium">
-                    <Shield className="w-4 h-4 text-orange-600" />
-                    Role
-                  </div>
-                </th>
-                <th className="text-left py-2 sm:py-3 px-2 sm:px-4">
-                  <div className="flex items-center gap-2 text-gray-600 font-medium">
-                    <Building className="w-4 h-4 text-indigo-600" />
-                    Department Type
                   </div>
                 </th>
                 <th className="text-left py-2 sm:py-3 px-2 sm:px-4">
@@ -463,24 +434,8 @@ const SalesDepartmentUser = ({ setActiveView }) => {
                     Due Payment
                   </div>
                 </th>
-                <th className="text-left py-2 sm:py-3 px-2 sm:px-4">
-                  <div className="flex items-center gap-2 text-gray-600 font-medium">
-                    <Calendar className="w-4 h-4 text-red-600" />
-                    Target Expiry
-                  </div>
-                </th>
-                <th className="text-left py-2 sm:py-3 px-2 sm:px-4">
-                  <div className="flex items-center gap-2 text-gray-600 font-medium">
-                    <Shield className="w-4 h-4 text-blue-600" />
-                    Status
-                  </div>
-                </th>
-                <th className="text-left py-2 sm:py-3 px-2 sm:px-4">
-                  <div className="flex items-center gap-2 text-gray-600 font-medium">
-                    <Calendar className="w-4 h-4 text-gray-600" />
-                    Created At
-                  </div>
-                </th>
+                <th className="text-left py-2 sm:py-3 px-2 sm:px-4 text-gray-600 font-medium">Target Expiry</th>
+                <th className="text-left py-2 sm:py-3 px-2 sm:px-4 text-gray-600 font-medium">Status</th>
                 <th className="text-left py-2 sm:py-3 px-2 sm:px-4">
                   <div className="flex items-center gap-2 text-gray-600 font-medium">
                     <MoreHorizontal className="w-4 h-4" />
@@ -491,34 +446,18 @@ const SalesDepartmentUser = ({ setActiveView }) => {
             </thead>
             <tbody>
               {loading && (
-                <tr><td className="py-8 px-4 text-center text-gray-500" colSpan={13}>Loading...</td></tr>
+                <tr><td className="py-8 px-4 text-center text-gray-500" colSpan={8}>Loading...</td></tr>
               )}
               {!loading && filteredUsers.length === 0 && (
-                <tr><td className="py-8 px-4 text-center text-gray-500" colSpan={13}>{error || 'No users found'}</td></tr>
+                <tr><td className="py-8 px-4 text-center text-gray-500" colSpan={8}>{error || 'No users found'}</td></tr>
               )}
               {!loading && filteredUsers.map((user) => (
                 <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="py-3 sm:py-4 px-2 sm:px-4">
-                    <span className="text-gray-700 font-medium">{user.id}</span>
-                  </td>
-                  <td className="py-3 sm:py-4 px-2 sm:px-4">
-                    <span className="text-gray-900 font-medium">{user.username}</span>
-                  </td>
-                  <td className="py-3 sm:py-4 px-2 sm:px-4">
-                    <span className="text-gray-700">{user.email}</span>
-                  </td>
-                  <td className="py-3 sm:py-4 px-2 sm:px-4">
-                    <div className="text-center">
-                      <span className="inline-block bg-gray-100 text-gray-800 text-xs font-semibold px-3 py-1 rounded-lg border border-gray-200">
-                        DEPARTMENT
-                      </span>
-                      <div className="text-xs text-gray-600 mt-1">USER</div>
+                    <div className="flex flex-col">
+                      <span className="text-gray-900 font-medium">{user.username}</span>
+                      <span className="text-xs text-gray-500">{user.email}</span>
                     </div>
-                  </td>
-                  <td className="py-3 sm:py-4 px-2 sm:px-4">
-                    <span className={`inline-block px-3 py-1 rounded-lg text-xs font-semibold border ${getDepartmentBadgeColor(user.department)}`}>
-                      {user.department}
-                    </span>
                   </td>
                   <td className="py-3 sm:py-4 px-2 sm:px-4">
                     <span className="text-gray-600">{user.target}</span>
@@ -596,9 +535,6 @@ const SalesDepartmentUser = ({ setActiveView }) => {
                     </div>
                   </td>
                   <td className="py-3 sm:py-4 px-2 sm:px-4">
-                    <span className="text-gray-700">{user.createdAt}</span>
-                  </td>
-                  <td className="py-3 sm:py-4 px-2 sm:px-4">
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleEdit(user.id)}
@@ -671,12 +607,24 @@ const SalesDepartmentUser = ({ setActiveView }) => {
       </div>
 
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
-          <div className="bg-white w-full max-w-lg rounded-xl shadow-xl border border-gray-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100">
-              <h3 className="text-base font-semibold text-gray-900">Add User</h3>
+        <div className="fixed inset-0 z-50">
+          <div
+            className="absolute inset-0 bg-slate-900/45 backdrop-blur-[1px]"
+            onClick={() => {
+              setShowAddModal(false);
+              setNewUser({ username: '', email: '', password: '', target: '', targetStartDate: '' });
+              setRemainingTarget(0);
+              setRemainingDays(0);
+              setHeadTargetStartDate(null);
+              setTargetExpirationDate(null);
+            }}
+            aria-hidden
+          />
+          <div className="absolute right-0 top-0 h-full w-full sm:w-[560px] bg-white shadow-2xl border-l border-gray-200 overflow-y-auto">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 bg-gradient-to-r from-indigo-600 to-violet-600">
+              <h3 className="text-base font-semibold text-white">Add User</h3>
               <button
-                className="p-2 text-gray-500 hover:text-gray-700"
+                className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg"
                 onClick={() => {
                   setShowAddModal(false);
                   setNewUser({ username: '', email: '', password: '', target: '', targetStartDate: '' });
@@ -843,7 +791,7 @@ const SalesDepartmentUser = ({ setActiveView }) => {
                   </div>
                 </div>
               </div>
-              <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
+              <div className="sticky bottom-0 bg-white px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
@@ -861,7 +809,7 @@ const SalesDepartmentUser = ({ setActiveView }) => {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                  className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-lg hover:from-indigo-700 hover:to-violet-700 disabled:opacity-50"
                 >
                   {saving ? 'Saving...' : 'Save'}
                 </button>

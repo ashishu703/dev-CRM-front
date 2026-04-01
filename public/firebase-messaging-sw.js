@@ -4,6 +4,7 @@ importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-comp
 let firebaseInitialized = false;
 let messaging = null;
 let vapidKey = null;
+const ANOCAB_LOGO_URL = 'https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png';
 
 self.addEventListener('push', (event) => {
   // Fallback handler so early push events are not dropped before Firebase init.
@@ -12,8 +13,8 @@ self.addEventListener('push', (event) => {
     const notificationTitle = payload?.notification?.title || payload?.data?.title || 'New Notification';
     const notificationOptions = {
       body: payload?.notification?.body || payload?.data?.body || '',
-      icon: '/logo.png',
-      badge: '/logo.png',
+      icon: payload?.data?.logo || ANOCAB_LOGO_URL,
+      badge: payload?.data?.logo || ANOCAB_LOGO_URL,
       data: payload?.data || {},
       requireInteraction: false,
       tag: payload?.data?.notificationId || 'notification'
@@ -88,8 +89,8 @@ self.addEventListener('message', async (event) => {
           const notificationTitle = payload.notification?.title || 'New Notification';
           const notificationOptions = {
             body: payload.notification?.body || '',
-            icon: '/logo.png',
-            badge: '/logo.png',
+            icon: payload?.data?.logo || ANOCAB_LOGO_URL,
+            badge: payload?.data?.logo || ANOCAB_LOGO_URL,
             data: payload.data || {},
             requireInteraction: false,
             tag: payload.data?.notificationId || 'notification'

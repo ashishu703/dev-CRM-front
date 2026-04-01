@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react"
-import { Calculator, ArrowRight, Upload } from "lucide-react"
+import { Calculator, ArrowRight, Upload, Search } from "lucide-react"
 import AaacCalculator from "./AaacCalculator"
 import AcsrCalculator from "./AcsrCalculator"
 import AbCableCalculator from "./AbCableCalculator"
@@ -21,6 +21,7 @@ export default function CalculatorProductList({ setActiveView }) {
   const [excelFile, setExcelFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [activeTab, setActiveTab] = useState('calculator') // 'calculator' or 'bulk_upload'
+  const [searchTerm, setSearchTerm] = useState('')
 
   const fetchPriceList = useCallback(async () => {
     setPriceListLoading(true)
@@ -112,6 +113,25 @@ export default function CalculatorProductList({ setActiveView }) {
       setLoading(false)
     }
   }
+
+  const filteredProducts = useMemo(() => {
+    const query = (searchTerm || '').trim().toLowerCase()
+    if (!query) return products
+    return products.filter((p) =>
+      String(p.name || '').toLowerCase().includes(query) ||
+      String(p.description || '').toLowerCase().includes(query)
+    )
+  }, [products, searchTerm])
+
+  const filteredPriceList = useMemo(() => {
+    const query = (searchTerm || '').trim().toLowerCase()
+    if (!query) return priceList
+    return priceList.filter((row) =>
+      String(row.product_spec || '').toLowerCase().includes(query) ||
+      String(row.price_type || '').toLowerCase().includes(query) ||
+      String(row.rate_type || '').toLowerCase().includes(query)
+    )
+  }, [priceList, searchTerm])
 
   const handleProductClick = (product) => {
     if (product.id === 'aaac') {
@@ -213,14 +233,31 @@ export default function CalculatorProductList({ setActiveView }) {
           </nav>
         </div>
 
+        <div className="mb-5 flex shadow-lg rounded-xl overflow-hidden w-full sm:w-fit">
+          <input
+            type="text"
+            placeholder="Search items..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64 bg-white border-gray-200 text-gray-900 placeholder-gray-500"
+          />
+          <button
+            type="button"
+            className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md"
+            aria-label="Search"
+          >
+            <Search className="h-4 w-4" />
+          </button>
+        </div>
+
         {/* Calculator Tab Content */}
         {activeTab === 'calculator' && (
           <>
-            {products.length > 0 && (
+            {filteredProducts.length > 0 && (
               <section className="mb-8">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Select product</h2>
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-                  {products.map((product) => (
+                  {filteredProducts.map((product) => (
                     <div
                       key={product.id}
                       onClick={() => handleProductClick(product)}
@@ -328,7 +365,7 @@ export default function CalculatorProductList({ setActiveView }) {
             <div className="overflow-hidden border-t border-slate-200">
               {(() => {
                 if (priceListLoading) return <div className="px-6 py-12 text-center text-sm text-slate-500">Loading…</div>
-                if (priceList.length === 0) return <div className="px-6 py-12 text-center text-sm text-slate-500">No rows. Upload Excel to see daily prices.</div>
+                if (filteredPriceList.length === 0) return <div className="px-6 py-12 text-center text-sm text-slate-500">No rows. Upload Excel to see daily prices.</div>
                 return (
                   <>
                     <div className="overflow-x-auto">
@@ -343,7 +380,7 @@ export default function CalculatorProductList({ setActiveView }) {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 bg-white">
-                          {priceList.slice(0, 100).map((row, i) => (
+                          {filteredPriceList.slice(0, 100).map((row, i) => (
                             <tr key={row.id || i} className="hover:bg-slate-50/50">
                               <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-800">{row.product_spec ?? '—'}</td>
                               <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">{PRICE_TYPE_LABEL(row.price_type)}</td>
@@ -355,8 +392,8 @@ export default function CalculatorProductList({ setActiveView }) {
                         </tbody>
                       </table>
                     </div>
-                    {priceList.length > 100 && (
-                      <div className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">Showing first 100 of {priceList.length}</div>
+                    {filteredPriceList.length > 100 && (
+                      <div className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">Showing first 100 of {filteredPriceList.length}</div>
                     )}
                   </>
                 )

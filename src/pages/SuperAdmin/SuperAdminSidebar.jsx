@@ -18,6 +18,7 @@ import {
 
 const Sidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, onToggleSidebar, isMobileView = false }) => {
   const [internalOpen, setInternalOpen] = useState(true);
+  const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const [openDropdowns, setOpenDropdowns] = useState({
     department: false,
     salesDepartment: false
@@ -57,28 +58,32 @@ const Sidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, onToggleSid
 
   return (
     <div 
-      className={`fixed left-0 top-0 z-[40] h-screen flex flex-col border-r border-slate-700/50 bg-gradient-to-b from-slate-800 via-slate-900 to-slate-950 shadow-2xl transition-all duration-300 ease-out
+      className={`fixed left-0 top-0 z-[40] h-screen flex flex-col border-r border-slate-700/50 bg-gradient-to-b from-[#1f2a44] via-[#141b2f] to-[#0b1020] shadow-2xl transition-all duration-300 ease-out
         ${isMobileView ? (isExpanded ? 'w-64 translate-x-0' : '-translate-x-full w-64') : (isExpanded ? 'w-64 translate-x-0' : 'w-16 translate-x-0')}`}
       style={{
-        background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
+        background: 'linear-gradient(180deg, #1f2a44 0%, #141b2f 52%, #0b1020 100%)',
         boxShadow: '4px 0 20px rgba(0, 0, 0, 0.3)'
       }}
     >
       {/* Header */}
-      <div className="p-4 border-b border-slate-700/50 bg-gradient-to-r from-blue-600/20 to-purple-600/20">
+      <div className="p-4 border-b border-slate-700/50 bg-gradient-to-r from-indigo-500/20 via-blue-500/10 to-violet-500/20">
         <div className="flex items-center justify-between">
           {isExpanded && (
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 p-1.5 shadow-lg">
-              <img 
-                src="https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png" 
-                alt="ANOCAB Logo" 
-                  className="w-full h-full object-contain rounded-lg"
-              />
+              <div className="w-10 h-10 rounded-xl bg-white p-1.5 shadow-lg border border-white/40 overflow-hidden flex items-center justify-center">
+              {!logoLoadFailed ? (
+                <img 
+                  src="https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png" 
+                  alt="ANOCAB Logo"
+                  onError={() => setLogoLoadFailed(true)}
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <span className="text-xs font-bold text-slate-700">A</span>
+              )}
               </div>
               <div>
                 <h1 className="font-bold text-white text-lg tracking-tight" style={{ fontFamily: 'Poppins, sans-serif' }}>ANOCAB</h1>
-                <p className="text-xs text-slate-400">CRM Platform</p>
               </div>
             </div>
           )}
@@ -215,7 +220,7 @@ const Sidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, onToggleSid
       </div>
 
       {/* Support Button */}
-      <div className="p-3 border-t border-slate-700/50 bg-slate-800/30">
+      <div className="p-3 border-t border-slate-700/50 bg-slate-800/20">
         <button 
           onClick={() => window.location.href = '/support'}
           className="w-full flex items-center space-x-3 px-3 py-2.5 text-slate-300 hover:bg-slate-700/50 hover:text-white rounded-xl transition-all duration-200"
@@ -223,6 +228,11 @@ const Sidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, onToggleSid
           <HelpCircle className="w-5 h-5" />
           {isExpanded && <span className="text-sm font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>Support</span>}
         </button>
+        {isExpanded && (
+          <p className="mt-3 text-[11px] text-slate-400 text-center">
+            All rights reserved.
+          </p>
+        )}
       </div>
     </div>
   );

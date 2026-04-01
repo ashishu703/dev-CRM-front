@@ -623,18 +623,8 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
 
   return (
     <div className="p-3 sm:p-4 md:p-6 space-y-4 overflow-x-hidden min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">RFP Workflow</h1>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={fetchRfps}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
           {permissions.isSalesperson && (
             <button
               onClick={() => openModal(setShowCreate, null, () => setCreateForm({
@@ -674,21 +664,37 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
 
       {/* Search, Filter, and Sort Controls */}
       <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Search Bar */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by RFP ID, Product, or Salesperson..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setPage(1);
-              }}
-              className="w-full pl-10 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            />
+          <div className="flex-1">
+            <div className="flex shadow-lg rounded-xl overflow-hidden w-full sm:w-fit">
+              <input
+                type="text"
+                placeholder="Search items..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+                className="px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64 bg-white border-gray-200 text-gray-900 placeholder-gray-500"
+              />
+              <button
+                type="button"
+                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md"
+                aria-label="Search"
+              >
+                <Search className="h-4 w-4" />
+              </button>
+            </div>
           </div>
+
+          <button
+            onClick={fetchRfps}
+            className="inline-flex items-center justify-center p-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-600 hover:to-blue-700 transition-all duration-200 shadow-md"
+            title="Refresh"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
 
           {/* Status Filter */}
           <div className="flex items-center gap-2">

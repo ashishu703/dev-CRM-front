@@ -52,17 +52,49 @@ const getSocketURL = () => {
 
 let sharedSocket = null;
 let sharedSocketToken = null;
+const ANOCAB_LOGO_URL = 'https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png';
 
 function normalizeBellList(list) {
   const now = Date.now();
   const byId = new Map();
+  const bySignature = new Map();
+  const DEDUPE_WINDOW_MS = 2 * 60 * 1000;
+  const getSignature = (n) => {
+    const message = String(n?.message || '').trim().toLowerCase();
+    const title = String(n?.title || '').trim().toLowerCase();
+    const refId = n?.referenceId ?? n?.reference_id ?? '';
+    const refType = n?.referenceType ?? n?.reference_type ?? '';
+    return `${n?.type || ''}|${refType}|${refId}|${title}|${message}`;
+  };
   for (const n of list) {
     if (!n || n.id == null) continue;
     const t = n.time ? new Date(n.time).getTime() : now;
     if (Number.isNaN(t) || now - t > RETENTION_MS) continue;
-    byId.set(n.id, { ...n, unread: n.unread !== false });
+    const normalized = { ...n, unread: n.unread !== false };
+    byId.set(n.id, normalized);
+
+    const signature = getSignature(normalized);
+    if (!signature) continue;
+    const existing = bySignature.get(signature);
+    if (!existing) {
+      bySignature.set(signature, normalized);
+      continue;
+    }
+
+    const existingTime = existing.time ? new Date(existing.time).getTime() : 0;
+    const withinWindow =
+      Number.isFinite(existingTime) &&
+      Math.abs(existingTime - t) <= DEDUPE_WINDOW_MS;
+
+    if (withinWindow && t > existingTime) {
+      bySignature.set(signature, normalized);
+    }
   }
-  const sorted = Array.from(byId.values()).sort(
+  const dedupedBySignatureIds = new Set(
+    Array.from(bySignature.values()).map((n) => n.id)
+  );
+  const merged = Array.from(byId.values()).filter((n) => dedupedBySignatureIds.has(n.id));
+  const sorted = merged.sort(
     (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()
   );
   return sorted.slice(0, BELL_MAX_ITEMS);
@@ -363,7 +395,7 @@ export const useNotifications = () => {
       }
       playNotificationSound();
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        new Notification(notification.title, { body: notification.message, icon: '/logo.png' });
+        new Notification(notification.title, { body: notification.message, icon: ANOCAB_LOGO_URL });
       }
     };
 
