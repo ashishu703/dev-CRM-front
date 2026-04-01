@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useContext, useMemo } from "react"
+import { useState, useEffect, useRef, useCallback, useContext } from "react"
 import {
   X,
   Send,
@@ -48,7 +48,7 @@ function userAvatarGlyph(displayName) {
 
 export default function AshvayChat({ showFloatingButton = true }) {
   const { user } = useContext(AuthContext)
-  const displayName = useMemo(() => displayNameFromUser(user), [user])
+  const displayName = displayNameFromUser(user)
 
   const [open, setOpen] = useState(false)
   const [message, setMessage] = useState("")

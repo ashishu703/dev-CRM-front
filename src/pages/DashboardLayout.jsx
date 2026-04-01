@@ -6,7 +6,7 @@ import SuperAdminSidebar from './SuperAdmin/SuperAdminSidebar';
 const MOBILE_BREAKPOINT = 768;
 
 const DashboardLayout = ({ children, onLogout, activeView, setActiveView }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobileView, setIsMobileView] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
   );
