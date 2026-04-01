@@ -18,9 +18,12 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
   const [showDetails, setShowDetails] = useState(false)
   const [requestsPage, setRequestsPage] = useState(1)
   const [requestsItemsPerPage, setRequestsItemsPerPage] = useState(50)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const fetchRfps = async () => {
-    setLoading(true)
+  const fetchRfps = async (options = {}) => {
+    const { refresh = false } = options
+    if (refresh) setIsRefreshing(true)
+    else setLoading(true)
     try {
       const queryParams = {
         status: filterStatus !== 'all' ? filterStatus : undefined,
@@ -50,7 +53,8 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
       Toast.error(error.message || 'Failed to load RFP requests')
       setRfps([])
     } finally {
-      setLoading(false)
+      if (refresh) setIsRefreshing(false)
+      else setLoading(false)
     }
   }
 
@@ -312,113 +316,121 @@ export default function SalespersonRfpRequests({ isDarkMode = false }) {
   return (
     <div className={`min-h-screen p-4 sm:p-6 lg:p-8 ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold mb-2">RFP Raise & Approved</h1>
-          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-            View all raised and approved RFP requests
-          </p>
-        </div>
 
         {/* Filters and Search */}
         {/* Filters and Search */}
         <div className={`mb-6 p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white shadow-sm'}`}>
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             {/* Search */}
-            <div className="flex-1 relative">
-              <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-              <input
-                type="text"
-                placeholder="Search by product, RFP ID, or company..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-700 border-gray-600 text-gray-100' 
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
-              />
+            <div className="flex-1 sm:flex-initial">
+              <div className="flex shadow-lg rounded-xl overflow-hidden flex-1 sm:flex-initial">
+                <input
+                  type="text"
+                  placeholder="Search items..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64 ${
+                    isDarkMode
+                      ? 'bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400'
+                      : 'bg-white border-gray-200 text-gray-900 placeholder-gray-500'
+                  }`}
+                />
+                <button
+                  type="button"
+                  className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md"
+                  aria-label="Search"
+                  title="Search"
+                >
+                  <Search className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             
-            {/* Status Filter */}
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3 ml-auto">
+              {/* Status Filter */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <button
+                  onClick={() => setFilterStatus('all')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterStatus === 'all'
+                      ? 'bg-blue-600 text-white'
+                      : isDarkMode
+                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => setFilterStatus('pending_dh')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterStatus === 'pending_dh'
+                      ? 'bg-yellow-600 text-white'
+                      : isDarkMode
+                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Pending
+                </button>
+                <button
+                  onClick={() => setFilterStatus('approved')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterStatus === 'approved'
+                      ? 'bg-green-600 text-white'
+                      : isDarkMode
+                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Approved
+                </button>
+                <button
+                  onClick={() => setFilterStatus('rejected')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filterStatus === 'rejected'
+                      ? 'bg-red-600 text-white'
+                      : isDarkMode
+                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Rejected
+                </button>
+              </div>
+
+              {/* Refresh */}
               <button
-                onClick={() => setFilterStatus('all')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  filterStatus === 'all'
-                    ? 'bg-blue-600 text-white'
-                    : isDarkMode
-                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                onClick={() => fetchRfps({ refresh: true })}
+                className="p-2.5 rounded-xl border-2 border-transparent text-white bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 hover:from-blue-700 hover:via-purple-700 hover:to-pink-700 transition-all duration-200 shadow-md"
+                title="Refresh"
+                aria-label="Refresh"
               >
-                All
-              </button>
-              <button
-                onClick={() => setFilterStatus('pending_dh')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  filterStatus === 'pending_dh'
-                    ? 'bg-yellow-600 text-white'
-                    : isDarkMode
-                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Pending
-              </button>
-              <button
-                onClick={() => setFilterStatus('approved')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  filterStatus === 'approved'
-                    ? 'bg-green-600 text-white'
-                    : isDarkMode
-                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Approved
-              </button>
-              <button
-                onClick={() => setFilterStatus('rejected')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  filterStatus === 'rejected'
-                    ? 'bg-red-600 text-white'
-                    : isDarkMode
-                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Rejected
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               </button>
             </div>
-
-            {/* Refresh */}
-            <button
-              onClick={fetchRfps}
-              className={`px-4 py-2 rounded-lg border transition-colors ${
-                isDarkMode
-                  ? 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'
-                  : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <RefreshCw className="w-5 h-5" />
-            </button>
           </div>
         </div>
 
         {/* RFP List (Date-wise Table + Pagination) */}
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className={`mt-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Loading RFPs...</p>
+        {loading || isRefreshing ? (
+          <div className={`rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} p-4 sm:p-6`}>
+            <div className="space-y-3">
+              <div className={`h-10 w-full rounded-lg animate-pulse ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`} />
+              <div className={`h-10 w-full rounded-lg animate-pulse ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`} />
+              <div className={`h-10 w-full rounded-lg animate-pulse ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`} />
+              <div className={`h-10 w-full rounded-lg animate-pulse ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`} />
+              <div className={`h-10 w-full rounded-lg animate-pulse ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`} />
+            </div>
           </div>
         ) : filteredRfps.length === 0 ? (
-          <div className={`text-center py-12 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-            <FileText className={`w-12 h-12 mx-auto mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`} />
-            <p className={`text-lg font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>No RFP requests found</p>
-            <p className={`text-sm mt-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-              {searchQuery || filterStatus !== 'all' ? 'Try adjusting your filters' : 'Raise an RFP to get started'}
-            </p>
+          <div className={`rounded-lg overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+            <img
+              src="/images/Screenshot 2026-04-01 143411.png"
+              alt="No RFP requests found"
+              className="w-full h-auto object-contain"
+              loading="lazy"
+            />
           </div>
         ) : (
           <div className="space-y-6">

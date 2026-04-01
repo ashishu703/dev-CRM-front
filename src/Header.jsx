@@ -14,13 +14,11 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
     markAsRead,
     markAsUnread,
     markAllAsRead,
-    notificationRetentionDays,
-    bellMaxItems
+    clearAllNotifications
   } = useNotifications();
   const chatUnreadCount = useSelector((state) => state.chat?.unreadCount ?? 0);
   
   const [showNotifications, setShowNotifications] = useState(false);
-  const [expandedNotificationId, setExpandedNotificationId] = useState(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileAnchorRect, setProfileAnchorRect] = useState(null);
   const profileButtonRef = useRef(null);
@@ -40,10 +38,38 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
     };
   }, []);
 
-  const getNotificationIcon = (type, { muted = false } = {}) => {
+  const getNotificationIcon = (type, notification = {}, { muted = false } = {}) => {
     const active = muted
       ? `w-3.5 h-3.5 ${isDarkMode ? 'text-zinc-300' : 'text-slate-600'}`
       : 'w-3 h-3 text-white';
+    const title = String(notification?.title || '').toLowerCase();
+    const message = String(notification?.message || '').toLowerCase();
+    const detailsText = `${title} ${message}`;
+
+    const inferredType = (() => {
+      if (detailsText.includes('follow-up') || detailsText.includes('follow up') || detailsText.includes('follow_up_status') || detailsText.includes('sales status')) {
+        return 'followup_activity';
+      }
+      if (detailsText.includes('quotation')) {
+        if (detailsText.includes('approved')) return 'quotation_approved';
+        if (detailsText.includes('rejected')) return 'quotation_rejected';
+        if (detailsText.includes('pending')) return 'quotation_pending';
+        return 'quotation_activity';
+      }
+      if (detailsText.includes('proforma invoice') || detailsText.includes('pi ')) {
+        if (detailsText.includes('approved')) return 'pi_approved';
+        if (detailsText.includes('rejected')) return 'pi_rejected';
+        return 'pi_activity';
+      }
+      if (detailsText.includes('payment') || detailsText.includes('due amount') || detailsText.includes('collection')) {
+        return 'payment_activity';
+      }
+      if (detailsText.includes('target')) {
+        return 'target_assigned';
+      }
+      return type;
+    })();
+
     const iconMap = {
       lead_assigned: <Users className={active} />,
       lead_transferred: <Users className={active} />,
@@ -52,9 +78,16 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
       quotation_activity: <FileText className={active} />,
       meeting_activity: <Calendar className={active} />,
       followup_activity: <Clock className={active} />,
+      quotation_pending: <Clock className={active} />,
+      quotation_approved: <CheckCircle className={active} />,
+      quotation_rejected: <X className={active} />,
+      pi_activity: <FileText className={active} />,
+      pi_approved: <CheckCircle className={active} />,
+      pi_rejected: <X className={active} />,
+      target_assigned: <Award className={active} />,
       activity: <Activity className={active} />
     };
-    return iconMap[type] || <Bell className={active} />;
+    return iconMap[inferredType] || iconMap[type] || <Bell className={active} />;
   };
 
   // Format time for display (handles timezone correctly)
@@ -695,9 +728,6 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
                         </span>
                       )}
                     </div>
-                    <p className={`text-[11px] mt-0.5 ${isDarkMode ? 'text-zinc-500' : 'text-slate-500'}`}>
-                      Showing recent {bellMaxItems} · older than {notificationRetentionDays} days are removed automatically
-                    </p>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {unreadCount > 0 && (
@@ -711,6 +741,19 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
                         }`}
                       >
                         Mark all read
+                      </button>
+                    )}
+                    {notifications.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => clearAllNotifications()}
+                        className={`text-[11px] font-medium px-2 py-1.5 rounded-lg transition-colors ${
+                          isDarkMode
+                            ? 'text-rose-400 hover:bg-zinc-800'
+                            : 'text-rose-700 hover:bg-rose-50'
+                        }`}
+                      >
+                        Clear all
                       </button>
                     )}
                     <button 
@@ -751,7 +794,7 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
                                 ? (isDarkMode ? 'bg-sky-600/90 shadow-sm shadow-sky-900/30' : 'bg-sky-600 text-white shadow-sm')
                                 : (isDarkMode ? 'bg-zinc-800' : 'bg-slate-100')
                             }`}>
-                              {getNotificationIcon(notification.type, { muted: !notification.unread })}
+                              {getNotificationIcon(notification.type, notification, { muted: !notification.unread })}
                             </div>
                           </div>
                           <div className="flex-1 min-w-0 overflow-hidden pt-0.5">
@@ -777,29 +820,6 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
                             <p className={`text-xs leading-relaxed break-words line-clamp-3 ${isDarkMode ? 'text-zinc-400' : 'text-slate-600'}`}>
                               {notification.message}
                             </p>
-                            {notification.details && (
-                              <div className="mt-2">
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedNotificationId(expandedNotificationId === notification.id ? null : notification.id)}
-                                  className={`text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
-                                    isDarkMode
-                                      ? 'bg-zinc-800 text-sky-400 hover:bg-zinc-700'
-                                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                  }`}
-                                >
-                                  {expandedNotificationId === notification.id ? 'Hide details' : 'View details'}
-                                </button>
-                                {expandedNotificationId === notification.id && (
-                                  <div className={`mt-2 text-[11px] space-y-1 break-words p-3 rounded-lg ${isDarkMode ? 'bg-zinc-950/50 text-zinc-400 border border-zinc-800' : 'bg-slate-50 text-slate-600 border border-slate-100'}`}>
-                                    {notification.details.customer && <div><span className="font-semibold text-slate-500">Customer</span> · {notification.details.customer}</div>}
-                                    {notification.details.business && <div><span className="font-semibold text-slate-500">Business</span> · {notification.details.business}</div>}
-                                    {notification.details.phone && <div><span className="font-semibold text-slate-500">Phone</span> · {notification.details.phone}</div>}
-                                    {notification.details.amount && <div><span className="font-semibold text-slate-500">Amount</span> · ₹{Number(notification.details.amount).toLocaleString()}</div>}
-                                  </div>
-                                )}
-                              </div>
-                            )}
                             <p className={`text-[11px] mt-2 flex items-center gap-1 tabular-nums ${isDarkMode ? 'text-zinc-500' : 'text-slate-400'}`}>
                               <Clock className="w-3.5 h-3.5 flex-shrink-0" />
                               {formatTime(notification.time)}
@@ -809,9 +829,6 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
                       </div>
                     ))
                   )}
-                </div>
-                <div className={`px-4 py-2.5 flex-shrink-0 border-t text-[11px] ${isDarkMode ? 'border-zinc-800 text-zinc-500 bg-zinc-900/80' : 'border-slate-100 text-slate-500 bg-slate-50/50'}`}>
-                  Unread count reflects only this recent list.
                 </div>
               </div>
               </>

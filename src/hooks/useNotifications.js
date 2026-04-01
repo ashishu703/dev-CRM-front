@@ -263,6 +263,32 @@ export const useNotifications = () => {
     }
   }, [authToken, syncIdSetFromList]);
 
+  const clearAllNotifications = useCallback(async () => {
+    try {
+      const token = authToken;
+      if (!token) return false;
+
+      const apiPath = BASE_URL.includes('/api')
+        ? `${BASE_URL}/notifications/clear-all`
+        : `${BASE_URL}/api/notifications/clear-all`;
+
+      const res = await fetch(apiPath, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) return false;
+
+      setNotifications([]);
+      syncIdSetFromList([]);
+      setServerUnreadCount(0);
+      return true;
+    } catch (error) {
+      console.error('Failed to clear notifications:', error);
+      return false;
+    }
+  }, [authToken, syncIdSetFromList]);
+
   useEffect(() => {
     if (!authToken) {
       if (sharedSocket) {
@@ -430,6 +456,7 @@ export const useNotifications = () => {
     markAsRead,
     markAsUnread,
     markAllAsRead,
+    clearAllNotifications,
     notificationRetentionDays: RETENTION_DAYS,
     bellMaxItems: BELL_MAX_ITEMS
   };
