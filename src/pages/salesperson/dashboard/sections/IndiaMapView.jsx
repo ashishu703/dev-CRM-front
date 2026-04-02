@@ -8,6 +8,27 @@ const MAP_HEIGHT = 320;
 const INDIA_GEOJSON_URL =
   'https://gist.githubusercontent.com/jbrobst/56c13bbbf9d97d187fea01ca62ea5112/raw/e388c4cae20aa53cb5090210a42ebb9b765c0a36/india_states.geojson';
 
+// Cache to avoid re-downloading the same GeoJSON on every re-mount.
+let geoJsonCache = null;
+let geoJsonPromise = null;
+
+async function loadIndiaGeoJson() {
+  if (geoJsonCache) return geoJsonCache;
+  if (!geoJsonPromise) {
+    geoJsonPromise = fetch(INDIA_GEOJSON_URL)
+      .then((r) => r.json())
+      .then((j) => {
+        geoJsonCache = j;
+        return j;
+      })
+      .catch((e) => {
+        geoJsonPromise = null;
+        throw e;
+      });
+  }
+  return geoJsonPromise;
+}
+
 function normalizeStateName(name) {
   return (name || '')
     .toString()
@@ -38,11 +59,21 @@ function IndiaGeoJSONLayer({ stateCountMap, stateMetaMap, onStateClick }) {
   const map = useMap();
   useEffect(() => {
     let layer = null;
-    fetch(INDIA_GEOJSON_URL)
-      .then((r) => r.json())
+    loadIndiaGeoJson()
       .then((geojson) => {
         if (!map || !geojson) return;
-        const maxCount = Math.max(1, ...Object.values(stateCountMap || {}));
+
+        // Compute intensity scale only for states that exist in the GeoJSON.
+        // Otherwise "Unknown"/"N/A" entries skew maxCount and break colors.
+        const geoKeys = new Set();
+        for (const f of geojson?.features || []) {
+          const name = f?.properties?.ST_NM;
+          if (!name) continue;
+          geoKeys.add(normalizeStateName(name));
+        }
+        const countsForGeo = Array.from(geoKeys).map((k) => Number(stateCountMap?.[k] ?? 0) || 0);
+        const maxCount = Math.max(1, ...countsForGeo);
+
         layer = L.geoJSON(geojson, {
           style: (feature) => {
             const name = feature?.properties?.ST_NM;

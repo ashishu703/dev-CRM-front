@@ -29,6 +29,8 @@ const getBaseURL = () => {
 };
 
 const BASE_URL = getBaseURL();
+const ANOCAB_LOGO_URL = 'https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png';
+const ANOCAB_TITLE = 'Anocab CRM';
 
 export const useFirebasePush = () => {
   const [fcmToken, setFcmToken] = useState(null);
@@ -223,10 +225,12 @@ export const useFirebasePush = () => {
             const targetUrl = payload?.data?.url || payload?.data?.click_action || '/';
 
             if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-              const n = new Notification(title, {
+              const n = new Notification(ANOCAB_TITLE, {
                 body,
-                icon: '/logo.png',
-                badge: '/logo.png',
+                title: ANOCAB_TITLE,
+                icon: ANOCAB_LOGO_URL,
+                badge: ANOCAB_LOGO_URL,
+                image: ANOCAB_LOGO_URL,
                 data: { url: targetUrl }
               });
               n.onclick = () => {

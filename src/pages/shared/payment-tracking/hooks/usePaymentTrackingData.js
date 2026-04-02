@@ -14,8 +14,8 @@ const EMPTY = {
   targetList: [],
 };
 
-export function usePaymentTrackingData() {
-  const { data: raw = {}, isLoading: initialLoading, isFetching: loading, refetch } = useGetPaymentTrackingQuery({});
+export function usePaymentTrackingData(enabled = true) {
+  const { data: raw = {}, isLoading: initialLoading, isFetching: loading, refetch } = useGetPaymentTrackingQuery({}, { skip: !enabled });
   const mapped = useMemo(() => (raw && Object.keys(raw).length ? mapPaymentTrackingResponse(raw) : EMPTY), [raw]);
   return {
     ...mapped,

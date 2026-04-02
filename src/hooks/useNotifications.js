@@ -421,7 +421,12 @@ export const useNotifications = () => {
       }
       playNotificationSound();
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        new Notification(notification.title, { body: notification.message, icon: ANOCAB_LOGO_URL });
+        new Notification('Anocab CRM', {
+          body: notification.message,
+          icon: ANOCAB_LOGO_URL,
+          badge: ANOCAB_LOGO_URL,
+          image: ANOCAB_LOGO_URL
+        });
       }
     };
 

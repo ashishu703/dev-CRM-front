@@ -50,6 +50,20 @@ export function setDashboardLeadsFilter(filterType, date, stageKey, extra = null
   } catch (_) {}
 }
 
+function pushLeadsUrl(queryParams) {
+  try {
+    if (typeof window === 'undefined') return;
+    const q = new URLSearchParams();
+    Object.entries(queryParams || {}).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
+    });
+    const qs = q.toString();
+    const next = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+    window.history.pushState({}, '', next);
+    window.dispatchEvent(new Event('dashboardLeadsFilterChanged'));
+  } catch (_) {}
+}
+
 /**
  * Create a single onCardClick handler for the dashboard.
  * @param {string} mode - 'salesperson' | 'head' | 'superadmin'
@@ -67,6 +81,7 @@ export function createDashboardCardHandler(mode, navigate, dashboardDate) {
         const q = new URLSearchParams({ filter: 'pipeline_stage', date, stage: stageKey });
         navigate(`/customers?${q.toString()}`);
       } else {
+        pushLeadsUrl({ filter: 'pipeline_stage', date, stage: stageKey });
         navigate('leads');
       }
       return;
@@ -78,7 +93,10 @@ export function createDashboardCardHandler(mode, navigate, dashboardDate) {
     if (target === 'last-call') {
       setDashboardLeadsFilter('last_call', date);
       if (mode === 'salesperson') navigate('last-call');
-      else navigate('leads');
+      else {
+        pushLeadsUrl({ filter: 'last_call', date });
+        navigate('leads');
+      }
       return;
     }
     if (target === 'enquiries') {
@@ -87,6 +105,7 @@ export function createDashboardCardHandler(mode, navigate, dashboardDate) {
         const q = new URLSearchParams({ filter: 'enquiries', date, tab: 'enquiry' });
         navigate(`/customers?${q.toString()}`);
       } else {
+        pushLeadsUrl({ filter: 'enquiries', date, tab: 'enquiry' });
         navigate('leads');
       }
       return;
@@ -105,6 +124,7 @@ export function createDashboardCardHandler(mode, navigate, dashboardDate) {
         if (stageKey) q.set('stage', stageKey);
         navigate(`/customers?${q.toString()}`);
       } else {
+        pushLeadsUrl({ filter, date, ...(stageKey ? { stage: stageKey } : {}) });
         navigate('leads');
       }
     }

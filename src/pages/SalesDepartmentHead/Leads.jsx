@@ -38,6 +38,9 @@ import EnquiryTable from '../../components/EnquiryTable';
 import departmentHeadService from '../../api/admin_api/departmentHeadService';
 import proformaInvoiceService from '../../api/admin_api/proformaInvoiceService';
 import { DASHBOARD_FILTER_KEY } from '../salesperson/dashboard/utils/dashboardNavigation';
+import PricingRfpDecisionModal from '../shared/PricingRfpDecisionModal';
+import CreateQuotationForm from '../salesperson/salespersoncreatequotation.jsx';
+import { useQuotationFlow } from '../../hooks/useQuotationFlow';
 
 const DEFAULT_COLUMN_FILTERS = {
   customerId: '',
@@ -125,18 +128,84 @@ const LeadsSimplified = () => {
   const [activeTab, setActiveTab] = useState('leads');
   const [dashboardFilterPayload, setDashboardFilterPayload] = useState(null);
   const { user } = useAuth();
+  const isSuperAdmin = ((user?.role || '') + '').toLowerCase() === 'superadmin';
+  const [quotationCustomer, setQuotationCustomer] = useState(null);
+  const quotationHook = useQuotationFlow(quotationCustomer?.id ?? quotationCustomer?._id ?? null);
+  const [showRfpIdValidationModal, setShowRfpIdValidationModal] = useState(false);
+  const [showCreateQuotation, setShowCreateQuotation] = useState(false);
+  const [rfpIdInput, setRfpIdInput] = useState('');
+  const [validatingRfpId, setValidatingRfpId] = useState(false);
+  const [validatedRfpDecision, setValidatedRfpDecision] = useState(null);
+  const [validationError, setValidationError] = useState('');
+  const [quotationEntryMode, setQuotationEntryMode] = useState(null);
+  const [activeQuotationCreationMode, setActiveQuotationCreationMode] = useState('rfp');
+  const [editingQuotation, setEditingQuotation] = useState(null);
 
   useEffect(() => {
     try {
+      const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const filterFromUrl = urlParams?.get('filter');
+      const dateFromUrl = urlParams?.get('date');
+      const stageFromUrl = urlParams?.get('stage');
+      const stateFromUrl = urlParams?.get('state');
+      const tabFromUrl = urlParams?.get('tab');
+
       const raw = sessionStorage.getItem(DASHBOARD_FILTER_KEY);
-      if (!raw) return;
-      const payload = JSON.parse(raw);
+      const sessionPayload = raw ? JSON.parse(raw) : null;
+
+      // URL ko precedence do (salesperson exact flow requirement)
+      if (filterFromUrl) {
+        const payload = { filter: filterFromUrl };
+        if (dateFromUrl) payload.date = dateFromUrl;
+        if (filterFromUrl === 'pipeline_stage' && stageFromUrl) payload.stageKey = stageFromUrl;
+        if (filterFromUrl === 'state' && stateFromUrl) payload.state = stateFromUrl;
+        setDashboardFilterPayload(payload);
+        // Keep tab consistent with salesperson URL scheme.
+        if (filterFromUrl === 'last_call') setActiveTab('lastCall');
+        else if (filterFromUrl === 'enquiries' || tabFromUrl === 'enquiry') setActiveTab('enquiry');
+        else setActiveTab('leads');
+        // If URL is used, sessionStorage can be safely cleared.
+        if (sessionPayload) sessionStorage.removeItem(DASHBOARD_FILTER_KEY);
+        return;
+      }
+
+      if (!sessionPayload) return;
       sessionStorage.removeItem(DASHBOARD_FILTER_KEY);
-      setDashboardFilterPayload(payload || null);
-      if (payload?.filter === 'last_call') setActiveTab('lastCall');
-      else if (payload?.filter === 'enquiries') setActiveTab('enquiry');
+      setDashboardFilterPayload(sessionPayload || null);
+      if (sessionPayload?.filter === 'last_call') setActiveTab('lastCall');
+      else if (sessionPayload?.filter === 'enquiries') setActiveTab('enquiry');
       else setActiveTab('leads');
     } catch (_) {}
+  }, []);
+
+  // Keep dashboard filters in sync even if user is already on this page.
+  useEffect(() => {
+    const applyFromUrl = () => {
+      try {
+        const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+        const filterFromUrl = urlParams?.get('filter');
+        const dateFromUrl = urlParams?.get('date');
+        const stageFromUrl = urlParams?.get('stage');
+        const stateFromUrl = urlParams?.get('state');
+        const tabFromUrl = urlParams?.get('tab');
+
+        if (!filterFromUrl) return;
+
+        const payload = { filter: filterFromUrl };
+        if (dateFromUrl) payload.date = dateFromUrl;
+        if (filterFromUrl === 'pipeline_stage' && stageFromUrl) payload.stageKey = stageFromUrl;
+        if (filterFromUrl === 'state' && stateFromUrl) payload.state = stateFromUrl;
+
+        setDashboardFilterPayload(payload);
+        if (filterFromUrl === 'last_call') setActiveTab('lastCall');
+        else if (filterFromUrl === 'enquiries' || tabFromUrl === 'enquiry') setActiveTab('enquiry');
+        else setActiveTab('leads');
+      } catch (_) {}
+    };
+
+    if (typeof window === 'undefined') return undefined;
+    window.addEventListener('dashboardLeadsFilterChanged', applyFromUrl);
+    return () => window.removeEventListener('dashboardLeadsFilterChanged', applyFromUrl);
   }, []);
   const [leadsData, setLeadsData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -751,6 +820,126 @@ const LeadsSimplified = () => {
     }
   };
 
+  const refreshQuotationsForLead = async (leadId) => {
+    if (!leadId) return;
+    try {
+      const latest = await quotationServiceInstance.fetchQuotationsByCustomer(leadId);
+      setQuotations(latest || []);
+    } catch (_) {}
+  };
+
+  const openSuperAdminQuotationChooser = (customer) => {
+    if (!customer) return;
+    setQuotationCustomer(customer);
+    setRfpIdInput('');
+    setValidatedRfpDecision(null);
+    setValidationError('');
+    setQuotationEntryMode(null);
+    setActiveQuotationCreationMode('rfp');
+    setEditingQuotation(null);
+    setShowRfpIdValidationModal(true);
+  };
+
+  const openSuperAdminQuotationForm = (mode) => {
+    setActiveQuotationCreationMode(mode);
+    setShowRfpIdValidationModal(false);
+    setEditingQuotation(null);
+    setShowCreateQuotation(true);
+  };
+
+  const handleSuperAdminValidateRfpId = async () => {
+    if (!rfpIdInput.trim()) {
+      setValidationError('Please enter RFP ID');
+      return;
+    }
+    const currentLeadId = quotationCustomer?.id ?? quotationCustomer?.lead_id ?? quotationCustomer?._id ?? null;
+    const leadIdParam = currentLeadId != null ? `?leadId=${encodeURIComponent(currentLeadId)}` : '';
+
+    setValidationError('');
+    setValidatingRfpId(true);
+    try {
+      const response = await apiClient.get(API_ENDPOINTS.PRICING_RFP_DECISION_GET(rfpIdInput.trim()) + leadIdParam);
+      if (response.success && response.data) {
+        const decision = response.data;
+        const decisionLeadId = decision.lead_id ?? decision.leadId ?? decision.rfp_request?.lead_id;
+        if (currentLeadId != null && decisionLeadId != null && String(decisionLeadId) !== String(currentLeadId)) {
+          const leadName = quotationCustomer?.name || quotationCustomer?.business || 'this lead';
+          setValidationError(`This RFP ID is linked to a different lead. Please enter the RFP ID that belongs to ${leadName} only.`);
+          setValidatedRfpDecision(null);
+          setValidatingRfpId(false);
+          return;
+        }
+        setValidatedRfpDecision(decision);
+        toastManager.success('RFP ID validated successfully!');
+
+        sessionStorage.setItem('pricingRfpDecisionId', rfpIdInput.trim());
+        sessionStorage.setItem('pricingRfpDecisionData', JSON.stringify(decision));
+
+        setShowRfpIdValidationModal(false);
+        const rfpId = rfpIdInput.trim();
+        const custId = quotationCustomer?.id ?? quotationCustomer?._id;
+        try {
+          const list = await quotationServiceInstance.fetchQuotationsByCustomer(custId);
+          const existing = (list || []).find(q => (q.rfp_id || q.master_rfp_id || '') === rfpId);
+          if (existing) {
+            const full = await quotationServiceInstance.getQuotation(existing.id);
+            if (full) {
+              setEditingQuotation(full);
+              toastManager.info('This RFP already has a quotation. Opened for editing.');
+            }
+          } else {
+            setEditingQuotation(null);
+          }
+        } catch (_) {
+          setEditingQuotation(null);
+        }
+        setShowCreateQuotation(true);
+      } else {
+        setValidationError('Invalid RFP ID. Please check and try again.');
+        setValidatedRfpDecision(null);
+      }
+    } catch (error) {
+      const data = error?.data;
+      const linkedToLeadName = data?.linkedToLeadName;
+      const currentLeadName = quotationCustomer?.name || quotationCustomer?.business || 'this lead';
+      let msg = data?.message || error.message;
+      if (linkedToLeadName && msg && !String(msg).includes(linkedToLeadName)) {
+        msg = `This RFP ID is linked to ${linkedToLeadName}. Please enter the RFP ID that belongs to ${currentLeadName} only.`;
+      }
+      setValidationError(msg || 'Failed to validate RFP ID. Please check and try again.');
+      setValidatedRfpDecision(null);
+    } finally {
+      setValidatingRfpId(false);
+    }
+  };
+
+  const closeSuperAdminQuotationFlow = async () => {
+    const leadId = quotationCustomer?.id ?? quotationCustomer?._id ?? null;
+    setShowCreateQuotation(false);
+    setShowRfpIdValidationModal(false);
+    setRfpIdInput('');
+    setValidatedRfpDecision(null);
+    setValidationError('');
+    setQuotationEntryMode(null);
+    setActiveQuotationCreationMode('rfp');
+    setEditingQuotation(null);
+    setQuotationCustomer(null);
+    try {
+      sessionStorage.removeItem('pricingRfpDecisionId');
+      sessionStorage.removeItem('pricingRfpDecisionData');
+    } catch (_) {}
+    await refreshQuotationsForLead(leadId);
+  };
+
+  const handleSuperAdminSaveQuotation = async (quotationData) => {
+    if (!quotationCustomer) return;
+    const qId = quotationData.quotationId || editingQuotation?.id || null;
+    const result = await quotationHook.handleSaveQuotation(quotationData, quotationCustomer, qId);
+    if (result?.success) {
+      await closeSuperAdminQuotationFlow();
+    }
+  };
+
   const handleApproveQuotation = async (quotationId) => {
     const previewLeadId = previewLead?.id || null;
     const updatedQuotations = await quotationServiceInstance.approveQuotation(quotationId, previewLeadId);
@@ -992,9 +1181,10 @@ const LeadsSimplified = () => {
 
   const hasActiveLeadFilters = useCallback(() => (
     Boolean(statusFilter.type || assignmentFilter) ||
+    Boolean(dashboardFilterPayload?.filter) ||
     Object.values(columnFilters).some(Boolean) ||
     Object.values(enabledFilters).some(Boolean)
-  ), [statusFilter.type, assignmentFilter, columnFilters, enabledFilters]);
+  ), [statusFilter.type, assignmentFilter, dashboardFilterPayload, columnFilters, enabledFilters]);
 
   const buildLeadFetchParams = useCallback(() => {
     const params = { page };
@@ -1003,15 +1193,28 @@ const LeadsSimplified = () => {
     if (trimmedSearch) {
       params.search = trimmedSearch;
     }
+    if (dashboardFilterPayload?.filter === 'state' && dashboardFilterPayload?.state) {
+      params.state = dashboardFilterPayload.state;
+    }
+    if (dashboardFilterPayload?.filter === 'pipeline_stage' && dashboardFilterPayload?.stageKey) {
+      params.followUpStatus = dashboardFilterPayload.stageKey;
+    }
+    if (dashboardFilterPayload?.filter === 'new_leads_added' && dashboardFilterPayload?.date) {
+      params.createdDate = dashboardFilterPayload.date;
+    }
+    if (dashboardFilterPayload?.filter === 'no_follow_up') {
+      params.noFollowUp = true;
+    }
     return params;
-  }, [page, limit, debouncedSearchTerm]);
+  }, [page, limit, debouncedSearchTerm, dashboardFilterPayload]);
 
   const normalizeLeadDateFields = useCallback((lead) => ({
     ...lead,
     follow_up_date: lead.follow_up_date || lead.followUpDate || null,
     follow_up_time: lead.follow_up_time || lead.followUpTime || null,
     follow_up_remark: lead.follow_up_remark || lead.followUpRemark || null,
-    follow_up_status: lead.follow_up_status || lead.followUpStatus || null,
+    follow_up_status:
+      lead?.follow_up_status !== undefined ? lead.follow_up_status : (lead.followUpStatus ?? null),
     next_meeting_date: lead.next_meeting_date || lead.nextMeetingDate || null,
     next_meeting_time: lead.next_meeting_time || lead.nextMeetingTime || null,
     meeting_date: lead.meeting_date || lead.meetingDate || null,
@@ -1075,11 +1278,33 @@ const LeadsSimplified = () => {
     loadAllLeadsForFiltersRef.current = loadAllLeadsForFilters;
   }, [loadAllLeadsForFilters]);
 
-  const fetchLeads = useCallback(async () => {
+  useEffect(() => {
+    const filter = dashboardFilterPayload?.filter;
+    if (!filter) return;
+    if (filter === 'state') return;
+    if (filter === 'pipeline_stage') return;
+    if (filter === 'new_leads_added') return;
+    if (filter === 'no_follow_up') return;
+    if (Array.isArray(allLeadsDataRef.current) && allLeadsDataRef.current.length > 0) return;
+    if (typeof loadAllLeadsForFiltersRef.current === 'function') {
+      loadAllLeadsForFiltersRef.current(false).catch(() => {});
+    }
+  }, [dashboardFilterPayload?.filter]);
+
+  const fetchLeads = useCallback(async ({ minSkeletonMs = 0 } = {}) => {
     try {
+      const startedAt = Date.now();
       setLoading(true);
-      const response = await leadService.fetchLeads(buildLeadFetchParams());
+      const params = buildLeadFetchParams();
+      const response = await leadService.fetchLeads(params);
       applyLeadResponse(response);
+      if (minSkeletonMs > 0) {
+        const elapsed = Date.now() - startedAt;
+        const remaining = minSkeletonMs - elapsed;
+        if (remaining > 0) {
+          await new Promise((resolve) => setTimeout(resolve, remaining));
+        }
+      }
     } catch (error) {
       apiErrorHandler.handleError(error, 'fetch leads');
     } finally {
@@ -1089,7 +1314,8 @@ const LeadsSimplified = () => {
   }, [buildLeadFetchParams, leadService, applyLeadResponse]);
 
   const handleManualRefresh = () => {
-    fetchLeads();
+    // Ensure "refresh" always shows loader briefly (even if API is fast)
+    fetchLeads({ minSkeletonMs: 250 });
     if (hasActiveLeadFilters()) {
       requestAllLeadsRefresh();
     }
@@ -1178,6 +1404,10 @@ const LeadsSimplified = () => {
   useEffect(() => {
     setPage(1);
   }, [limit]);
+
+  useEffect(() => {
+    if (dashboardFilterPayload?.filter) setPage(1);
+  }, [dashboardFilterPayload?.filter]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1322,7 +1552,9 @@ const LeadsSimplified = () => {
 
   const hasStatusFilter = Boolean(statusFilter.type && statusFilter.status);
   const hasAssignmentFilter = Boolean(assignmentFilter);
-  const activeLeadPool = (hasStatusFilter || hasAssignmentFilter)
+  const hasDashboardFilter = Boolean(dashboardFilterPayload?.filter);
+  const isDashboardServerFiltered = ['state', 'pipeline_stage', 'new_leads_added', 'no_follow_up'].includes(dashboardFilterPayload?.filter);
+  const activeLeadPool = (hasStatusFilter || hasAssignmentFilter || (hasDashboardFilter && !isDashboardServerFiltered))
     ? (statusFilterLeadsRef.current?.length > 0 ? statusFilterLeadsRef.current : allLeadsDataRef.current?.length > 0 ? allLeadsDataRef.current : allLeadsData?.length > 0 ? allLeadsData : []) 
     : leadsData;
 
@@ -1398,9 +1630,35 @@ const LeadsSimplified = () => {
     setSortOrder(newSortOrder);
   }, []);
 
-  const normalizeText = useCallback((value) => String(value || '').trim().toLowerCase(), []);
+  const normalizeText = useCallback(
+    (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase(),
+    []
+  );
   const toDateKey = useCallback((value) => {
     if (!value) return null;
+    // DH "createdAt" is formatted like "2/4/2026 10:30 AM" (en-IN),
+    // which JS Date() may parse as MM/DD/YYYY. Parse DD/MM/YYYY explicitly.
+    if (typeof value === 'string') {
+      const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+      const dmY = value.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (dmY) {
+        const d = String(dmY[1]).padStart(2, '0');
+        const m = String(dmY[2]).padStart(2, '0');
+        const y = dmY[3];
+        return `${y}-${m}-${d}`;
+      }
+
+      const dmyDash = value.match(/(\d{1,2})-(\d{1,2})-(\d{4})/);
+      if (dmyDash) {
+        const d = String(dmyDash[1]).padStart(2, '0');
+        const m = String(dmyDash[2]).padStart(2, '0');
+        const y = dmyDash[3];
+        return `${y}-${m}-${d}`;
+      }
+    }
+
     const dt = new Date(value);
     if (Number.isNaN(dt.getTime())) return null;
     const y = dt.getFullYear();
@@ -1526,11 +1784,17 @@ const LeadsSimplified = () => {
       const filterDate = dashboardFilterPayload.date || null;
       const stageKey = normalizeText(dashboardFilterPayload.stageKey);
       const focusLeadId = dashboardFilterPayload.leadId != null ? String(dashboardFilterPayload.leadId) : null;
+      const stateName = dashboardFilterPayload.state != null ? String(dashboardFilterPayload.state) : null;
 
       result = result.filter((lead) => {
         const leadId = lead?.id != null ? String(lead.id) : '';
-        const followUpStatus = normalizeText(lead?.followUpStatus || lead?.connectedStatus || lead?.telecallerStatus);
-        const hasFollowUp = Boolean(followUpStatus && !['pending', 'none', 'new'].includes(followUpStatus));
+        const followUpStatus = normalizeText(
+          lead?.followUpStatus ||
+            lead?.follow_up_status ||
+            lead?.connectedStatus ||
+            lead?.telecallerStatus
+        );
+
         const hasQuotation = Number(lead?.quotationCount || lead?.quotation_count || lead?.totalQuotation || 0) > 0;
         const hasPi = Number(lead?.piCount || lead?.pi_count || lead?.totalPI || 0) > 0;
 
@@ -1538,15 +1802,19 @@ const LeadsSimplified = () => {
           case 'new_leads_added':
             return isSameLeadDate(lead, filterDate);
           case 'no_follow_up':
-            return isSameLeadDate(lead, filterDate) && !hasFollowUp;
+            return true;
           case 'pipeline_stage':
-            return (!filterDate || isSameLeadDate(lead, filterDate)) && (!stageKey || followUpStatus === stageKey);
+              return (!stageKey || followUpStatus === stageKey);
           case 'quotation_created':
             return (!filterDate || isSameLeadDate(lead, filterDate)) && hasQuotation;
           case 'pi_created':
             return (!filterDate || isSameLeadDate(lead, filterDate)) && hasPi;
           case 'lead_priority':
             return focusLeadId ? leadId === focusLeadId : true;
+          case 'state':
+              if (!stateName) return true;
+              // State distribution drilldown shouldn't depend on dashboard date filter.
+              return normalizeText(lead?.state) === normalizeText(stateName);
           default:
             return true;
         }
@@ -1602,9 +1870,9 @@ const LeadsSimplified = () => {
     });
   }, [uniqueFilteredLeads]);
 
-  const tableLoading = loading || ((hasStatusFilter || hasAssignmentFilter) && loadingAllLeads && allLeadsData.length === 0);
+  const tableLoading = loading || ((hasStatusFilter || hasAssignmentFilter || (hasDashboardFilter && !isDashboardServerFiltered)) && loadingAllLeads && allLeadsData.length === 0);
   const paginationDisabled = false;
-  const hasClientSideFilteredPagination = hasStatusFilter || hasAssignmentFilter;
+  const hasClientSideFilteredPagination = hasStatusFilter || hasAssignmentFilter || (hasDashboardFilter && !isDashboardServerFiltered);
   const displayTotal = hasClientSideFilteredPagination ? uniqueFilteredLeads.length : total;
   const effectiveLimit = Math.max(1, Number(limit) || 20);
   const totalPages = Math.max(1, Math.ceil(displayTotal / effectiveLimit) || 1);
@@ -3303,8 +3571,12 @@ const LeadsSimplified = () => {
             if (lead) handleEdit(lead);
           }}
           onQuotation={(customer) => {
-            setShowCustomerTimeline(false);
-            toastManager.info('Please use the quotation creation workflow from the main page');
+            if (!isSuperAdmin) {
+              setShowCustomerTimeline(false);
+              toastManager.info('Please use the quotation creation workflow from the main page');
+              return;
+            }
+            openSuperAdminQuotationChooser(customer || timelineLead);
           }}
           quotations={quotations.filter(q => (q.customerId || q.customer_id) === timelineLead?.id)}
           onViewQuotation={(quotation) => {
@@ -3354,12 +3626,22 @@ const LeadsSimplified = () => {
           }}
           onPricingRfp={() => {
             setShowCustomerTimeline(false);
-            toastManager.info('Please use the RFP workflow from the main page');
+            if (!isSuperAdmin) toastManager.info('Please use the RFP workflow from the main page');
           }}
           onSendEmail={() => {}}
           onDocs={() => {}}
           renderUpdateStatusContent={null}
-          renderRfpContent={null}
+          renderRfpContent={
+            isSuperAdmin
+              ? (onClose) => (
+                <PricingRfpDecisionModal
+                  customer={timelineLead}
+                  user={user}
+                  onClose={onClose}
+                />
+              )
+              : null
+          }
           renderSendEmailContent={(onClose) => {
             const leadFormat = (lead) => ({
               id: lead?.id ?? lead?._id,
@@ -3378,6 +3660,154 @@ const LeadsSimplified = () => {
           onDeleteActivity={handleDeleteActivity}
           onEditEnquiry={handleEditEnquiryFromActivity}
         />
+      )}
+
+      {showRfpIdValidationModal && quotationCustomer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[160] p-4">
+          <div className="w-full max-w-md rounded-lg shadow-xl bg-white text-gray-900">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold">{quotationEntryMode === 'rfp' ? 'Validate RFP ID' : 'Create Quotation'}</h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRfpIdValidationModal(false);
+                    setRfpIdInput('');
+                    setValidatedRfpDecision(null);
+                    setValidationError('');
+                    setQuotationEntryMode(null);
+                    setActiveQuotationCreationMode('rfp');
+                    setQuotationCustomer(null);
+                  }}
+                  className="p-1 rounded-lg hover:bg-black/10"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <p className="text-sm mt-2 text-gray-600">Choose how you want to create the quotation.</p>
+              <p className="text-sm mt-1 font-medium text-blue-700">
+                Lead:{' '}
+                <span className="font-semibold">{quotationCustomer.name || quotationCustomer.business || '—'}</span>
+                {quotationCustomer.business && quotationCustomer.name !== quotationCustomer.business && (
+                  <span className="text-gray-600"> ({quotationCustomer.business})</span>
+                )}
+              </p>
+            </div>
+            <div className="p-6 space-y-4">
+              {!quotationEntryMode && (
+                <div className="grid grid-cols-1 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setQuotationEntryMode('rfp')}
+                    className="px-4 py-3 rounded-lg text-left border border-gray-200 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="font-semibold">1) Validate from RFP</div>
+                    <div className="text-xs mt-1 text-gray-600">Same flow as current (RFP ID required).</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openSuperAdminQuotationForm('direct')}
+                    className="px-4 py-3 rounded-lg text-left border border-gray-200 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="font-semibold">2) Direct Quote</div>
+                    <div className="text-xs mt-1 text-gray-600">
+                      Manual entry → goes to Department Head approval → then PI.
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openSuperAdminQuotationForm('price_list')}
+                    className="px-4 py-3 rounded-lg text-left border border-gray-200 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="font-semibold">3) Via Price List</div>
+                    <div className="text-xs mt-1 text-gray-600">
+                      Upload Excel items → auto-fill rates from approved price list → DH approval → PI.
+                    </div>
+                  </button>
+                </div>
+              )}
+
+              {quotationEntryMode === 'rfp' && (
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700">
+                    RFP ID <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={rfpIdInput}
+                    onChange={(e) => {
+                      setRfpIdInput(e.target.value);
+                      setValidationError('');
+                    }}
+                    placeholder="Enter RFP ID (e.g., RFP-202412-0001)"
+                    className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none focus:ring-2 ${
+                      validationError
+                        ? 'border-red-400 focus:ring-red-500 focus:border-red-500'
+                        : validatedRfpDecision
+                        ? 'border-green-400 focus:ring-green-500 focus:border-green-500'
+                        : 'bg-white border-gray-300 text-gray-900 focus:ring-blue-500 focus:border-blue-500'
+                    }`}
+                    disabled={validatingRfpId || !!validatedRfpDecision}
+                    autoFocus
+                  />
+                  {validationError && <p className="mt-2 text-sm text-red-600">{validationError}</p>}
+                  {validatedRfpDecision && (
+                    <p className="mt-2 text-sm text-green-600">✓ RFP ID validated successfully! Opening quotation form...</p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRfpIdValidationModal(false);
+                    setRfpIdInput('');
+                    setValidatedRfpDecision(null);
+                    setValidationError('');
+                    setQuotationEntryMode(null);
+                    setActiveQuotationCreationMode('rfp');
+                    setQuotationCustomer(null);
+                  }}
+                  className="px-4 py-2 rounded-lg font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                {quotationEntryMode === 'rfp' && (
+                  <button
+                    type="button"
+                    onClick={handleSuperAdminValidateRfpId}
+                    disabled={validatingRfpId || !rfpIdInput.trim() || !!validatedRfpDecision}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                      validatedRfpDecision
+                        ? 'bg-green-600 text-white hover:bg-green-700'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {validatingRfpId ? 'Validating...' : validatedRfpDecision ? '✓ Validated' : 'Validate'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCreateQuotation && quotationCustomer && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[165] p-4">
+          <div className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <CreateQuotationForm
+              creationMode={activeQuotationCreationMode}
+              customer={quotationCustomer}
+              user={user}
+              standalone
+              existingQuotation={editingQuotation}
+              onClose={closeSuperAdminQuotationFlow}
+              onSave={handleSuperAdminSaveQuotation}
+            />
+          </div>
+        </div>
       )}
 
     </div>

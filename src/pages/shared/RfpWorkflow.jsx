@@ -84,13 +84,14 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
 
   const permissions = useMemo(() => {
     const dept = (user?.departmentType || '').toLowerCase();
+    const role = (user?.role || '').toLowerCase();
     return {
       isSales: dept.includes('sales'),
       isAccounts: dept.includes('accounts'),
       isProduction: dept.includes('production'),
-      isSuperAdmin: user?.role === 'superadmin',
-      isDh: user?.role === 'department_head',
-      isSalesperson: user?.role === 'department_user' && dept.includes('sales')
+      isSuperAdmin: role === 'superadmin',
+      isDh: role === 'department_head',
+      isSalesperson: role === 'department_user' && dept.includes('sales')
     };
   }, [user]);
 
@@ -535,8 +536,37 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
   };
 
   const handleGenerateQuotation = async (rfpId) => {
-    await rfpService.generateQuotation(rfpId);
+    const response = await rfpService.generateQuotation(rfpId);
     fetchRfps();
+
+    // For SuperAdmin and Sales DH, "direct quote" should also take them to PI creation flow
+    // (main-page PI workflow uses `sessionStorage.piQuotationData`).
+    if (
+      typeof setActiveView === 'function' &&
+      (permissions.isSuperAdmin || permissions.isDh) &&
+      response?.data
+    ) {
+      try {
+        const quotation = response.data;
+        const customer = {
+          id: quotation.customerId || quotation.customer_id || null,
+          business: quotation.customer_business || quotation.customerBusiness || quotation.billTo?.business || '',
+          address: quotation.customer_address || quotation.customerAddress || quotation.billTo?.address || '',
+          phone: quotation.customer_phone || quotation.customerPhone || quotation.billTo?.phone || '',
+          gstNo: quotation.customer_gst_no || quotation.customerGstNo || quotation.billTo?.gstNo || '',
+          state: quotation.customer_state || quotation.customerState || quotation.billTo?.state || '',
+        };
+
+        // We only rely on quotation.id + fields; CreatePIForm will fetch full quotation if needed.
+        window.sessionStorage.setItem(
+          'piQuotationData',
+          JSON.stringify({ quotation, customer, user })
+        );
+        setActiveView('create-pi');
+      } catch (e) {
+        // If PI navigation fails, keep quotation generation working.
+      }
+    }
   };
 
   const handleSubmitAccounts = async () => {
@@ -625,22 +655,6 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
     <div className="p-3 sm:p-4 md:p-6 space-y-4 overflow-x-hidden min-w-0">
       <div className="flex flex-wrap items-center justify-end gap-2">
         <div className="flex flex-wrap gap-2">
-          {permissions.isSalesperson && (
-            <button
-              onClick={() => openModal(setShowCreate, null, () => setCreateForm({
-                leadId: '',
-                productSpec: '3×16',
-                quantity: '',
-                deliveryTimeline: '',
-                specialRequirements: '',
-                availabilityStatus: 'not_in_stock'
-              }))}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-500"
-            >
-              <FilePlus2 className="w-4 h-4" />
-              Raise RFP
-            </button>
-          )}
           {permissions.isAccounts && (
             <button
               onClick={() => {
@@ -796,7 +810,7 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                   <tr 
                     key={rfp.id} 
                     className="hover:bg-slate-50 transition-colors cursor-pointer"
-                    onClick={() => permissions.isDh && openRfpApprovalModal(rfp)}
+                    onClick={() => (permissions.isDh || permissions.isSuperAdmin) && openRfpApprovalModal(rfp)}
                   >
                     <td className="px-4 py-3 text-sm font-medium text-slate-900">
                       {rfp.rfp_id ? (
@@ -849,7 +863,7 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-                        {permissions.isDh && (
+                        {(permissions.isDh || permissions.isSuperAdmin) && (
                           <button
                             onClick={() => openRfpApprovalModal(rfp)}
                             className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md text-white transition-colors ${
@@ -874,7 +888,7 @@ const RfpWorkflow = ({ setActiveView, onOpenCalculator }) => {
                             Add Price
                           </button>
                         )}
-                        {permissions.isSalesperson && rfp.status === 'pricing_ready' && !rfp.quotation_id && (
+                        {(permissions.isSalesperson || permissions.isDh || permissions.isSuperAdmin) && rfp.status === 'pricing_ready' && !rfp.quotation_id && (
                           <button
                             onClick={() => handleGenerateQuotation(rfp.id)}
                             className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-slate-900 text-white hover:bg-slate-800 transition-colors"

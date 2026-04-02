@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { Package, RefreshCw } from 'lucide-react';
 import { usePaymentTrackingData } from '../../../shared/payment-tracking/hooks/usePaymentTrackingData';
 
@@ -15,75 +15,124 @@ function formatQty(row) {
   return u ? `${q} ${u}` : String(q);
 }
 
-const RunningOrderSection = memo(function RunningOrderSection({ onNavigate }) {
-  const { activeOrderProductRows = [], loading, refresh } = usePaymentTrackingData();
+const RunningOrderSection = memo(function RunningOrderSection({ onNavigate, mode = 'salesperson' }) {
+  const cardRef = useRef(null);
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) {
+      setEnabled(true);
+      return;
+    }
+    if (typeof IntersectionObserver === 'undefined') {
+      setEnabled(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries?.[0]?.isIntersecting) {
+          setEnabled(true);
+          observer.disconnect();
+        }
+      },
+      { root: null, rootMargin: '200px', threshold: 0.01 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const { activeOrderProductRows = [], loading, refresh } = usePaymentTrackingData(enabled);
   const rows = Array.isArray(activeOrderProductRows) ? activeOrderProductRows : [];
 
+  const handleViewAll = () => {
+    if (typeof onNavigate !== 'function') return;
+    if (mode === 'salesperson') {
+      onNavigate('/payment-tracking');
+      return;
+    }
+    // For superadmin/head, `onNavigate` is usually `setActiveView`, so we must pass view IDs.
+    if (mode === 'superadmin') onNavigate('performance');
+    else onNavigate('payment-info');
+  };
+
   return (
-    <div className="salesperson-dashboard-card overflow-hidden">
-      <div className="dashboard-card-header flex flex-row items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h3>Running Order</h3>
-          <p>Active orders from Payment Tracking · Party · Product · Qty · Rate</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => refresh()}
-          disabled={loading}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-[12px] font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-secondary)] disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
-      <div className="card-inner-padding">
-        <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
-          <table className="w-full text-[12px] min-w-[500px]">
-            <thead>
-              <tr className="bg-[var(--surface-secondary)] border-b border-[var(--border)]">
-                <th className="text-left py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Party</th>
-                <th className="text-left py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Product</th>
-                <th className="text-right py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Quantity</th>
-                <th className="text-right py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Rate</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)]">
-              {rows.length === 0 && !loading ? (
-                <tr>
-                  <td colSpan={4} className="py-10 text-center text-[var(--text-primary)]">
-                    <Package className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                    <p className="text-sm font-semibold">No data found</p>
-                    <p className="text-xs mt-1 opacity-80">No running orders</p>
-                  </td>
-                </tr>
-              ) : (
-                rows.slice(0, 10).map((r, i) => (
-                  <tr key={`${r.quotationId ?? ''}-${r.partyName ?? ''}-${r.productName ?? ''}-${i}`} className="hover:bg-[var(--surface-secondary)]/80">
-                    <td className="py-2.5 px-3 font-medium text-[var(--text-primary)] whitespace-nowrap">{r.partyName || '—'}</td>
-                    <td className="py-2.5 px-3 text-[var(--text-primary)] max-w-[220px] truncate" title={r.productName}>{r.productName || '—'}</td>
-                    <td className="py-2.5 px-3 text-right tabular-nums text-[var(--text-primary)]">{formatQty(r)}</td>
-                    <td className="py-2.5 px-3 text-right tabular-nums font-medium text-[var(--text-primary)]">{formatRate(r.rate)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        {rows.length > 10 && (
-          <p className="mt-2 text-[11px] text-[var(--text-primary)] opacity-90">
-            Showing 10 of {rows.length}.{' '}
-            {onNavigate && (
-              <button
-                type="button"
-                onClick={() => onNavigate('/payment-tracking')}
-                className="text-[var(--primary-600)] font-semibold hover:underline"
-              >
-                View all in Payment Tracking
-              </button>
-            )}
+    <div ref={cardRef} className="salesperson-dashboard-card overflow-hidden">
+      {!enabled && (
+        <div className="card-inner-padding">
+          <p className="py-6 text-center text-[var(--text-muted)] text-xs font-semibold">
+            Loading running order...
           </p>
-        )}
-      </div>
+        </div>
+      )}
+
+      {enabled && (
+        <>
+          <div className="dashboard-card-header flex flex-row items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h3>Running Order</h3>
+              <p>Active orders from Payment Tracking · Party · Product · Qty · Rate</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => refresh()}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-[12px] font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-secondary)] disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+          <div className="card-inner-padding">
+            <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+              <table className="w-full text-[12px] min-w-[500px]">
+                <thead>
+                  <tr className="bg-[var(--surface-secondary)] border-b border-[var(--border)]">
+                    <th className="text-left py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Party</th>
+                    <th className="text-left py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Product</th>
+                    <th className="text-right py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Quantity</th>
+                    <th className="text-right py-2.5 px-3 font-semibold text-[var(--text-secondary)]">Rate</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {rows.length === 0 && !loading ? (
+                    <tr>
+                      <td colSpan={4} className="py-10 text-center text-[var(--text-primary)]">
+                        <Package className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                        <p className="text-sm font-semibold">No data found</p>
+                        <p className="text-xs mt-1 opacity-80">No running orders</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.slice(0, 10).map((r, i) => (
+                      <tr key={`${r.quotationId ?? ''}-${r.partyName ?? ''}-${r.productName ?? ''}-${i}`} className="hover:bg-[var(--surface-secondary)]/80">
+                        <td className="py-2.5 px-3 font-medium text-[var(--text-primary)] whitespace-nowrap">{r.partyName || '—'}</td>
+                        <td className="py-2.5 px-3 text-[var(--text-primary)] max-w-[220px] truncate" title={r.productName}>{r.productName || '—'}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums text-[var(--text-primary)]">{formatQty(r)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-medium text-[var(--text-primary)]">{formatRate(r.rate)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {rows.length > 10 && (
+              <p className="mt-2 text-[11px] text-[var(--text-primary)] opacity-90">
+                Showing 10 of {rows.length}.{' '}
+                {onNavigate && (
+                  <button
+                    type="button"
+                    onClick={handleViewAll}
+                    className="text-[var(--primary-600)] font-semibold hover:underline"
+                  >
+                    View all in Payment Tracking
+                  </button>
+                )}
+              </p>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 });

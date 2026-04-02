@@ -19,7 +19,7 @@ export default function PaymentTrackingContainer(props = {}) {
   const [activeTab, setActiveTab] = useState('orders');
   const roleScope = useRoleScope();
 
-  const data = usePaymentTrackingData();
+  const data = usePaymentTrackingData(true);
   const filters = usePaymentFilters(data, activeTab, roleScope.salespersonFilter);
   const pagination = usePagination(filters.filteredRows, { initialLimit: 10 });
 

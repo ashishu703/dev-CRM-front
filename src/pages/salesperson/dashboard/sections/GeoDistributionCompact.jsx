@@ -2,6 +2,7 @@ import React, { memo, useEffect, useMemo, useState } from 'react';
 import IndiaMapView from './IndiaMapView';
 import { X, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { formatCurrency } from '../utils/formatUtils';
+import { setDashboardLeadsFilter } from '../utils/dashboardNavigation';
 
 function normalizeStateName(name) {
   return (name || '')
@@ -15,10 +16,42 @@ const SORT_LEADS = 'leads';
 const SORT_REVENUE = 'revenue';
 const TOP_N = 10;
 
-const GeoDistributionCompact = memo(function GeoDistributionCompact({ indiaGeo, onNavigate, dashboardDate }) {
+const GeoDistributionCompact = memo(function GeoDistributionCompact({ indiaGeo, onNavigate, dashboardDate, mode }) {
   if (!indiaGeo) return null;
 
   const { states = [], topStates = [] } = indiaGeo;
+  const aggregatedStates = useMemo(() => {
+    const m = new Map();
+    (states || []).forEach((st) => {
+      const key = normalizeStateName(st?.state);
+      if (!key) return;
+      if (['unknown', 'n/a', 'na', 'null'].includes(key)) return;
+
+      const prev = m.get(key) || {
+        stateName: st?.state,
+        customerCount: 0,
+        orders: 0,
+        revenue: 0,
+      };
+
+      const customerCount = Number(st?.customerCount || 0) || 0;
+      const orders = Number(st?.orders || 0) || 0;
+      const rev = typeof st?.revenue === 'number' ? st.revenue : Number(st?.revenue) || 0;
+
+      prev.customerCount += customerCount;
+      prev.orders += orders;
+      prev.revenue += rev;
+      m.set(key, prev);
+    });
+
+    return Array.from(m.entries()).map(([key, v]) => ({
+      state: v.stateName,
+      customerCount: v.customerCount,
+      orders: v.orders,
+      revenue: v.revenue,
+      conversionPct: v.customerCount > 0 ? (v.orders / v.customerCount) * 100 : 0,
+    }));
+  }, [states]);
   const [stateCountMap, setStateCountMap] = useState({});
   const [stateMetaMap, setStateMetaMap] = useState({});
   const [sortBy, setSortBy] = useState(SORT_LEADS);
@@ -30,23 +63,24 @@ const GeoDistributionCompact = memo(function GeoDistributionCompact({ indiaGeo, 
   useEffect(() => {
     const countMap = {};
     const metaMap = {};
-    (states || []).forEach((st) => {
+    (aggregatedStates || []).forEach((st) => {
       const key = normalizeStateName(st.state);
+      if (!key) return;
       countMap[key] = Number(st.customerCount || 0) || 0;
       const rev = typeof st.revenue === 'number' ? st.revenue : Number(st.revenue) || 0;
       metaMap[key] = {
         orders: Number(st.orders || 0) || 0,
         revenue: rev,
-        conversionPct: st.conversionPct ?? 0,
+        conversionPct: Number(st.conversionPct ?? 0) || 0,
         stateName: st.state,
       };
     });
     setStateCountMap(countMap);
     setStateMetaMap(metaMap);
-  }, [states]);
+  }, [aggregatedStates]);
 
   const filteredAndSorted = useMemo(() => {
-    let list = [...(states || [])];
+    let list = [...(aggregatedStates || [])];
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter((s) => (s.state || '').toLowerCase().includes(q));
@@ -55,7 +89,7 @@ const GeoDistributionCompact = memo(function GeoDistributionCompact({ indiaGeo, 
     if (sortBy === SORT_REVENUE) list.sort((a, b) => revNum(b) - revNum(a));
     else list.sort((a, b) => (b.customerCount || 0) - (a.customerCount || 0));
     return list;
-  }, [states, search, sortBy]);
+  }, [aggregatedStates, search, sortBy]);
 
   const totalLeads = useMemo(
     () => filteredAndSorted.reduce((s, x) => s + (x.customerCount || 0), 0),
@@ -76,13 +110,32 @@ const GeoDistributionCompact = memo(function GeoDistributionCompact({ indiaGeo, 
       conversionPct: meta?.conversionPct ?? 0,
     });
 
-    // Navigate to Leads with only that state filtered.
+    // Navigate with only that state filtered.
+    // Salesperson mode uses URL-based navigation to `/customers`.
+    // Superadmin / Department Head use `Leads` page + sessionStorage filter.
     if (onNavigate) {
-      const params = new URLSearchParams();
-      params.set('filter', 'state');
-      params.set('state', effectiveName);
-      if (dashboardDate) params.set('date', dashboardDate);
-      onNavigate(`/customers?${params.toString()}`);
+      if (mode === 'salesperson') {
+        const params = new URLSearchParams();
+        params.set('filter', 'state');
+        params.set('state', effectiveName);
+        if (dashboardDate) params.set('date', dashboardDate);
+        onNavigate(`/customers?${params.toString()}`);
+      } else {
+        // Keep URL in sync with salesperson flow.
+        try {
+          if (typeof window !== 'undefined') {
+            const params = new URLSearchParams();
+            params.set('filter', 'state');
+            params.set('state', effectiveName);
+            if (dashboardDate) params.set('date', dashboardDate);
+            const next = `${window.location.pathname}?${params.toString()}`;
+            window.history.pushState({}, '', next);
+            window.dispatchEvent(new Event('dashboardLeadsFilterChanged'));
+          }
+        } catch (_) {}
+        setDashboardLeadsFilter('state', dashboardDate, null, { state: effectiveName });
+        onNavigate('leads');
+      }
     }
   };
 

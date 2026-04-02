@@ -5,21 +5,22 @@ let firebaseInitialized = false;
 let messaging = null;
 let vapidKey = null;
 const ANOCAB_LOGO_URL = 'https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png';
+const ANOCAB_TITLE = 'Anocab CRM';
 
 self.addEventListener('push', (event) => {
   // Fallback handler so early push events are not dropped before Firebase init.
   try {
     const payload = event.data ? event.data.json() : {};
-    const notificationTitle = payload?.notification?.title || payload?.data?.title || 'New Notification';
     const notificationOptions = {
       body: payload?.notification?.body || payload?.data?.body || '',
-      icon: payload?.data?.logo || ANOCAB_LOGO_URL,
-      badge: payload?.data?.logo || ANOCAB_LOGO_URL,
+      icon: ANOCAB_LOGO_URL,
+      badge: ANOCAB_LOGO_URL,
+      image: ANOCAB_LOGO_URL,
       data: payload?.data || {},
       requireInteraction: false,
       tag: payload?.data?.notificationId || 'notification'
     };
-    event.waitUntil(self.registration.showNotification(notificationTitle, notificationOptions));
+    event.waitUntil(self.registration.showNotification(ANOCAB_TITLE, notificationOptions));
   } catch (err) {
     console.warn('[SW] push fallback parse failed:', err);
   }
@@ -86,17 +87,17 @@ self.addEventListener('message', async (event) => {
         messaging.onBackgroundMessage((payload) => {
           console.log('[SW] Background message received:', payload);
           
-          const notificationTitle = payload.notification?.title || 'New Notification';
           const notificationOptions = {
             body: payload.notification?.body || '',
-            icon: payload?.data?.logo || ANOCAB_LOGO_URL,
-            badge: payload?.data?.logo || ANOCAB_LOGO_URL,
+            icon: ANOCAB_LOGO_URL,
+            badge: ANOCAB_LOGO_URL,
+            image: ANOCAB_LOGO_URL,
             data: payload.data || {},
             requireInteraction: false,
             tag: payload.data?.notificationId || 'notification'
           };
           
-          return self.registration.showNotification(notificationTitle, notificationOptions);
+          return self.registration.showNotification(ANOCAB_TITLE, notificationOptions);
         });
       }
     } catch (error) {

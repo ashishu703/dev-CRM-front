@@ -7,6 +7,7 @@ import CalculatorProductList from './CalculatorProductList';
 import RfpWorkflow from '../shared/RfpWorkflow';
 import ToolboxInterface from '../salesperson/ToolboxInterface';
 import SalesDepartmentUser from './SalesDepartmentUser';
+import CreatePIForm from '../salesperson/CreatePIForm';
 
 const SalesDepartmentHeadDashboard = ({ activeView, setActiveView }) => {
   const hasInitializedRef = React.useRef(false);
@@ -33,6 +34,8 @@ const SalesDepartmentHeadDashboard = ({ activeView, setActiveView }) => {
         return <RfpWorkflow setActiveView={setActiveView} />;
       case 'calculator':
         return <CalculatorProductList setActiveView={setActiveView} />;
+      case 'create-pi':
+        return <CreatePIForm />;
       case 'toolbox':
         return <ToolboxInterface />;
       case 'stock-update':

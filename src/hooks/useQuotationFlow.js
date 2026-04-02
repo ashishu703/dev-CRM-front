@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { quotationService } from '../utils/globalImports'
 import { QuotationHelper } from '../utils/QuotationHelper'
 import Toast from '../utils/Toast'
+import { useAuth } from './useAuth'
 
 export function useQuotationFlow(customerId, isRefreshing = false) {
+  const { user } = useAuth()
   const [quotations, setQuotations] = useState([])
   const [quotationPopupData, setQuotationPopupData] = useState(null)
   const [showQuotationPopup, setShowQuotationPopup] = useState(false)
@@ -62,7 +64,10 @@ export function useQuotationFlow(customerId, isRefreshing = false) {
       console.log('💾 Saving quotation with data:', quotationData);
       const isEdit = !!quotationId;
       const creationMode = quotationData?.creationMode || 'rfp';
-      const requiresDhApproval = creationMode === 'direct' || creationMode === 'price_list';
+      const role = (user?.role || '').toString().toLowerCase();
+      const isSuperAdmin = role === 'superadmin';
+      // For SuperAdmin: "Direct Quote" should bypass DH approval and go straight to PI flow.
+      const requiresDhApproval = (creationMode === 'direct' || creationMode === 'price_list') && !(isSuperAdmin && creationMode === 'direct');
       
       const quotationPayload = {
         customerId: viewingCustomer.id, 

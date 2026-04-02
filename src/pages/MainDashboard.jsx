@@ -11,6 +11,8 @@ import OfficeSalesPersonDashboard from './SuperAdmin/OfficeSalesPersonDashboard'
 import CreateOrganisation from './SuperAdmin/CreateOrganisation';
 import DetailedReportPage from './Reports/DetailedReportPage';
 import RfpWorkflow from './shared/RfpWorkflow';
+import CalculatorProductList from './SalesDepartmentHead/CalculatorProductList';
+import CreatePIForm from './salesperson/CreatePIForm';
 import ToolboxInterface from './salesperson/ToolboxInterface';
 import SalesIntelligenceDashboard from './salesperson/dashboard/SalesIntelligenceDashboard';
 
@@ -51,7 +53,11 @@ const MainDashboard = ({ activeView, setActiveView }) => {
       case 'create-organisation':
         return <CreateOrganisation />;
       case 'rfp-workflow':
-        return <RfpWorkflow />;
+        return <RfpWorkflow setActiveView={setActiveView} />;
+      case 'calculator':
+        return <CalculatorProductList setActiveView={setActiveView} />;
+      case 'create-pi':
+        return <CreatePIForm />;
       case 'toolbox':
         return <ToolboxInterface />;
       default:

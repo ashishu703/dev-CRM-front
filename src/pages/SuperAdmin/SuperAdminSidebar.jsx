@@ -13,6 +13,7 @@ import {
   HelpCircle,
   PlusCircle,
   FileText,
+  Calculator,
   Wrench,
 } from 'lucide-react';
 
@@ -48,6 +49,7 @@ const Sidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, onToggleSid
     { id: 'leads', label: 'Leads', icon: <UserCheck className="w-5 h-5" />, hasDropdown: false },
     { id: 'performance', label: 'Payment Info', icon: <TrendingUp className="w-5 h-5" />, hasDropdown: false },
     { id: 'rfp-workflow', label: 'RFP Workflow', icon: <FileText className="w-5 h-5" />, hasDropdown: false },
+    { id: 'calculator', label: 'Calculator', icon: <Calculator className="w-5 h-5" />, hasDropdown: false },
     { id: 'department', label: 'Department', icon: <Building2 className="w-5 h-5" />, hasDropdown: false },
     { id: 'configuration', label: 'Configuration', icon: <Settings className="w-5 h-5" />, hasDropdown: false },
     { id: 'toolbox', label: 'Toolbox Interface', icon: <Wrench className="w-5 h-5" />, hasDropdown: false },

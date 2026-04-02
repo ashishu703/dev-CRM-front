@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import {
   Hash, User, Building, Shield, Tag, Clock, Settings,
-  Calendar, CheckCircle, XCircle, Edit, Eye, Phone, RefreshCw
+  Calendar, CheckCircle, XCircle, Edit, Eye, Phone
 } from 'lucide-react';
 import InlineStatusDropdown from './InlineStatusDropdown';
 import InlineFollowUpStatusCell from './InlineFollowUpStatusCell';
@@ -10,6 +10,8 @@ const TH_CLASS = 'px-1.5 py-1 text-left text-[10px] font-bold text-gray-800 uppe
 const TD_CLASS = 'px-1.5 py-1 text-xs text-gray-900 align-top';
 const FILTER_INPUT_CLASS = 'w-full px-1 py-0.5 text-[10px] border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500';
 const ICON_BOX_CLASS = 'w-5 h-5 rounded flex items-center justify-center flex-shrink-0';
+const ROUND_CHECKBOX_CLASS =
+  "appearance-none relative w-3.5 h-3.5 rounded-full border border-gray-300 bg-white checked:bg-blue-600 checked:border-blue-600 checked:after:block after:content-[''] after:absolute after:left-1/2 after:top-1/2 after:w-[3px] after:h-[6px] after:border-l-[2px] after:border-b-[2px] after:border-white after:transform after:-translate-x-1/2 after:-translate-y-1/2 after:rotate-[-45deg] after:hidden focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer";
 
 const COL_WIDTHS = {
   checkbox: '32px',
@@ -90,7 +92,7 @@ const LeadTable = ({
                   type="checkbox"
                   checked={isAllSelected && filteredLeads.length > 0}
                   onChange={toggleSelectAll}
-                  className="rounded-full w-3.5 h-3.5 cursor-pointer"
+                  className={ROUND_CHECKBOX_CLASS}
                 />
               </th>
               {visibleColumns.customerId && (
@@ -272,10 +274,21 @@ const LeadTable = ({
           <tbody className="bg-white divide-y divide-gray-100">
             {tableLoading ? (
               <tr>
-                <td colSpan={Object.values(visibleColumns).filter(Boolean).length + 2} className="px-3 py-4 text-center text-xs text-gray-500">
-                  <div className="flex items-center justify-center gap-2">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Loading leads...</span>
+                <td
+                  colSpan={Object.values(visibleColumns).filter(Boolean).length + 2}
+                  className="px-3 py-4"
+                >
+                  <div className="space-y-3">
+                    {Array.from({ length: 10 }).map((_, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <div className="w-4 h-3 rounded bg-gray-200 animate-pulse" />
+                        <div className="w-24 h-3 rounded bg-gray-200 animate-pulse" />
+                        <div className="w-32 h-3 rounded bg-gray-200 animate-pulse" />
+                        <div className="w-20 h-3 rounded bg-gray-200 animate-pulse" />
+                        <div className="w-28 h-3 rounded bg-gray-200 animate-pulse" />
+                        <div className="ml-auto w-16 h-3 rounded bg-gray-200 animate-pulse" />
+                      </div>
+                    ))}
                   </div>
                 </td>
               </tr>
@@ -300,7 +313,7 @@ const LeadTable = ({
                         checked={selectedLeadIdsSet.has(lead.id)}
                         onChange={() => toggleSelectOne(lead.id)}
                         title={isLeadAssigned(lead) ? 'Click to reassign' : 'Select for assignment'}
-                        className="rounded-full w-3.5 h-3.5 cursor-pointer"
+                        className={ROUND_CHECKBOX_CLASS}
                       />
                     </td>
                     {visibleColumns.customerId && <td className={TD_CLASS} title={lead.customerId}><span className="block truncate">{lead.customerId}</span></td>}

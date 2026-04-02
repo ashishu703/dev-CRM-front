@@ -230,11 +230,11 @@ const SalesIntelligenceDashboard = memo(function SalesIntelligenceDashboard({
         />
 
         {/* 5. Running Order (from Payment Tracking) */}
-        <RunningOrderSection onNavigate={onNavigate} />
+        <RunningOrderSection onNavigate={onNavigate} mode={mode} />
 
         {/* 6. Map | Lead Source */}
         <div className={`grid grid-cols-1 lg:grid-cols-2 ${CARD_GAP}`}>
-          <GeoDistributionCompact indiaGeo={summary?.indiaGeo} onNavigate={onNavigate} dashboardDate={date} />
+          <GeoDistributionCompact indiaGeo={summary?.indiaGeo} onNavigate={onNavigate} dashboardDate={date} mode={mode} />
           <LeadSourceCard leadSourceBreakdown={summary?.leadSourceBreakdown} />
         </div>
       </div>

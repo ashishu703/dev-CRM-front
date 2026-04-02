@@ -60,6 +60,7 @@ export default function AshvayChat({ showFloatingButton = true }) {
   const [isDragging, setIsDragging] = useState(false)
   const dragStartRef = useRef({ x: 0, y: 0 })
   const mouseDownPosRef = useRef({ x: 0, y: 0 })
+  const movedDuringDragRef = useRef(false)
 
   const hasThread = thread.length > 0
 
@@ -89,50 +90,105 @@ export default function AshvayChat({ showFloatingButton = true }) {
     return () => window.removeEventListener("resize", handleResize)
   }, [position])
 
-  const handleMouseDown = (e) => {
-    if (!showFloatingButton) return
+  const startDrag = (clientX, clientY) => {
     setIsDragging(true)
+    movedDuringDragRef.current = false
     const currentX = position.x !== null ? position.x : window.innerWidth - 100
     const currentY = position.y !== null ? position.y : window.innerHeight - 100
     dragStartRef.current = {
-      x: e.clientX - currentX,
-      y: e.clientY - currentY,
+      x: clientX - currentX,
+      y: clientY - currentY,
     }
-    mouseDownPosRef.current = { x: e.clientX, y: e.clientY }
+    mouseDownPosRef.current = { x: clientX, y: clientY }
+  }
+
+  const handleMouseDown = (e) => {
+    startDrag(e.clientX, e.clientY)
     e.preventDefault()
   }
 
-  const handleMouseMove = useCallback((e) => {
+  const handleTouchStart = (e) => {
+    const touch = e.touches?.[0]
+    if (!touch) return
+    startDrag(touch.clientX, touch.clientY)
+  }
+
+  const moveDrag = useCallback((clientX, clientY) => {
     const logoRect = logoRef.current?.getBoundingClientRect()
     if (!logoRect) return
-    const newX = e.clientX - dragStartRef.current.x
-    const newY = e.clientY - dragStartRef.current.y
+    const newX = clientX - dragStartRef.current.x
+    const newY = clientY - dragStartRef.current.y
     const maxX = window.innerWidth - logoRect.width
     const maxY = window.innerHeight - logoRect.height
     setPosition({
       x: Math.max(0, Math.min(newX, maxX)),
       y: Math.max(0, Math.min(newY, maxY)),
     })
+    const moved =
+      Math.abs(clientX - mouseDownPosRef.current.x) > 5 ||
+      Math.abs(clientY - mouseDownPosRef.current.y) > 5
+    if (moved) movedDuringDragRef.current = true
   }, [])
 
-  const handleMouseUp = useCallback((e) => {
+  const handleMouseMove = useCallback(
+    (e) => {
+      moveDrag(e.clientX, e.clientY)
+    },
+    [moveDrag]
+  )
+
+  const finishDrag = useCallback((clientX, clientY) => {
     setIsDragging(false)
     const moved =
-      Math.abs(e.clientX - mouseDownPosRef.current.x) > 5 ||
-      Math.abs(e.clientY - mouseDownPosRef.current.y) > 5
+      movedDuringDragRef.current ||
+      Math.abs(clientX - mouseDownPosRef.current.x) > 5 ||
+      Math.abs(clientY - mouseDownPosRef.current.y) > 5
     if (!moved) setOpen(true)
   }, [])
+
+  const handleMouseUp = useCallback(
+    (e) => {
+      finishDrag(e.clientX, e.clientY)
+    },
+    [finishDrag]
+  )
+
+  const handleTouchMove = useCallback(
+    (e) => {
+      const touch = e.touches?.[0]
+      if (!touch) return
+      e.preventDefault()
+      moveDrag(touch.clientX, touch.clientY)
+    },
+    [moveDrag]
+  )
+
+  const handleTouchEnd = useCallback(
+    (e) => {
+      const touch = e.changedTouches?.[0]
+      if (!touch) {
+        setIsDragging(false)
+        return
+      }
+      finishDrag(touch.clientX, touch.clientY)
+    },
+    [finishDrag]
+  )
 
   useEffect(() => {
     if (isDragging) {
       document.addEventListener("mousemove", handleMouseMove)
       document.addEventListener("mouseup", handleMouseUp)
+      document.addEventListener("touchmove", handleTouchMove, { passive: false })
+      document.addEventListener("touchend", handleTouchEnd)
       return () => {
         document.removeEventListener("mousemove", handleMouseMove)
         document.removeEventListener("mouseup", handleMouseUp)
+        document.removeEventListener("touchmove", handleTouchMove)
+        document.removeEventListener("touchend", handleTouchEnd)
       }
     }
-  }, [isDragging, handleMouseMove, handleMouseUp])
+  }, [isDragging, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd])
 
   const toApiMessages = useCallback((msgs) => {
     const out = []
@@ -238,6 +294,7 @@ export default function AshvayChat({ showFloatingButton = true }) {
           type="button"
           ref={logoRef}
           onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
           className="fixed z-[100] w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-full shadow-xl flex items-center justify-center hover:scale-105 transition-transform overflow-hidden ring-2 ring-white cursor-move"
           style={{
             background: GRADIENT,
@@ -246,6 +303,7 @@ export default function AshvayChat({ showFloatingButton = true }) {
             right: position.x === null ? "24px" : "auto",
             bottom: position.y === null ? "24px" : "auto",
             userSelect: "none",
+            touchAction: "none",
           }}
           aria-label="Open Ashvay"
         >
@@ -254,9 +312,19 @@ export default function AshvayChat({ showFloatingButton = true }) {
       ) : (
         <button
           type="button"
-          onClick={() => setOpen(true)}
-          className="fixed z-[100] bottom-5 right-5 flex items-center gap-2 px-3 py-2 rounded-full shadow-lg text-white font-semibold text-sm ring-2 ring-white/80 hover:opacity-95 transition-transform hover:scale-[1.02]"
-          style={{ background: GRADIENT }}
+          ref={logoRef}
+          onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
+          className="fixed z-[100] bottom-5 right-5 flex items-center gap-2 px-3 py-2 rounded-full shadow-lg text-white font-semibold text-sm ring-2 ring-white/80 hover:opacity-95 transition-transform hover:scale-[1.02] cursor-move"
+          style={{
+            background: GRADIENT,
+            left: position.x !== null ? `${position.x}px` : "auto",
+            top: position.y !== null ? `${position.y}px` : "auto",
+            right: position.x === null ? "24px" : "auto",
+            bottom: position.y === null ? "24px" : "auto",
+            userSelect: "none",
+            touchAction: "none",
+          }}
         >
           <span className="w-6 h-6 rounded-full overflow-hidden bg-white/90 ring-1 ring-white/70 shrink-0">
             <img src={ASHVAY_LOGO} alt="" className="w-full h-full object-cover" />
