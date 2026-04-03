@@ -220,6 +220,16 @@ class PaymentService {
     }
   }
 
+  // Delete advance credit for a customer
+  async deleteAdvanceCredit(customerId) {
+    try {
+      const response = await apiClient.post('/api/payments/credit/advance/delete', { customerId });
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async getBulkPaymentsByQuotations(quotationIds) {
     try {
       if (quotationIds.length > 100) {

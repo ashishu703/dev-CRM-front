@@ -1,10 +1,8 @@
 import React from 'react';
+import { Trash2 } from 'lucide-react';
+import { formatCurrencyINR } from '../utils/formatters';
 
 const th = 'px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 tracking-wider';
-
-function formatCurrency(n) {
-  return `₹${Number(n).toLocaleString('en-IN')}`;
-}
 
 function StatusBadge({ creditType }) {
   const isAdvance = creditType === 'advance';
@@ -19,22 +17,23 @@ function StatusBadge({ creditType }) {
   );
 }
 
-export default function PartyCreditTable({ rows, showSalespersonColumn }) {
+export default function PartyCreditTable({ rows, showSalespersonColumn, canDelete, onDeleteCreditRow }) {
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[600px] w-full">
+      <table className="min-w-[650px] w-full">
         <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
             {showSalespersonColumn && <th className={th}>Salesperson</th>}
             <th className={th}>Party Name</th>
             <th className={`${th} text-right`}>Credit Balance</th>
             <th className={th}>Status</th>
+            {canDelete && <th className={th + ' text-center'}>Action</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200 bg-white">
           {rows.length === 0 ? (
             <tr>
-              <td className="px-4 py-8 text-sm text-gray-500 text-center" colSpan={showSalespersonColumn ? 4 : 3}>
+              <td className="px-4 py-8 text-sm text-gray-500 text-center" colSpan={showSalespersonColumn ? 5 : 4}>
                 No party credit data
               </td>
             </tr>
@@ -50,11 +49,22 @@ export default function PartyCreditTable({ rows, showSalespersonColumn }) {
                     r.creditType === 'advance' ? 'text-emerald-700' : 'text-red-700'
                   }`}
                 >
-                  {formatCurrency(r.creditBalance)}
+                  {formatCurrencyINR(r.creditBalance)}
                 </td>
                 <td className="px-4 py-3">
                   <StatusBadge creditType={r.creditType || 'advance'} />
                 </td>
+                {canDelete && (
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => onDeleteCreditRow?.(r)}
+                      className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:brightness-110"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                )}
               </tr>
             ))
           )}

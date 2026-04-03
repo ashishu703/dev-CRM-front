@@ -12,6 +12,7 @@ import {
 } from './components';
 import AddPaymentSidebar from './components/AddPaymentSidebar';
 import { closeAddPaymentSidebar } from '../../../features/paymentTracking/paymentTrackingSlice';
+import { useCallback } from 'react';
 
 const TABS = [
   { id: 'orders', label: 'Active Orders', Icon: FileText },
@@ -40,6 +41,11 @@ export default function PaymentTrackingView({
   setSelectedForCancelOrder,
   onRefresh,
   onSaveOrderDelivery,
+  canDelete,
+  onDeleteQuotation,
+  onBulkDeleteQuotations,
+  onDeletePaymentHistory,
+  onDeleteCreditRow,
 }) {
   const dispatch = useDispatch();
   const { addPaymentSidebarOpen, selectedPayment } = useSelector((state) => state.paymentTracking);
@@ -58,6 +64,15 @@ export default function PaymentTrackingView({
   const isSalesperson = roleScope?.isSalesperson ?? true;
   const salespersonFilter = roleScope?.salespersonFilter ?? '';
   const setSalespersonFilter = roleScope?.setSalespersonFilter ?? (() => {});
+
+  const handleEditPendingRow = useCallback(
+    (row) => {
+      const qn = row?.quotationNumber || row?.quotationId;
+      if (qn) setSearchTerm(String(qn));
+      setActiveTab('orders');
+    },
+    [setSearchTerm, setActiveTab]
+  );
 
   const showPagination = activeTab !== 'target' && totalItems > 0;
   const renderLoadingSkeleton = () => (
@@ -157,15 +172,22 @@ export default function PaymentTrackingView({
               onCancelOrder={(item) => setSelectedForCancelOrder(item)}
               onCancelProduct={(item) => setSelectedForCancelOrder(item)}
               onSaveOrderDelivery={onSaveOrderDelivery}
+              canDelete={canDelete}
+              onDeleteQuotation={onDeleteQuotation}
+              onBulkDeleteQuotations={onBulkDeleteQuotations}
             />
           ) : activeTab === 'pending' ? (
             <PendingPaymentsTable
               rows={paginatedRows}
               onAddPayment={setSelectedForAddPayment}
               getPaymentForRow={getPaymentForRow}
+              canDelete={canDelete}
+              onDeleteQuotation={onDeleteQuotation}
+              onBulkDeleteQuotations={onBulkDeleteQuotations}
+              onEditQuotation={handleEditPendingRow}
             />
           ) : activeTab === 'statement' ? (
-            <StatementTable rows={paginatedRows} />
+            <StatementTable rows={paginatedRows} canDelete={canDelete} onDeletePaymentHistory={onDeletePaymentHistory} />
           ) : activeTab === 'target' ? (
             <TargetSummary
               isSalesperson={isSalesperson}
@@ -173,7 +195,12 @@ export default function PaymentTrackingView({
               targetList={data.targetList}
             />
           ) : activeTab === 'credit' ? (
-            <PartyCreditTable rows={paginatedRows} showSalespersonColumn={showSalespersonColumn} />
+            <PartyCreditTable
+              rows={paginatedRows}
+              showSalespersonColumn={showSalespersonColumn}
+              canDelete={canDelete}
+              onDeleteCreditRow={onDeleteCreditRow}
+            />
           ) : null}
         </div>
 

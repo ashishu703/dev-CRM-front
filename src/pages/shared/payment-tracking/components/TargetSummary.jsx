@@ -1,8 +1,5 @@
 import React from 'react';
-
-function formatCurrency(n) {
-  return `₹${Number(n).toLocaleString('en-IN')}`;
-}
+import { formatCurrencyINR } from '../utils/formatters';
 
 function SummaryCardsAndProgress({ targetSummary }) {
   const { totalTarget, achieved, remaining, progressPct, requiredPerDay = 0, daysLeftInPeriod = 0 } = targetSummary || {};
@@ -12,16 +9,16 @@ function SummaryCardsAndProgress({ targetSummary }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-gray-500 tracking-wider">Total Target</div>
-          <div className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(totalTarget || 0)}</div>
+          <div className="mt-1 text-xl font-bold text-gray-900">{formatCurrencyINR(totalTarget || 0)}</div>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-gray-500 tracking-wider">Achieved</div>
-          <div className="mt-1 text-xl font-bold text-emerald-600">{formatCurrency(achieved || 0)}</div>
+          <div className="mt-1 text-xl font-bold text-emerald-600">{formatCurrencyINR(achieved || 0)}</div>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-gray-500 tracking-wider">Remaining</div>
           <div className="mt-1 text-xl font-bold text-amber-600">
-            {formatCurrency(remaining != null ? remaining : (Number(totalTarget || 0) - Number(achieved || 0)))}
+            {formatCurrencyINR(remaining != null ? remaining : (Number(totalTarget || 0) - Number(achieved || 0)))}
           </div>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -30,7 +27,7 @@ function SummaryCardsAndProgress({ targetSummary }) {
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-gray-500 tracking-wider">Required/day</div>
-          <div className="mt-1 text-xl font-bold text-slate-800">{formatCurrency(requiredPerDay)}</div>
+          <div className="mt-1 text-xl font-bold text-slate-800">{formatCurrencyINR(requiredPerDay)}</div>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-gray-500 tracking-wider">Days left</div>
@@ -85,13 +82,13 @@ export default function TargetSummary({ isSalesperson, targetSummary, targetList
               list.map((row, i) => (
                 <tr key={(row.salespersonName || '') + i} className="hover:bg-gray-50/50">
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.salespersonName}</td>
-                  <td className="px-4 py-3 text-sm text-right text-gray-700">{formatCurrency(row.target)}</td>
-                  <td className="px-4 py-3 text-sm text-right text-emerald-600 font-medium">{formatCurrency(row.achieved)}</td>
-                  <td className="px-4 py-3 text-sm text-right text-amber-600">{formatCurrency(row.remaining)}</td>
+                  <td className="px-4 py-3 text-sm text-right text-gray-700">{formatCurrencyINR(row.target)}</td>
+                  <td className="px-4 py-3 text-sm text-right text-emerald-600 font-medium">{formatCurrencyINR(row.achieved)}</td>
+                  <td className="px-4 py-3 text-sm text-right text-amber-600">{formatCurrencyINR(row.remaining)}</td>
                   <td className="px-4 py-3 text-sm text-right font-semibold text-indigo-600">
                     {Number(row.progressPct || 0).toFixed(1)}%
                   </td>
-                  <td className="px-4 py-3 text-sm text-right text-gray-700">{formatCurrency(row.requiredPerDay ?? 0)}</td>
+                  <td className="px-4 py-3 text-sm text-right text-gray-700">{formatCurrencyINR(row.requiredPerDay ?? 0)}</td>
                   <td className="px-4 py-3 text-sm text-right text-gray-700">{Number(row.daysLeftInPeriod ?? 0)}</td>
                 </tr>
               ))

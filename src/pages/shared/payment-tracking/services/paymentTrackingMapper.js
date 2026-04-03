@@ -103,6 +103,8 @@ function mapOutstandingRow(o) {
     creditBalance: Number(o.due_amount || 0),
     status: 'Outstanding Balance',
     creditType: 'outstanding',
+    quotationId: o.quotation_id || null,
+    quotationNumber: o.quotation_number || '',
     salespersonName: o.salesperson_name || null,
   };
 }

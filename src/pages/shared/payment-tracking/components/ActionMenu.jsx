@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, DollarSign, Scissors, Ban, Lock } from 'lucide-react';
+import { MoreVertical, DollarSign, Scissors, Ban, Lock, Trash2 } from 'lucide-react';
 import { getActionRules, isDelivered } from '../constants/actionRules';
 
 /**
@@ -10,6 +10,8 @@ export default function ActionMenu({
   onAddPayment,
   onCancelProduct,
   onCancelOrder,
+  canDelete,
+  onDeleteQuotation,
   payment,
   cancelItemFull,
   productName,
@@ -69,6 +71,18 @@ export default function ActionMenu({
               )}
               {rules.canCancel && cancelItemFull && (
                 <>
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDeleteQuotation?.();
+                        setOpen(false);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" /> Delete
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleCancelProduct}

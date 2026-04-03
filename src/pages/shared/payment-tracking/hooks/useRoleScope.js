@@ -1,11 +1,15 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '../../../../hooks/useAuth';
+import {
+  normalizeRole,
+  isPaymentTrackingSuperAdmin,
+  isPaymentTrackingSalesHead,
+  userCanDeletePaymentTracking,
+} from '../utils/paymentTrackingRoles';
 
 const ROLES = {
   SALESPERSON: 'salesperson',
   DEPARTMENT_USER: 'department_user',
-  SALES_HEAD: 'sales_head',
-  SUPER_ADMIN: 'super_admin',
 };
 
 /**
@@ -14,12 +18,13 @@ const ROLES = {
  */
 export function useRoleScope() {
   const { user } = useAuth();
-  const role = (user?.role || 'salesperson').toLowerCase().replace(/\s+/g, '_');
+  const role = normalizeRole(user?.role);
   const [salespersonFilter, setSalespersonFilter] = useState('');
 
   const isSalesperson = role === ROLES.SALESPERSON || role === ROLES.DEPARTMENT_USER;
-  const isSalesHead = role === ROLES.SALES_HEAD || role === 'department_head' || role === 'sales_department_head';
-  const isSuperAdmin = role === ROLES.SUPER_ADMIN || role === 'superadmin';
+  const isSuperAdmin = isPaymentTrackingSuperAdmin(user?.role);
+  const isSalesHead = isPaymentTrackingSalesHead(user?.role, user?.departmentType);
+  const canDeletePaymentTracking = userCanDeletePaymentTracking(user);
   const showSalespersonColumn = !isSalesperson;
   const showSalespersonFilter = isSalesHead || isSuperAdmin;
 
@@ -29,6 +34,7 @@ export function useRoleScope() {
       isSalesperson,
       isSalesHead,
       isSuperAdmin,
+      canDeletePaymentTracking,
       showSalespersonColumn,
       showSalespersonFilter,
       salespersonFilter,
@@ -40,6 +46,7 @@ export function useRoleScope() {
       isSalesperson,
       isSalesHead,
       isSuperAdmin,
+      canDeletePaymentTracking,
       showSalespersonColumn,
       showSalespersonFilter,
       salespersonFilter,

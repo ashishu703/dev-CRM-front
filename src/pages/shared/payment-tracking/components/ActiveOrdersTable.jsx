@@ -1,19 +1,18 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { getActionRules, isDelivered } from '../constants/actionRules';
+import { formatCurrencyINR } from '../utils/formatters';
+import { useBulkQuotationIdSelection } from '../hooks/useBulkQuotationIdSelection';
 import StatusBadge from './StatusBadge';
 import ActionMenu from './ActionMenu';
+import BulkQuotationDeleteBar from './BulkQuotationDeleteBar';
+import RoundSelectCheckbox from './RoundSelectCheckbox';
 
 const th = 'px-3 sm:px-4 py-3 text-left text-xs font-semibold uppercase text-slate-600 tracking-wider whitespace-nowrap';
-const thSticky = th + ' max-md:static md:sticky md:left-0 md:z-10 bg-slate-50 min-w-[120px] border-r border-slate-200';
 
 function formatDate(v) {
   if (!v) return '';
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
-}
-
-function formatCurrency(n) {
-  return '₹' + Number(n).toLocaleString('en-IN');
 }
 
 function getRowKey(r, i) {
@@ -43,8 +42,41 @@ export default function ActiveOrdersTable({
   onCancelOrder,
   onCancelProduct,
   onSaveOrderDelivery,
+  canDelete,
+  onDeleteQuotation,
+  onBulkDeleteQuotations,
 }) {
   const [localDelivery, setLocalDelivery] = useState({});
+  const visibleQuotationIds = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    rows.forEach((r) => {
+      const id = r.quotationId;
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        list.push(id);
+      }
+    });
+    return list;
+  }, [rows]);
+  const {
+    selectedIds: selectedQuotationIds,
+    allSelected,
+    selectedCount,
+    toggleAll,
+    toggleOne,
+    clearSelection,
+  } = useBulkQuotationIdSelection(visibleQuotationIds);
+
+  const thSticky =
+    th +
+    ` max-md:static md:sticky ${canDelete ? 'md:left-10' : 'md:left-0'} md:z-10 bg-slate-50 min-w-[120px] border-r border-slate-200`;
+
+  const handleBulkDelete = async () => {
+    if (!selectedCount) return;
+    await onBulkDeleteQuotations?.(selectedQuotationIds);
+    clearSelection();
+  };
   const handleDeliveryChange = useCallback((rowKey, field, value, row) => {
     setLocalDelivery((prev) => {
       const next = { ...prev, [rowKey]: { ...(prev[rowKey] || {}), [field]: value } };
@@ -58,13 +90,29 @@ export default function ActiveOrdersTable({
     });
   }, [onSaveOrderDelivery]);
 
-  const colSpan = (showSalespersonColumn ? 9 : 8) + 1;
+  const colSpan = (showSalespersonColumn ? 9 : 8) + 1 + (canDelete ? 1 : 0);
   return (
     // Avoid negative horizontal margins: sticky `left: 0` alignment is affected and can look like overlap.
     <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <BulkQuotationDeleteBar
+        canDelete={canDelete}
+        selectedCount={selectedCount}
+        onDelete={handleBulkDelete}
+        summaryLabel={`${selectedCount} order(s) selected`}
+        className="px-1"
+      />
       <table className="min-w-[900px] w-full">
         <thead className="bg-slate-50 border-b border-slate-200">
           <tr>
+            {canDelete && (
+              <th className="w-10 px-2 py-3 text-center text-xs font-semibold uppercase text-slate-600 tracking-wider whitespace-nowrap">
+                <RoundSelectCheckbox
+                  checked={allSelected}
+                  onChange={(e) => toggleAll(e.target.checked)}
+                  aria-label="Select all orders on this page"
+                />
+              </th>
+            )}
             {showSalespersonColumn && <th className={th + ' min-w-[100px]'}>Salesperson</th>}
             <th className={thSticky}>Party</th>
             <th className={th + ' min-w-[80px]'}>Quotation</th>
@@ -99,16 +147,32 @@ export default function ActiveOrdersTable({
                 : delivered
                   ? 'bg-emerald-50/30 hover:bg-emerald-50/50 border-l-4 border-l-emerald-500'
                   : 'hover:bg-slate-50/60';
+              const checked = canDelete && selectedQuotationIds.includes(r.quotationId);
 
               return (
                 <tr key={rowKey} className={rowClass}>
+                  {canDelete && (
+                    <td className="px-2 py-3 text-center">
+                      <RoundSelectCheckbox
+                        checked={checked}
+                        onChange={(e) => toggleOne(r.quotationId, e.target.checked)}
+                        aria-label={`Select order ${r.quotationNumber || r.quotationId}`}
+                      />
+                    </td>
+                  )}
                   {showSalespersonColumn && <td className="px-3 sm:px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{r.salespersonName || '—'}</td>}
-                  <td className="max-md:static md:sticky md:left-0 md:z-10 bg-white px-3 sm:px-4 py-3 text-sm font-medium text-slate-900 whitespace-nowrap min-w-[120px] border-r border-slate-100">{r.partyName}</td>
+                  <td
+                    className={
+                      `max-md:static md:sticky ${canDelete ? 'md:left-10' : 'md:left-0'} md:z-10 bg-white px-3 sm:px-4 py-3 text-sm font-medium text-slate-900 whitespace-nowrap min-w-[120px] border-r border-slate-100`
+                    }
+                  >
+                    {r.partyName}
+                  </td>
                   <td className="px-3 sm:px-4 py-3 text-sm font-mono text-gray-700 whitespace-nowrap">{r.quotationNumber || '—'}</td>
                   <td className="px-3 sm:px-4 py-3 text-gray-800 min-w-0">
                     <ProductCell productName={r.productName} />
                   </td>
-                  <td className="px-3 sm:px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{typeof r.rate === 'number' ? formatCurrency(r.rate) : r.rate}</td>
+                  <td className="px-3 sm:px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{typeof r.rate === 'number' ? formatCurrencyINR(r.rate) : r.rate}</td>
                   <td className="px-3 sm:px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{r.quantity != null ? (String(r.quantity) + ' ' + (r.unit || '').trim()).trim() || '—' : '—'}</td>
                   <td className="px-3 sm:px-4 py-2 min-w-[120px]">
                     {rules.editable ? (
@@ -156,6 +220,8 @@ export default function ActiveOrdersTable({
                       payment={payment}
                       cancelItemFull={cancelItemFull}
                       productName={r.productName}
+                      canDelete={canDelete}
+                      onDeleteQuotation={() => onDeleteQuotation?.(r.quotationId)}
                     />
                   </td>
                 </tr>
