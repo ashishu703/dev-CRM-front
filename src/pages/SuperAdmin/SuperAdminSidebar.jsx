@@ -67,31 +67,44 @@ const Sidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, onToggleSid
         boxShadow: '4px 0 20px rgba(0, 0, 0, 0.3)'
       }}
     >
-      {/* Header */}
+      {/* Header — logo only, full width of row (beside toggle when expanded) */}
       <div className="p-4 border-b border-slate-700/50 bg-gradient-to-r from-indigo-500/20 via-blue-500/10 to-violet-500/20">
-        <div className="flex items-center justify-between">
-          {isExpanded && (
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-white p-1.5 shadow-lg border border-white/40 overflow-hidden flex items-center justify-center">
-              {!logoLoadFailed ? (
-                <img 
-                  src="https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png" 
-                  alt="ANOCAB Logo"
-                  onError={() => setLogoLoadFailed(true)}
-                  className="w-full h-full object-contain"
-                />
-              ) : (
-                <span className="text-xs font-bold text-slate-700">A</span>
-              )}
+        <div className={`flex items-center gap-2 ${!isExpanded ? 'flex-col' : ''}`}>
+          {isExpanded ? (
+            <div className="flex-1 min-w-0 w-full">
+              <div className="w-full rounded-xl bg-white p-2 shadow-lg border border-white/40 overflow-hidden flex items-center justify-center min-h-[2.75rem]">
+                {!logoLoadFailed ? (
+                  <img
+                    src="https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png"
+                    alt="Logo"
+                    onError={() => setLogoLoadFailed(true)}
+                    className="w-full max-h-14 h-auto object-contain object-center"
+                  />
+                ) : (
+                  <span className="text-xs font-bold text-slate-700">A</span>
+                )}
               </div>
-              <div>
-                <h1 className="font-bold text-white text-lg tracking-tight" style={{ fontFamily: 'Poppins, sans-serif' }}>ANOCAB</h1>
+            </div>
+          ) : (
+            <div className="w-full px-0">
+              <div className="w-full rounded-lg bg-white p-1.5 shadow-lg border border-white/40 overflow-hidden flex items-center justify-center">
+                {!logoLoadFailed ? (
+                  <img
+                    src="https://res.cloudinary.com/drpbrn2ax/image/upload/v1757416761/logo2_kpbkwm-removebg-preview_jteu6d.png"
+                    alt="Logo"
+                    onError={() => setLogoLoadFailed(true)}
+                    className="w-full max-h-9 h-auto object-contain"
+                  />
+                ) : (
+                  <span className="text-[10px] font-bold text-slate-700">A</span>
+                )}
               </div>
             </div>
           )}
           <button
+            type="button"
             onClick={toggleSidebar}
-            className={`p-2 hover:bg-slate-700/50 rounded-lg transition-all duration-200 text-slate-300 hover:text-white ${!isExpanded ? 'mx-auto' : ''}`}
+            className={`shrink-0 p-2 hover:bg-slate-700/50 rounded-lg transition-all duration-200 text-slate-300 hover:text-white ${!isExpanded ? 'mx-auto' : ''}`}
           >
             {isExpanded ? <X className="w-4 h-4" /> : <Menu className="w-5 h-5 sm:w-6 sm:h-6" />}
           </button>
@@ -232,7 +245,7 @@ const Sidebar = ({ onLogout, activeView, setActiveView, sidebarOpen, onToggleSid
         </button>
         {isExpanded && (
           <p className="mt-3 text-[11px] text-slate-400 text-center">
-            © {new Date().getFullYear()} ANOCAB. All rights reserved.
+            © {new Date().getFullYear()}. All rights reserved.
           </p>
         )}
       </div>

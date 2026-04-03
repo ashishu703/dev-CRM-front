@@ -41,6 +41,7 @@ import { DASHBOARD_FILTER_KEY } from '../salesperson/dashboard/utils/dashboardNa
 import PricingRfpDecisionModal from '../shared/PricingRfpDecisionModal';
 import CreateQuotationForm from '../salesperson/salespersoncreatequotation.jsx';
 import { useQuotationFlow } from '../../hooks/useQuotationFlow';
+import { EditLeadStatusModal } from '../salesperson/LeadStatus';
 
 const DEFAULT_COLUMN_FILTERS = {
   customerId: '',
@@ -256,6 +257,7 @@ const LeadsSimplified = () => {
   const [previewLead, setPreviewLead] = useState(null);
   const [showCustomerTimeline, setShowCustomerTimeline] = useState(false);
   const [timelineLead, setTimelineLead] = useState(null);
+  const [sidebarUpdateStatusLead, setSidebarUpdateStatusLead] = useState(null);
   const [quotationCounts, setQuotationCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
   const [piCounts, setPiCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
   const [loadingCounts, setLoadingCounts] = useState(false);
@@ -2001,6 +2003,110 @@ const LeadsSimplified = () => {
     setShowCustomerTimeline(true);
   }, []);
 
+  const leadFormatForEnquirySidebar = useCallback((customer) => ({
+    id: customer.id ?? customer._id,
+    sales_status: customer.salesStatus || customer.sales_status || '',
+    sales_status_remark: customer.salesStatusRemark || customer.sales_status_remark || '',
+    follow_up_status: customer.followUpStatus || customer.follow_up_status || '',
+    follow_up_remark: customer.followUpRemark || customer.follow_up_remark || '',
+    follow_up_date: customer.followUpDate || customer.follow_up_date || '',
+    follow_up_time: customer.followUpTime || customer.follow_up_time || '',
+    enquired_products: customer.enquired_products || customer.enquiredProducts || [],
+    other_product: customer.other_product || customer.otherProduct || ''
+  }), []);
+
+  const handleSidebarEnquirySave = useCallback(async (leadId, statusData) => {
+    try {
+      const enquiredProducts = statusData.enquired_products || [];
+      const enquiredProductsStr = Array.isArray(enquiredProducts)
+        ? JSON.stringify(enquiredProducts)
+        : enquiredProducts;
+
+      const payload = {
+        sales_status: statusData.sales_status ?? statusData.salesStatus ?? '',
+        sales_status_remark: statusData.sales_status_remark ?? statusData.salesStatusRemark ?? '',
+        follow_up_status: statusData.follow_up_status ?? statusData.followUpStatus ?? '',
+        follow_up_remark: statusData.follow_up_remark ?? statusData.followUpRemark ?? '',
+        follow_up_date: statusData.follow_up_date ?? statusData.followUpDate ?? '',
+        follow_up_time: statusData.follow_up_time ?? statusData.followUpTime ?? '',
+        enquired_products: enquiredProductsStr,
+        other_product: statusData.other_product || '',
+      };
+      const fd = new FormData();
+      Object.entries(payload).forEach(([k, v]) => fd.append(k, v == null ? '' : v));
+      const response = await apiClient.putFormData(API_ENDPOINTS.SALESPERSON_LEAD_BY_ID(leadId), fd);
+
+      if (response.success) {
+        let formattedProductsForState = [];
+        try {
+          formattedProductsForState = typeof enquiredProductsStr === 'string'
+            ? JSON.parse(enquiredProductsStr)
+            : enquiredProducts;
+        } catch {
+          formattedProductsForState = Array.isArray(enquiredProducts) ? enquiredProducts : [];
+        }
+
+        setTimelineLead((prev) => {
+          if (!prev || ((prev.id ?? prev._id) !== leadId)) return prev;
+          return {
+            ...prev,
+            salesStatus: payload.sales_status,
+            sales_status: payload.sales_status,
+            salesStatusRemark: payload.sales_status_remark,
+            sales_status_remark: payload.sales_status_remark,
+            followUpStatus: payload.follow_up_status,
+            follow_up_status: payload.follow_up_status,
+            followUpRemark: payload.follow_up_remark,
+            follow_up_remark: payload.follow_up_remark,
+            followUpDate: payload.follow_up_date,
+            follow_up_date: payload.follow_up_date,
+            followUpTime: payload.follow_up_time,
+            follow_up_time: payload.follow_up_time,
+            enquired_products: formattedProductsForState,
+            enquiredProducts: formattedProductsForState,
+            other_product: payload.other_product,
+            otherProduct: payload.other_product,
+          };
+        });
+
+        setLeadsData((prev) =>
+          prev.map((l) => {
+            const lid = l.id ?? l._id;
+            if (lid !== leadId) return l;
+            return {
+              ...l,
+              salesStatus: payload.sales_status,
+              sales_status: payload.sales_status,
+              salesStatusRemark: payload.sales_status_remark,
+              sales_status_remark: payload.sales_status_remark,
+              followUpStatus: payload.follow_up_status,
+              follow_up_status: payload.follow_up_status,
+              followUpRemark: payload.follow_up_remark,
+              follow_up_remark: payload.follow_up_remark,
+              followUpDate: payload.follow_up_date,
+              follow_up_date: payload.follow_up_date,
+              followUpTime: payload.follow_up_time,
+              follow_up_time: payload.follow_up_time,
+              enquired_products: formattedProductsForState,
+              enquiredProducts: formattedProductsForState,
+              other_product: payload.other_product,
+              otherProduct: payload.other_product,
+            };
+          })
+        );
+
+        toastManager.success('Enquiry saved successfully');
+        if (activeTab === 'enquiry') {
+          await fetchEnquiries(true, enquiryPage, enquiryLimit);
+        }
+        await fetchLeads();
+      }
+    } catch (error) {
+      toastManager.error('Failed to save enquiry');
+      throw error;
+    }
+  }, [activeTab, enquiryPage, enquiryLimit, fetchEnquiries, fetchLeads]);
+
   const handleColumnFilterChange = useCallback((key, value) => {
     setColumnFilters(prev => ({ ...prev, [key]: value }));
   }, []);
@@ -3566,6 +3672,7 @@ const LeadsSimplified = () => {
           onClose={() => {
             setShowCustomerTimeline(false);
             setTimelineLead(null);
+            setSidebarUpdateStatusLead(null);
           }}
           onEdit={(lead) => {
             if (lead) handleEdit(lead);
@@ -3620,17 +3727,22 @@ const LeadsSimplified = () => {
               handleViewPI(piId);
             }
           }}
-          onUpdateStatus={() => {
-            setShowCustomerTimeline(false);
-            toastManager.info('Please use the status update workflow from the main page');
-          }}
+          onUpdateStatus={() => {}}
           onPricingRfp={() => {
             setShowCustomerTimeline(false);
             if (!isSuperAdmin) toastManager.info('Please use the RFP workflow from the main page');
           }}
           onSendEmail={() => {}}
           onDocs={() => {}}
-          renderUpdateStatusContent={null}
+          onUpdateStatusTabSelect={(c) => setSidebarUpdateStatusLead(leadFormatForEnquirySidebar(c))}
+          renderUpdateStatusContent={(onClose) => sidebarUpdateStatusLead && (
+            <EditLeadStatusModal
+              lead={sidebarUpdateStatusLead}
+              onClose={() => { onClose(); setSidebarUpdateStatusLead(null); }}
+              onSave={handleSidebarEnquirySave}
+              embedInSidebar
+            />
+          )}
           renderRfpContent={
             isSuperAdmin
               ? (onClose) => (

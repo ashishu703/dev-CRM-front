@@ -1,4 +1,3 @@
-// Use relative URLs in development to leverage Vite proxy, full URLs in production
 const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (isDevelopment ? '' : 'http://localhost:4500');
 
@@ -142,7 +141,6 @@ export const API_ENDPOINTS = {
   STOCK_TALLY_ITEMS: () => `${API_BASE_URL}/api/stock/tally/items`,
 
   // Product images (toolbox interface)
-  // GET returns images for a given product; UPLOAD posts a new image.
   PRODUCT_IMAGES_GET: (productName) => `${API_BASE_URL}/api/product-images/${encodeURIComponent(productName)}`,
   PRODUCT_IMAGES_UPLOAD: () => `${API_BASE_URL}/api/product-images`,
 
@@ -229,7 +227,6 @@ export const API_ENDPOINTS = {
   LEAD_PHOTOS: (leadId) => `${API_BASE_URL}/api/leads/assigned/salesperson/lead/${leadId}/photos`,
   UPLOAD_LEAD_PHOTO: (leadId) => `${API_BASE_URL}/api/upload/lead-photo?leadId=${leadId}`,
 
-  // expose base URL for rare direct uses
   API_BASE_URL,
 };
 

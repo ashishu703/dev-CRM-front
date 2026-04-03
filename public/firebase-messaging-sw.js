@@ -8,7 +8,6 @@ const ANOCAB_LOGO_URL = 'https://res.cloudinary.com/drpbrn2ax/image/upload/v1757
 const ANOCAB_TITLE = 'Anocab CRM';
 
 self.addEventListener('push', (event) => {
-  // Fallback handler so early push events are not dropped before Firebase init.
   try {
     const payload = event.data ? event.data.json() : {};
     const notificationOptions = {
