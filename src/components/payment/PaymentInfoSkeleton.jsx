@@ -1,5 +1,6 @@
 import React from 'react';
 import { SkeletonTable, SkeletonStatCard } from '../dashboard/DashboardSkeleton';
+import { Skeleton } from '../ui/Skeleton';
 
 /**
  * Shared skeleton loader for Payment Info screens (SuperAdmin + Department Head).
@@ -16,7 +17,7 @@ const PaymentInfoSkeleton = () => {
     >
       {/* Header skeleton */}
       <div className="mb-6">
-        <div className="h-8 bg-gray-200 rounded w-48 mb-2 animate-pulse" />
+        <Skeleton className="h-8 w-48 mb-2 rounded-lg bg-gray-200" />
       </div>
 
       {/* Stats Cards skeleton */}
@@ -29,11 +30,11 @@ const PaymentInfoSkeleton = () => {
       {/* Search + filters + table area skeleton */}
       <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm mb-6">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-6">
-          <div className="h-10 bg-gray-200 rounded w-full lg:w-96 animate-pulse" />
+          <Skeleton className="h-10 w-full lg:w-96 rounded-lg bg-gray-200" />
           <div className="flex items-center gap-3 flex-wrap w-full lg:w-auto">
-            <div className="h-10 bg-gray-200 rounded w-32 animate-pulse" />
-            <div className="h-10 bg-gray-200 rounded w-24 animate-pulse" />
-            <div className="h-10 bg-gray-200 rounded w-28 animate-pulse" />
+            <Skeleton className="h-10 w-32 rounded-lg bg-gray-200" />
+            <Skeleton className="h-10 w-24 rounded-lg bg-gray-200" />
+            <Skeleton className="h-10 w-28 rounded-lg bg-gray-200" />
           </div>
         </div>
 

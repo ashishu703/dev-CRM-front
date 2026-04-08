@@ -535,6 +535,24 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
           title: "RFP Workflow",
           subtitle: "Manage RFP requests and workflow"
         };
+      case 'accounts-dashboard':
+        return {
+          icon: <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-white" />,
+          title: "Dashboard",
+          subtitle: "Overview & insights — payments and approvals"
+        };
+      case 'accounts-payments':
+        return {
+          icon: <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-white" />,
+          title: "Payment Info",
+          subtitle: "Approvals, history, and reconciliation"
+        };
+      case 'price-updation':
+        return {
+          icon: <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-white" />,
+          title: "Price Management",
+          subtitle: "Manage all product pricing"
+        };
       case 'toolbox':
         return {
           icon: <Wrench className="w-5 h-5 text-white" />,
@@ -553,6 +571,8 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
 
   const pageContent = getPageHeaderContent();
   const isSalesHeadTheme = userType === 'salesdepartmenthead' || userType === 'salesperson';
+  const isAccountsTheme =
+    userType === 'accountsdepartmenthead' || userType === 'accounts-user';
   const isSalespersonLight = false;
   const isSuperAdmin = userType === 'superadmin';
   const headerIsDark = isDarkMode || isSuperAdmin || (isSalesHeadTheme && !isSalespersonLight);
@@ -607,7 +627,15 @@ const FixedHeader = ({ userType = "superadmin", currentPage = "dashboard", isMob
           {(pageContent.title || pageContent.subtitle) && (
             <div 
               className="min-w-0 flex flex-col justify-center"
-              style={isSalesHeadTheme && !isSalespersonLight ? { borderLeft: '3px solid #6366F1', paddingLeft: 14 } : isSalespersonLight ? { borderLeft: '3px solid #64748b', paddingLeft: 14 } : undefined}
+              style={
+              isSalesHeadTheme && !isSalespersonLight
+                ? { borderLeft: '3px solid #6366F1', paddingLeft: 14 }
+                : isAccountsTheme
+                  ? { borderLeft: '3px solid #4F46E5', paddingLeft: 14 }
+                  : isSalespersonLight
+                    ? { borderLeft: '3px solid #64748b', paddingLeft: 14 }
+                    : undefined
+            }
             >
               <h1 
                 className={`truncate ${!isSalesHeadTheme ? (headerIsDark ? 'text-white' : 'text-gray-900') + ' text-sm sm:text-base lg:text-lg font-bold' : ''}`}

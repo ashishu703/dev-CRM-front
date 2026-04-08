@@ -1,42 +1,45 @@
 import React from 'react';
+import { Skeleton } from '../ui/Skeleton';
+
+const bar = 'bg-gray-200';
 
 // Reusable skeleton components for dashboard
 export const SkeletonCard = ({ className = '' }) => (
-  <div className={`bg-white rounded-lg p-6 border border-gray-200 animate-pulse ${className}`}>
-    <div className="h-4 bg-gray-200 rounded w-1/3 mb-4"></div>
-    <div className="h-8 bg-gray-200 rounded w-1/2 mb-2"></div>
-    <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+  <div className={`bg-white rounded-lg p-6 border border-gray-200 ${className}`}>
+    <Skeleton className={`h-4 w-1/3 mb-4 ${bar}`} />
+    <Skeleton className={`h-8 w-1/2 mb-2 ${bar}`} />
+    <Skeleton className={`h-3 w-2/3 ${bar}`} />
   </div>
 );
 
 export const SkeletonStatCard = () => (
-  <div className="bg-white rounded-lg p-6 border border-gray-200 animate-pulse">
+  <div className="bg-white rounded-lg p-6 border border-gray-200">
     <div className="flex items-center justify-between mb-4">
-      <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-      <div className="h-8 w-8 bg-gray-200 rounded"></div>
+      <Skeleton className={`h-4 w-1/2 ${bar}`} />
+      <Skeleton className={`h-8 w-8 rounded ${bar}`} />
     </div>
-    <div className="h-8 bg-gray-200 rounded w-1/3 mb-2"></div>
-    <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+    <Skeleton className={`h-8 w-1/3 mb-2 ${bar}`} />
+    <Skeleton className={`h-3 w-2/3 ${bar}`} />
   </div>
 );
 
 export const SkeletonChart = () => (
-  <div className="bg-white rounded-lg p-6 border border-gray-200 animate-pulse">
-    <div className="h-5 bg-gray-200 rounded w-1/3 mb-6"></div>
-    <div className="h-64 bg-gray-200 rounded"></div>
+  <div className="bg-white rounded-lg p-6 border border-gray-200">
+    <Skeleton className={`h-5 w-1/3 mb-6 ${bar}`} />
+    <Skeleton className={`h-64 w-full ${bar}`} />
   </div>
 );
 
 export const SkeletonTable = ({ rows = 5 }) => (
-  <div className="bg-white rounded-lg border border-gray-200 animate-pulse">
+  <div className="bg-white rounded-lg border border-gray-200">
     <div className="p-4 border-b border-gray-200">
-      <div className="h-5 bg-gray-200 rounded w-1/4"></div>
+      <Skeleton className={`h-5 w-1/4 ${bar}`} />
     </div>
     {Array.from({ length: rows }).map((_, i) => (
       <div key={i} className="p-4 border-b border-gray-200 last:border-b-0">
-        <div className="flex items-center justify-between">
-          <div className="h-4 bg-gray-200 rounded w-1/3"></div>
-          <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+        <div className="flex items-center justify-between gap-4">
+          <Skeleton className={`h-4 w-1/3 ${bar}`} />
+          <Skeleton className={`h-4 w-1/4 ${bar}`} />
         </div>
       </div>
     ))}
@@ -51,9 +54,9 @@ const DashboardSkeleton = () => {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-4">
-            <div className="h-10 bg-gray-200 rounded w-24 animate-pulse"></div>
-            <div className="h-10 bg-gray-200 rounded w-32 animate-pulse"></div>
-            <div className="h-10 bg-gray-200 rounded w-40 animate-pulse"></div>
+            <Skeleton className="h-10 w-24 rounded-lg bg-gray-200" />
+            <Skeleton className="h-10 w-32 rounded-lg bg-gray-200" />
+            <Skeleton className="h-10 w-40 rounded-lg bg-gray-200" />
           </div>
         </div>
       </div>
@@ -61,8 +64,8 @@ const DashboardSkeleton = () => {
       {/* Sales Department Section */}
       <div className="mb-8">
         <div className="flex items-center space-x-2 mb-4">
-          <div className="h-6 w-6 bg-gray-200 rounded animate-pulse"></div>
-          <div className="h-7 bg-gray-200 rounded w-48 animate-pulse"></div>
+          <Skeleton className="h-6 w-6 rounded bg-gray-200" />
+          <Skeleton className="h-7 w-48 rounded bg-gray-200" />
         </div>
         
         {/* Lead Status Cards */}
@@ -95,8 +98,8 @@ const DashboardSkeleton = () => {
       {/* Accounts Department Section */}
       <div className="mb-8">
         <div className="flex items-center space-x-2 mb-4">
-          <div className="h-6 w-6 bg-gray-200 rounded animate-pulse"></div>
-          <div className="h-7 bg-gray-200 rounded w-56 animate-pulse"></div>
+          <Skeleton className="h-6 w-6 rounded bg-gray-200" />
+          <Skeleton className="h-7 w-56 rounded bg-gray-200" />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -108,8 +111,8 @@ const DashboardSkeleton = () => {
       {/* IT Department Section */}
       <div className="mb-8">
         <div className="flex items-center space-x-2 mb-4">
-          <div className="h-6 w-6 bg-gray-200 rounded animate-pulse"></div>
-          <div className="h-7 bg-gray-200 rounded w-40 animate-pulse"></div>
+          <Skeleton className="h-6 w-6 rounded bg-gray-200" />
+          <Skeleton className="h-7 w-40 rounded bg-gray-200" />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {Array.from({ length: 5 }).map((_, i) => (

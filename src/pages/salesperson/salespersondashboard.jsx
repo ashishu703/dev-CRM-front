@@ -10,6 +10,7 @@ import { getDateRangeFromFilter, filterLeadsByDate, filterPaymentsByDate, filter
 import { calculateLeadMetrics } from './dashboard/services/dashboardCalculator'
 import { Card, CardHeader, CardTitle, CardContent } from '../../shared/components/Card'
 import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton'
+import { Skeleton, TableRowsSkeleton } from '../../components/ui/Skeleton'
 import MyPerformancePanel from '../../components/dashboard/MyPerformancePanel'
 import { toDateOnly } from '../../utils/dateOnly'
 import {
@@ -1031,7 +1032,25 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
             <p className={cx("text-xs mt-0.5", isDarkMode ? "text-gray-400" : "text-gray-500")}>Quotations, PI, payments — total, approved, pending, rejected</p>
           </div>
           {(leadsLoading || targetLoading) ? (
-            <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-500 border-t-transparent" /></div>
+            <div className="overflow-x-auto p-4">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className={cx("border-b", isDarkMode ? "border-gray-600 bg-gray-800" : "border-gray-200 bg-gray-50")}>
+                    <th className={cx("text-left py-2.5 px-4 font-semibold", isDarkMode ? "text-gray-300" : "text-gray-700")}>Metric</th>
+                    <th className={cx("text-right py-2.5 px-4 font-semibold", isDarkMode ? "text-gray-300" : "text-gray-700")}>Value</th>
+                  </tr>
+                </thead>
+                <tbody className={cx(isDarkMode ? "text-gray-200" : "text-gray-700")}>
+                  <TableRowsSkeleton
+                    rows={12}
+                    columns={2}
+                    tdClassName="py-2.5 px-4"
+                    trClassName={cx("border-b", isDarkMode ? "border-gray-700" : "border-gray-100")}
+                    barClassName={isDarkMode ? "bg-gray-600" : "bg-gray-200"}
+                  />
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -1064,8 +1083,12 @@ export default function DashboardContent({ isDarkMode = false, onNavigate }) {
       {/* Trends & Analytics - Charts only */}
       <div className="space-y-4 mb-8">
         {(leadsLoading || targetLoading) ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-8">
+            <Skeleton className={cx('h-64 rounded-xl', isDarkMode ? 'bg-gray-700' : 'bg-gray-200')} />
+            <Skeleton className={cx('h-64 rounded-xl', isDarkMode ? 'bg-gray-700' : 'bg-gray-200')} />
+            <Skeleton className={cx('h-64 rounded-xl lg:col-span-2', isDarkMode ? 'bg-gray-700' : 'bg-gray-200')} />
+            <Skeleton className={cx('h-64 rounded-xl', isDarkMode ? 'bg-gray-700' : 'bg-gray-200')} />
+            <Skeleton className={cx('h-64 rounded-xl', isDarkMode ? 'bg-gray-700' : 'bg-gray-200')} />
           </div>
         ) : (
           <>

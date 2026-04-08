@@ -1,27 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, ArrowUpRight, CheckCircle, Clock, FileText, Loader2, RefreshCw, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, Banknote, Clock, Medal, RefreshCw } from 'lucide-react';
 import paymentService from '../../api/admin_api/paymentService';
+import { AccountsDashboardSkeleton } from '../../components/accounts/AccountsSkeletons';
 import AccountsPayInfo from './accountspayinfo';
 import PriceManagement from './PriceManagement';
 import RfpWorkflow from '../shared/RfpWorkflow';
 
-const STATUS_CONFIG = {
-  pending: {
-    title: 'Pending Approvals',
-    color: 'bg-amber-50 text-amber-700 border-amber-200',
-    icon: Clock
-  },
-  approved: {
-    title: 'Approved Payments',
-    color: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    icon: CheckCircle
-  },
-  rejected: {
-    title: 'Rejected Payments',
-    color: 'bg-rose-50 text-rose-700 border-rose-200',
-    icon: XCircle
-  }
-};
+const sortPaymentsLatestFirst = (rows) =>
+  [...rows].sort((a, b) => {
+    const ta = new Date(a.created_at || a.payment_date || 0).getTime();
+    const tb = new Date(b.created_at || b.payment_date || 0).getTime();
+    if (tb !== ta) return tb - ta;
+    return Number(b.id || 0) - Number(a.id || 0);
+  });
 
 const AccountsOverview = ({ onViewPayments }) => {
   const [stats, setStats] = useState({
@@ -30,34 +21,51 @@ const AccountsOverview = ({ onViewPayments }) => {
     rejected: { count: 0, amount: 0 }
   });
   const [recentPending, setRecentPending] = useState([]);
+  const [overview, setOverview] = useState(null);
+  const [overviewError, setOverviewError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const fetchStats = async () => {
     setLoading(true);
     setError(null);
+    setOverviewError(null);
     try {
-      const statuses = Object.keys(STATUS_CONFIG);
-      const responses = await Promise.all(
-        statuses.map((status) =>
-          paymentService.getAllPayments({ approvalStatus: status, limit: status === 'pending' ? 5 : 1 })
+      const statuses = ['pending', 'approved', 'rejected'];
+      const [overviewRes, ...responses] = await Promise.all([
+        paymentService.getAccountsOverview().catch((e) => ({ __failed: true, message: e?.message })),
+        ...statuses.map((status) =>
+          paymentService.getAllPayments({
+            approvalStatus: status,
+            limit: status === 'pending' ? 200 : 1
+          })
         )
-      );
+      ]);
+
+      if (overviewRes?.__failed) {
+        setOverview(null);
+        setOverviewError(overviewRes.message || 'Could not load monthly summary.');
+      } else if (overviewRes?.data) {
+        setOverview(overviewRes.data);
+      } else {
+        setOverview(null);
+      }
 
       const nextStats = {};
       responses.forEach((res, idx) => {
         const status = statuses[idx];
         const rows = Array.isArray(res?.data) ? res.data : [];
-        const formattedRows = rows.map((payment) => ({
-          ...payment,
-          displayQuotation: payment.quotation_number || payment.quotation_id || 'N/A',
-          leadSort: Number(payment.lead_id || 0)
-        })).sort((a, b) => a.leadSort - b.leadSort);
+        const formattedRows = sortPaymentsLatestFirst(
+          rows.map((payment) => ({
+            ...payment,
+            displayQuotation: payment.quotation_number || payment.quotation_id || 'N/A'
+          }))
+        );
         const total = res?.pagination?.total ?? rows.length;
-        const totalAmount = rows.reduce((sum, row) => sum + Number(row.installment_amount || 0), 0);
+        const totalAmount = formattedRows.reduce((sum, row) => sum + Number(row.installment_amount || 0), 0);
         nextStats[status] = { count: total, amount: totalAmount };
         if (status === 'pending') {
-          setRecentPending(formattedRows);
+          setRecentPending(formattedRows.slice(0, 5));
         }
       });
       setStats(nextStats);
@@ -74,84 +82,139 @@ const AccountsOverview = ({ onViewPayments }) => {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="flex items-center gap-3 text-slate-500">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          Loading payment insights...
-        </div>
-      </div>
-    );
+    return <AccountsDashboardSkeleton />;
   }
+
+  const topPerformer = overview?.topPerformers?.[0];
+  const mtdAmount = overview?.mtdApproved?.amount ?? null;
+  const mtdCount = overview?.mtdApproved?.count ?? null;
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">Accounts Control Tower</p>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Payment & Approval Snapshot</h1>
+          <p className="text-xs uppercase tracking-wide text-slate-500">Overview &amp; insights</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mt-0.5">Payment summary</h2>
+          <p className="text-sm text-slate-500 mt-1 max-w-xl">
+            Collections approved this month, items awaiting approval, and the leading salesperson.
+          </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
           <button
+            type="button"
             onClick={fetchStats}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-slate-700 border border-slate-200 rounded-xl bg-white hover:bg-slate-50"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
           <button
+            type="button"
             onClick={onViewPayments}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-500"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-500 shadow-sm"
           >
-            Go to Payment Info
+            Open payment info
             <ArrowUpRight className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">
-          <AlertTriangle className="w-4 h-4" />
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-rose-50 text-rose-700 border border-rose-200">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {Object.entries(STATUS_CONFIG).map(([key, meta]) => {
-          const Icon = meta.icon;
-          return (
-            <div key={key} className={`border rounded-2xl p-5 flex flex-col gap-3 ${meta.color}`}>
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-white/70">
-                  <Icon className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wider">{meta.title}</p>
-                  <p className="text-2xl font-bold">{stats[key]?.count ?? 0}</p>
-                </div>
-              </div>
-              <p className="text-xs">
-                Approx value:{' '}
-                <span className="font-semibold">
-                  ₹{(stats[key]?.amount ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                </span>
+      {overviewError && !error && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-sm">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          {overviewError}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600">
+              <Banknote className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Received this month</p>
+              <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
+                {mtdAmount != null
+                  ? `₹${mtdAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                  : '—'}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                {mtdCount != null
+                  ? `${mtdCount} approved payment${mtdCount === 1 ? '' : 's'}`
+                  : overviewError
+                    ? 'Monthly total unavailable'
+                    : 'Approved in the current calendar month'}
               </p>
             </div>
-          );
-        })}
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Pending approval</p>
+              <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">{stats.pending?.count ?? 0}</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Approx. ₹{(stats.pending?.amount ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}{' '}
+                {(stats.pending?.count ?? 0) > 200 ? ' (from 200 most recent)' : ' outstanding'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600">
+              <Medal className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Top performer (MTD)</p>
+              {topPerformer ? (
+                <>
+                  <p className="text-lg font-semibold text-slate-900 mt-1 truncate">
+                    {topPerformer.username || topPerformer.email || 'Sales executive'}
+                  </p>
+                  <p className="text-sm font-bold text-slate-900 mt-0.5 tabular-nums">
+                    ₹{Number(topPerformer.totalAmount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {topPerformer.paymentCount} approved payment
+                    {topPerformer.paymentCount === 1 ? '' : 's'} this month
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-slate-500 mt-2">
+                  No approved payments this month yet. Rankings appear after approvals are posted.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-4 border-b border-slate-100 gap-3">
           <div>
-            <h2 className="text-sm sm:text-base font-semibold text-slate-900">Latest Pending Approvals</h2>
-            <p className="text-xs sm:text-sm text-slate-500">Stay on top of every incoming payment</p>
+            <h3 className="text-sm sm:text-base font-semibold text-slate-900">Pending approvals</h3>
+            <p className="text-xs sm:text-sm text-slate-500">Newest entries first</p>
           </div>
           <button
+            type="button"
             onClick={onViewPayments}
             className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium text-indigo-600 hover:text-indigo-500 self-start sm:self-auto"
           >
-            Review all
+            View full queue
             <ArrowUpRight className="w-4 h-4" />
           </button>
         </div>
@@ -174,7 +237,7 @@ const AccountsOverview = ({ onViewPayments }) => {
               {recentPending.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-sm text-slate-500">
-                    All caught up! No pending approvals at the moment.
+                    No pending approvals.
                   </td>
                 </tr>
               )}
@@ -198,9 +261,7 @@ const AccountsOverview = ({ onViewPayments }) => {
         {/* Mobile Card View */}
         <div className="md:hidden space-y-3 p-4">
           {recentPending.length === 0 && (
-            <div className="text-center py-8 text-sm text-slate-500">
-              All caught up! No pending approvals at the moment.
-            </div>
+            <div className="text-center py-8 text-sm text-slate-500">No pending approvals.</div>
           )}
           {recentPending.map((payment) => (
             <div key={payment.id} className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">

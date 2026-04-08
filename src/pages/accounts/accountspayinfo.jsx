@@ -1,13 +1,41 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Edit3, Eye, Filter, Info, Loader2, Search } from 'lucide-react';
+import { Edit3, Eye, Filter, Info, Search } from 'lucide-react';
 import paymentService from '../../api/admin_api/paymentService';
+import {
+  AccountsPaymentMobileSkeleton,
+  AccountsPaymentTableSkeleton,
+  InstallmentBreakdownSkeleton
+} from '../../components/accounts/AccountsSkeletons';
 
 const TAB_META = {
-  pending: { label: 'Pending', color: 'text-amber-600 border-amber-200 bg-amber-50' },
-  approved: { label: 'Approved', color: 'text-emerald-600 border-emerald-200 bg-emerald-50' },
-  rejected: { label: 'Rejected', color: 'text-rose-600 border-rose-200 bg-rose-50' }
+  pending: {
+    label: 'Pending',
+    active: 'text-amber-800 border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 shadow-sm shadow-amber-100',
+    idle: 'border-slate-200 bg-slate-50/80 text-slate-600 hover:border-amber-200 hover:bg-amber-50/60 hover:text-amber-800'
+  },
+  approved: {
+    label: 'Approved',
+    active: 'text-emerald-800 border-emerald-300 bg-gradient-to-r from-emerald-50 to-teal-50 shadow-sm shadow-emerald-100',
+    idle: 'border-slate-200 bg-slate-50/80 text-slate-600 hover:border-emerald-200 hover:bg-emerald-50/60 hover:text-emerald-800'
+  },
+  rejected: {
+    label: 'Rejected',
+    active: 'text-rose-800 border-rose-300 bg-gradient-to-r from-rose-50 to-pink-50 shadow-sm shadow-rose-100',
+    idle: 'border-slate-200 bg-slate-50/80 text-slate-600 hover:border-rose-200 hover:bg-rose-50/60 hover:text-rose-800'
+  }
 };
 const STATUS_KEYS = Object.keys(TAB_META);
+
+const PAYMENT_TABLE_HEADERS = [
+  'Customer',
+  'Business',
+  'Address',
+  'Quotation ID',
+  'Payment method',
+  'Installment',
+  'Remark',
+  'Action'
+];
 
 const AccountsPayInfo = ({ setActiveView }) => {
   const [activeTab, setActiveTab] = useState('pending');
@@ -96,8 +124,10 @@ const AccountsPayInfo = ({ setActiveView }) => {
             displayQuotation: payment.quotation_number || payment.quotation_id || '—',
             displayPi,
             approvalStatus: (payment.approval_status || 'pending').toLowerCase(),
-            leadSort: Number(payment.lead_id || 0),
-            remarksText: payment.remarks || '—',
+            remarksText: (() => {
+              const parts = [payment.remarks, payment.notes].filter((x) => x && String(x).trim());
+              return parts.length ? parts.join(' · ') : '—';
+            })(),
             methodLabel: (payment.payment_method || 'N/A').replace(/_/g, ' ').toUpperCase(),
             statusVariant,
             paymentTotals: {
@@ -107,7 +137,12 @@ const AccountsPayInfo = ({ setActiveView }) => {
             }
           };
         });
-        formatted.sort((a, b) => a.leadSort - b.leadSort);
+        formatted.sort((a, b) => {
+          const ta = new Date(a.created_at || a.payment_date || 0).getTime();
+          const tb = new Date(b.created_at || b.payment_date || 0).getTime();
+          if (tb !== ta) return tb - ta;
+          return Number(b.id || 0) - Number(a.id || 0);
+        });
         setPayments(formatted);
         const total = response?.pagination?.total ?? formatted.length;
         setTabCounts((prev) => ({ ...prev, [activeTab]: total }));
@@ -199,13 +234,14 @@ const AccountsPayInfo = ({ setActiveView }) => {
         {Object.entries(TAB_META).map(([key, meta]) => (
           <button
             key={key}
+            type="button"
             onClick={() => setActiveTab(key)}
-            className={`px-3 sm:px-4 py-2 rounded-full border text-xs sm:text-sm font-medium transition ${
-              activeTab === key ? `${meta.color} border-current` : 'border-slate-200 text-slate-500'
+            className={`px-3 sm:px-4 py-2 rounded-full border text-xs sm:text-sm font-semibold transition ${
+              activeTab === key ? meta.active : meta.idle
             }`}
           >
-            {meta.label} <span className="hidden sm:inline">({tabCounts[key] || 0})</span>
-            <span className="sm:hidden">({tabCounts[key] || 0})</span>
+            {meta.label}{' '}
+            <span className="tabular-nums opacity-90">({tabCounts[key] || 0})</span>
           </button>
         ))}
       </div>
@@ -223,28 +259,30 @@ const AccountsPayInfo = ({ setActiveView }) => {
         </div>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-100">
-          <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-500">
-            <Filter className="w-4 h-4" />
+      <div className="bg-white border border-indigo-100 rounded-2xl shadow-md shadow-indigo-100/40 ring-1 ring-violet-100/80 overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-4 border-b border-indigo-100/80 bg-gradient-to-r from-indigo-50/90 via-violet-50/70 to-fuchsia-50/50">
+          <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-indigo-900/80">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/80 text-indigo-600 shadow-sm border border-indigo-100">
+              <Filter className="w-4 h-4" />
+            </span>
             <span className="hidden sm:inline">{paginatedLabel}</span>
             <span className="sm:hidden">Payments</span>
           </div>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-400" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search..."
-                className="w-full sm:w-auto pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="w-full sm:w-auto pl-9 pr-3 py-2 rounded-xl border border-indigo-200/80 bg-white/90 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
               />
             </div>
             <select
               value={pagination.limit}
               onChange={(e) => setPagination((prev) => ({ ...prev, limit: Number(e.target.value), page: 1 }))}
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-600"
+              className="border border-indigo-200/80 rounded-xl px-3 py-2 text-sm text-indigo-950 bg-white/90 font-medium focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
             >
               {[10, 25, 50].map((size) => (
                 <option key={size} value={size}>
@@ -257,80 +295,82 @@ const AccountsPayInfo = ({ setActiveView }) => {
 
         {/* Desktop Table View */}
         <div className="hidden md:block overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100">
-            <thead className="bg-slate-50">
+          <table className="min-w-full divide-y divide-indigo-100/80">
+            <thead className="bg-gradient-to-r from-indigo-100/50 via-violet-100/40 to-fuchsia-100/30">
               <tr>
-                {['Lead ID', 'Customer', 'Business', 'Product', 'Address', 'Quotation ID', 'PI ID', 'Payment Method / Ref', 'Installment', 'Remarks', 'Action'].map(
-                  (header) => (
-                    <th
-                      key={header}
-                      className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
-                    >
-                      {header}
-                    </th>
-                  )
-                )}
+                {PAYMENT_TABLE_HEADERS.map((header) => (
+                  <th
+                    key={header}
+                    className="px-5 py-3.5 text-left text-[11px] font-bold text-indigo-900/90 uppercase tracking-wider"
+                  >
+                    {header}
+                  </th>
+                ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {loading && (
-                <tr>
-                  <td colSpan={11} className="px-6 py-10 text-center text-slate-500">
-                    <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
-                    Loading payments...
-                  </td>
-                </tr>
-              )}
+            <tbody className="divide-y divide-indigo-50 bg-white">
+              {loading && <AccountsPaymentTableSkeleton rows={6} />}
               {!loading && payments.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-6 py-10 text-center text-slate-500">
+                  <td colSpan={8} className="px-6 py-10 text-center text-slate-500">
                     No payments found for this tab.
                   </td>
                 </tr>
               )}
               {!loading &&
                 payments.map((payment) => (
-                  <tr key={payment.id}>
-                    <td className="px-6 py-4 text-sm font-semibold text-slate-900">LD-{payment.lead_id}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{payment.customer_name || 'N/A'}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{payment.business_name || 'N/A'}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{payment.product_name || 'N/A'}</td>
-                    <td className="px-6 py-4 text-sm text-slate-500 max-w-xs truncate">{payment.address || 'N/A'}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{payment.displayQuotation}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{payment.displayPi}</td>
-                    <td className="px-6 py-4 text-xs text-slate-600">
-                      <span className="font-semibold text-slate-900">{payment.methodLabel}</span>
+                  <tr
+                    key={payment.id}
+                    className="transition-colors hover:bg-gradient-to-r hover:from-violet-50/50 hover:to-indigo-50/30"
+                  >
+                    <td className="px-5 py-4 text-sm font-semibold text-slate-900">{payment.customer_name || 'N/A'}</td>
+                    <td className="px-5 py-4 text-sm text-slate-700">{payment.business_name || 'N/A'}</td>
+                    <td className="px-5 py-4 text-sm text-slate-600 max-w-[14rem] truncate" title={payment.address || ''}>
+                      {payment.address || 'N/A'}
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className="inline-flex items-center rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-100 px-2.5 py-1 text-xs font-semibold font-mono">
+                        {payment.displayQuotation}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-xs text-slate-700">
+                      <span className="inline-flex items-center rounded-md bg-sky-50 text-sky-900 border border-sky-100 px-2 py-1 text-[11px] font-bold uppercase tracking-wide">
+                        {payment.methodLabel}
+                      </span>
                       {payment.payment_reference && (
-                        <span className="block text-slate-500">Ref: {payment.payment_reference}</span>
+                        <span className="block text-slate-500 mt-1.5 font-mono text-[11px]">Ref: {payment.payment_reference}</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm font-semibold text-slate-900">
-                      {formatAmount(payment.installment_amount)}
+                    <td className="px-5 py-4 text-sm">
+                      <span className="text-xs font-semibold text-violet-600">#{payment.installment_number ?? '—'}</span>
+                      <span className="block font-bold text-slate-900 mt-0.5">{formatAmount(payment.installment_amount)}</span>
                       {payment.statusVariant && (
                         <span
-                          className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${payment.statusVariant.badgeClass}`}
+                          className={`mt-1.5 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${payment.statusVariant.badgeClass}`}
                           title={payment.statusVariant.label}
                         >
                           {payment.statusVariant.code}
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-xs text-slate-500 whitespace-pre-line">
+                    <td className="px-5 py-4 text-xs text-slate-600 max-w-[12rem] whitespace-pre-line line-clamp-3" title={payment.remarksText}>
                       {payment.remarksText}
                     </td>
-                    <td className="px-6 py-4 text-sm">
-                      <div className="flex items-center gap-2">
+                    <td className="px-5 py-4 text-sm">
+                      <div className="flex items-center gap-1">
                         <button
+                          type="button"
                           onClick={() => handleOpenEdit(payment)}
                           title="Edit approval"
-                          className="p-2 rounded-full hover:bg-slate-100 text-slate-500"
+                          className="p-2 rounded-xl text-indigo-600 hover:bg-indigo-100 border border-transparent hover:border-indigo-200 transition-colors"
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleViewPayment(payment)}
                           title="View details"
-                          className="p-2 rounded-full hover:bg-slate-100 text-slate-500"
+                          className="p-2 rounded-xl text-violet-600 hover:bg-violet-100 border border-transparent hover:border-violet-200 transition-colors"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
@@ -343,13 +383,8 @@ const AccountsPayInfo = ({ setActiveView }) => {
         </div>
 
         {/* Mobile Card View */}
-        <div className="md:hidden space-y-4 p-4">
-          {loading && (
-            <div className="text-center py-10 text-slate-500">
-              <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
-              Loading payments...
-            </div>
-          )}
+        <div className="md:hidden space-y-4 p-4 bg-gradient-to-b from-indigo-50/40 to-transparent">
+          {loading && <AccountsPaymentMobileSkeleton cards={3} />}
           {!loading && payments.length === 0 && (
             <div className="text-center py-10 text-slate-500">
               No payments found for this tab.
@@ -357,24 +392,29 @@ const AccountsPayInfo = ({ setActiveView }) => {
           )}
           {!loading &&
             payments.map((payment) => (
-              <div key={payment.id} className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs text-slate-500">Lead ID</p>
-                    <p className="text-sm font-semibold text-slate-900">LD-{payment.lead_id}</p>
+              <div
+                key={payment.id}
+                className="rounded-2xl border border-indigo-100 bg-white p-4 space-y-3 shadow-sm shadow-violet-100/50 ring-1 ring-violet-50"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-500">Customer</p>
+                    <p className="text-sm font-bold text-slate-900 truncate">{payment.customer_name || 'N/A'}</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     <button
+                      type="button"
                       onClick={() => handleOpenEdit(payment)}
                       title="Edit approval"
-                      className="p-2 rounded-full hover:bg-slate-100 text-slate-500"
+                      className="p-2 rounded-xl text-indigo-600 hover:bg-indigo-100"
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleViewPayment(payment)}
                       title="View details"
-                      className="p-2 rounded-full hover:bg-slate-100 text-slate-500"
+                      className="p-2 rounded-xl text-violet-600 hover:bg-violet-100"
                     >
                       <Eye className="w-4 h-4" />
                     </button>
@@ -382,80 +422,71 @@ const AccountsPayInfo = ({ setActiveView }) => {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs text-slate-500">Customer</p>
-                    <p className="text-sm text-slate-700">{payment.customer_name || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Business</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Business</p>
                     <p className="text-sm text-slate-700">{payment.business_name || 'N/A'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Product</p>
-                    <p className="text-sm text-slate-700">{payment.product_name || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Installment</p>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {formatAmount(payment.installment_amount)}
-                      {payment.statusVariant && (
-                        <span
-                          className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${payment.statusVariant.badgeClass}`}
-                          title={payment.statusVariant.label}
-                        >
-                          {payment.statusVariant.code}
-                        </span>
-                      )}
-                    </p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Quotation ID</p>
+                    <p className="text-sm font-mono font-semibold text-indigo-800">{payment.displayQuotation}</p>
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Address</p>
+                  <p className="text-[10px] font-bold uppercase text-slate-400">Address</p>
                   <p className="text-sm text-slate-600">{payment.address || 'N/A'}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs text-slate-500">Quotation ID</p>
-                    <p className="text-sm text-slate-600">{payment.displayQuotation}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">PI ID</p>
-                    <p className="text-sm text-slate-600">{payment.displayPi}</p>
-                  </div>
-                </div>
                 <div>
-                  <p className="text-xs text-slate-500">Payment Method</p>
-                  <p className="text-sm font-semibold text-slate-900">{payment.methodLabel}</p>
+                  <p className="text-[10px] font-bold uppercase text-slate-400">Payment method</p>
+                  <span className="inline-flex mt-0.5 items-center rounded-md bg-sky-50 text-sky-900 border border-sky-100 px-2 py-1 text-[11px] font-bold">
+                    {payment.methodLabel}
+                  </span>
                   {payment.payment_reference && (
-                    <p className="text-xs text-slate-500 mt-1">Ref: {payment.payment_reference}</p>
+                    <p className="text-xs text-slate-500 mt-1 font-mono">Ref: {payment.payment_reference}</p>
                   )}
                 </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase text-slate-400">Installment</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    <span className="text-violet-600">#{payment.installment_number ?? '—'}</span>{' '}
+                    {formatAmount(payment.installment_amount)}
+                    {payment.statusVariant && (
+                      <span
+                        className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${payment.statusVariant.badgeClass}`}
+                        title={payment.statusVariant.label}
+                      >
+                        {payment.statusVariant.code}
+                      </span>
+                    )}
+                  </p>
+                </div>
                 {payment.remarksText && payment.remarksText !== '—' && (
-                  <div>
-                    <p className="text-xs text-slate-500">Remarks</p>
-                    <p className="text-sm text-slate-600 whitespace-pre-line">{payment.remarksText}</p>
+                  <div className="rounded-xl bg-amber-50/80 border border-amber-100/80 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase text-amber-700/90">Remark</p>
+                    <p className="text-sm text-amber-950/90 whitespace-pre-line">{payment.remarksText}</p>
                   </div>
                 )}
               </div>
             ))}
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-4 border-t border-slate-100">
-          <p className="text-xs sm:text-sm text-slate-500 text-center sm:text-left">{paginatedLabel}</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-4 border-t border-indigo-100/80 bg-indigo-50/30">
+          <p className="text-xs sm:text-sm text-indigo-900/70 font-medium text-center sm:text-left">{paginatedLabel}</p>
           <div className="flex items-center justify-center gap-2">
             <button
+              type="button"
               disabled={pagination.page === 1}
               onClick={() => setPagination((prev) => ({ ...prev, page: prev.page - 1 }))}
-              className="px-3 py-2 text-xs sm:text-sm border rounded-lg disabled:opacity-40"
+              className="px-3 py-2 text-xs sm:text-sm font-medium rounded-xl border border-indigo-200 bg-white text-indigo-800 hover:bg-indigo-50 disabled:opacity-40 disabled:hover:bg-white"
             >
               Previous
             </button>
-            <span className="text-xs sm:text-sm text-slate-500">
+            <span className="text-xs sm:text-sm text-indigo-900/70 font-medium tabular-nums">
               Page {pagination.page} of {pagination.pages}
             </span>
             <button
+              type="button"
               disabled={pagination.page >= pagination.pages}
               onClick={() => setPagination((prev) => ({ ...prev, page: prev.page + 1 }))}
-              className="px-3 py-2 text-xs sm:text-sm border rounded-lg disabled:opacity-40"
+              className="px-3 py-2 text-xs sm:text-sm font-medium rounded-xl border border-indigo-200 bg-white text-indigo-800 hover:bg-indigo-50 disabled:opacity-40 disabled:hover:bg-white"
             >
               Next
             </button>
@@ -573,14 +604,12 @@ const AccountsPayInfo = ({ setActiveView }) => {
                     <p className="text-xs text-slate-500">Complete payment ledger with installment-wise details</p>
                   </div>
                   {loadingBreakdown && (
-                    <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                    <span className="inline-block h-4 w-4 rounded-full bg-slate-200 animate-pulse" aria-hidden />
                   )}
                 </div>
 
                 {loadingBreakdown ? (
-                  <div className="text-center py-8 text-sm text-slate-500">
-                    Loading installment details...
-                  </div>
+                  <InstallmentBreakdownSkeleton />
                 ) : installmentBreakdown ? (
                   <div className="space-y-4">
                     {/* Summary Cards */}

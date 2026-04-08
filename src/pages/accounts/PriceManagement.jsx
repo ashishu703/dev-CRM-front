@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react"
 import { Calculator, Save, RefreshCw, AlertCircle, CheckCircle } from "lucide-react"
 import rawMaterialService from "../../api/admin_api/rawMaterialService"
+import { PriceManagementSkeleton } from "../../components/accounts/AccountsSkeletons"
 
 export default function PriceManagement() {
   // Single source of truth: rates from backend
@@ -183,14 +184,7 @@ export default function PriceManagement() {
   }
 
   if (loading) {
-    return (
-      <div className="p-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-64"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
-        </div>
-      </div>
-    )
+    return <PriceManagementSkeleton />
   }
 
   return (

@@ -65,6 +65,15 @@ class PaymentService {
     }
   }
 
+  async getAccountsOverview() {
+    try {
+      const response = await apiClient.get('/api/payments/accounts-overview');
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   // Get payment by ID
   async getPayment(id) {
     try {

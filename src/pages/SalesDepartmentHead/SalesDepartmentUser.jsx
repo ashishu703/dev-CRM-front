@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth';
 import toastManager from '../../utils/ToastManager';
 import { toDateOnly, toDateOnlyOrEmpty } from '../../utils/dateOnly';
 import DashboardSkeleton from '../../components/dashboard/DashboardSkeleton';
+import { TableRowsSkeleton } from '../../components/ui/Skeleton';
 
 const MS_IN_DAY = 24 * 60 * 60 * 1000;
 
@@ -446,7 +447,13 @@ const SalesDepartmentUser = ({ setActiveView }) => {
             </thead>
             <tbody>
               {loading && (
-                <tr><td className="py-8 px-4 text-center text-gray-500" colSpan={8}>Loading...</td></tr>
+                <TableRowsSkeleton
+                  rows={8}
+                  columns={8}
+                  tdClassName="py-3 sm:py-4 px-2 sm:px-4"
+                  trClassName="border-b border-gray-100"
+                  barClassName="bg-gray-200"
+                />
               )}
               {!loading && filteredUsers.length === 0 && (
                 <tr><td className="py-8 px-4 text-center text-gray-500" colSpan={8}>{error || 'No users found'}</td></tr>

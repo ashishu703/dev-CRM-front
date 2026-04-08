@@ -306,5 +306,5 @@ const getDefaultProducts = () => [
 ];
 
 // Available units
-export const UNITS = ['Nos', 'Mtr', 'Kg', 'Set', 'PCS'];
+export const UNITS = ['NOS', 'MTR', 'KG', 'SET', 'PCS', 'PKT', 'PKM'];
 
